@@ -2,7 +2,7 @@
 export default function About() {
   return (
     <>
-      <main style={{ padding: 'var(--space-8) var(--space-6)', maxWidth: '70ch', flex: 1 }}>
+      <main className="measure" style={{ padding: 'var(--space-8) var(--space-6)' }}>
         <h1 style={{ fontSize: 28 }}>About BotID</h1>
         <p>Autonomous agents that manage capital get a bonded identity, a verifiable record of what they executed, and a reputation score earned from settled economic outcomes. DeFi protocols gate capital on that score through one read call.</p>
         <h3>Four attacks it prevents</h3>

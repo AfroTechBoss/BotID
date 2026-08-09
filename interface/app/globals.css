@@ -3,22 +3,40 @@
    nothing in this file may reintroduce one: a webfont @import blocks rendering on a third-party
    response, which is both a performance cost and a privacy claim the legal pages contradict. */
 
+/* --- Theme ---------------------------------------------------------------------------------
+   Dark is the default: :root carries it, and [data-theme='light'] is the opt-out. The Modernist
+   light palette is not deleted, it is demoted — it stays exact and reachable, so a toggle is a
+   one-line change rather than a rebuild.
+
+   The ramps are INVERTED between themes rather than duplicated by hand. Every use in this app
+   reads a ramp positionally — neutral-200 means "a surface barely off the background", 700 means
+   "a line you can see" — so inverting the ends keeps all four existing usages correct in dark
+   without touching a single component. The same applies to the accent ramp, where 600 is the
+   hover step and therefore has to move *toward* the reader's eye in both themes: darker on light,
+   lighter on dark.
+   ------------------------------------------------------------------------------------------ */
 :root {
-  /* --- Modernist design system tokens (bound design system) --- */
-  --color-bg: #f3f2f2;
-  --color-surface: #eae9e9;
-  --color-text: #201e1d;
-  --color-accent: #ec3013;
+  /* Tells the browser to render scrollbars, form controls and the like in their dark variants.
+     Without it a native <select> and the page's own scrollbar stay light against a dark page. */
+  color-scheme: dark;
+
+  --color-canvas: #0d0c0c;          /* outside the frame */
+  --color-bg: #171615;
+  --color-surface: #201e1d;
+  --color-text: #f3f2f2;
+  /* #ec3013 on a near-black background lands around 3.5:1 — under the 4.5:1 body-text floor, and
+     links are body text. The 500 step clears it while staying recognisably the same red. */
+  --color-accent: #ff563c;
   --color-accent-2: #e15b47;
-  --color-divider: color-mix(in srgb, #201e1d 40%, transparent);
+  --color-divider: color-mix(in srgb, #f3f2f2 26%, transparent);
 
-  --color-neutral-100: #f8f4f4; --color-neutral-200: #eae7e7; --color-neutral-300: #d7d3d3;
-  --color-neutral-400: #bab6b6; --color-neutral-500: #9b9797; --color-neutral-600: #7d7979;
-  --color-neutral-700: #605d5d; --color-neutral-800: #444141; --color-neutral-900: #2d2b2b;
+  --color-neutral-100: #1a1918; --color-neutral-200: #232120; --color-neutral-300: #322f2e;
+  --color-neutral-400: #4a4746; --color-neutral-500: #7d7979; --color-neutral-600: #a39f9f;
+  --color-neutral-700: #c2bebe; --color-neutral-800: #ddd9d9; --color-neutral-900: #f0eeee;
 
-  --color-accent-100: #fff2ef; --color-accent-200: #ffe0d9; --color-accent-300: #ffc4b8;
-  --color-accent-400: #ff9783; --color-accent-500: #ff563c; --color-accent-600: #dd2b0f;
-  --color-accent-700: #ae1800; --color-accent-800: #7c1405; --color-accent-900: #4d170e;
+  --color-accent-100: #3a1109; --color-accent-200: #571a0c; --color-accent-300: #7c1405;
+  --color-accent-400: #ae1800; --color-accent-500: #dd2b0f; --color-accent-600: #ff7a63;
+  --color-accent-700: #ff9783; --color-accent-800: #ffc4b8; --color-accent-900: #ffe0d9;
 
   /* The fallback goes inside var(), not after it: next/font already appends a metric-matched
      fallback to each variable, so a trailing `, system-ui` would only ever duplicate what is
@@ -33,9 +51,11 @@
   --space-1: 4px; --space-2: 8px; --space-3: 12px; --space-4: 16px; --space-6: 24px; --space-8: 32px;
   --radius-sm: 0px; --radius-md: 0px; --radius-lg: 0px;
 
-  --shadow-sm: 0 1px 2px color-mix(in srgb, #2d2b2b 14%, transparent);
-  --shadow-md: 0 3px 10px color-mix(in srgb, #2d2b2b 16%, transparent);
-  --shadow-lg: 0 12px 32px color-mix(in srgb, #2d2b2b 22%, transparent);
+  /* Heavier than the light theme's. A shadow on a dark surface has less luminance range to work
+     with, so the same alpha reads as nothing at all. */
+  --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.45);
+  --shadow-md: 0 3px 10px rgb(0 0 0 / 0.5);
+  --shadow-lg: 0 12px 32px rgb(0 0 0 / 0.6);
 
   /* --- BotID functional palette (§2.2 of the brief): tier and score are ORTHOGONAL axes.
      Tier owns hue-as-material (bronze/silver/gold). Score owns a diverging ramp around 5000.
@@ -54,13 +74,56 @@
      --tier-silver to --color-neutral-500, which made them literally the same colours as
      --score-weak and --score-neutral. A Gold agent and a failing agent rendered identically,
      directly under a comment promising they never would. Aliasing across families is the one
-     thing this palette cannot survive. --- */
+     thing this palette cannot survive.
+
+     Dark shifts every one of these lighter. The hues and the family boundaries are identical —
+     what changes is that a 52% bronze or a 40% slashed, legible against #f3f2f2, is close to
+     invisible against #171615. Lightness is the only axis that moves; if a hue ever moves, the
+     orthogonality argument above stops being true in one theme and not the other. --- */
+  --tier-bronze: oklch(66% 0.09 55);
+  --tier-silver: oklch(78% 0.02 250);
+  --tier-gold: oklch(82% 0.12 85);
+  --score-critical: oklch(62% 0.20 25);
+  --score-weak: oklch(70% 0.16 35);
+  --score-neutral: oklch(68% 0.01 60);
+  --score-good: oklch(74% 0.14 152);
+  --score-strong: oklch(84% 0.16 152);
+  --live: oklch(72% 0.13 240);
+  --state-pending: oklch(72% 0.12 265);
+  --state-slashed: oklch(64% 0.13 322);
+}
+
+/* The Modernist light palette, intact. Nothing here is new — these are the values that were in
+   :root before dark became the default, so switching themes is lossless in both directions. */
+[data-theme='light'] {
+  color-scheme: light;
+
+  --color-canvas: #e2e0e0;
+  --color-bg: #f3f2f2;
+  --color-surface: #eae9e9;
+  --color-text: #201e1d;
+  --color-accent: #ec3013;
+  --color-accent-2: #e15b47;
+  --color-divider: color-mix(in srgb, #201e1d 40%, transparent);
+
+  --color-neutral-100: #f8f4f4; --color-neutral-200: #eae7e7; --color-neutral-300: #d7d3d3;
+  --color-neutral-400: #bab6b6; --color-neutral-500: #9b9797; --color-neutral-600: #7d7979;
+  --color-neutral-700: #605d5d; --color-neutral-800: #444141; --color-neutral-900: #2d2b2b;
+
+  --color-accent-100: #fff2ef; --color-accent-200: #ffe0d9; --color-accent-300: #ffc4b8;
+  --color-accent-400: #ff9783; --color-accent-500: #ff563c; --color-accent-600: #dd2b0f;
+  --color-accent-700: #ae1800; --color-accent-800: #7c1405; --color-accent-900: #4d170e;
+
+  --shadow-sm: 0 1px 2px color-mix(in srgb, #2d2b2b 14%, transparent);
+  --shadow-md: 0 3px 10px color-mix(in srgb, #2d2b2b 16%, transparent);
+  --shadow-lg: 0 12px 32px color-mix(in srgb, #2d2b2b 22%, transparent);
+
   --tier-bronze: oklch(52% 0.07 55);
   --tier-silver: oklch(62% 0.015 250);
   --tier-gold: oklch(70% 0.11 85);
-  --score-critical: var(--color-accent-700);
-  --score-weak: var(--color-accent-500);
-  --score-neutral: var(--color-neutral-500);
+  --score-critical: oklch(46% 0.19 25);
+  --score-weak: oklch(58% 0.18 35);
+  --score-neutral: oklch(62% 0.01 60);
   --score-good: oklch(64% 0.13 152);
   --score-strong: oklch(56% 0.15 152);
   --live: oklch(58% 0.13 240);
@@ -70,7 +133,7 @@
 
 * , *::before, *::after { box-sizing: border-box; }
 body {
-  margin: 0; background: #e2e0e0; color: var(--color-text); font-family: var(--font-body);
+  margin: 0; background: var(--color-canvas); color: var(--color-text); font-family: var(--font-body);
   font-weight: var(--font-body-weight); font-size: 15px; line-height: 1.55;
 }
 
@@ -142,5 +205,27 @@ img { display: block; max-width: 100%; }
 .table td { padding: var(--space-2); border-bottom: 1px solid var(--color-divider); }
 .table tbody tr:hover { background: color-mix(in srgb, var(--color-text) 4%, transparent); }
 
-.page-frame { max-width: 1600px; margin: 0 auto; box-shadow: 0 0 0 1px var(--color-divider); min-height: 100vh; background: var(--color-bg); display: flex; flex-direction: column; }
+/* Full viewport width. The frame used to cap at 1600px, which on a wide desktop left the app
+   floating in a band with dead canvas either side — wrong for a dashboard whose whole job is
+   dense tables, and doubly wrong once the leaderboard added its own 1400px cap on top. Line
+   length is still controlled, but per page and only where reading is the point (see .measure). */
+.page-frame { min-height: 100vh; background: var(--color-bg); display: flex; flex-direction: column; }
+
+/* The reason the footer used to sit halfway up the leaderboard. .page-frame is a flex column
+   100vh tall, but nothing inside it grew, so the footer landed wherever the content stopped.
+   /executions carried `flex: 1` inline and /agents did not — the same page-by-page drift that
+   put Nav and Footer in the layout. It is one rule now, so no page can forget it. */
+.page-body { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+.page-body > main { flex: 1; width: 100%; }
+
+/* Prose wants a measure; tables want the screen. ~70ch is roughly 12 words a line, which is
+   where reading speed peaks — a 2560px-wide paragraph is not generous, it is unreadable. */
+.measure { max-width: 70ch; }
+
+/* The live feed scrolls inside itself instead of growing the page.
+   `overflow-y: auto` alone did nothing: an auto-height box never overflows, so every arriving row
+   made the document taller and pushed the footer further away — a feed left open for ten minutes
+   turned the overview into a mile of column. The cap is what makes the overflow real. Rows are
+   still capped at 40 in the component; this bounds the pixels, that bounds the memory. */
+.feed-scroll { flex: 1; overflow-y: auto; overscroll-behavior: contain; max-height: min(68vh, 720px); }
 .tabular { font-variant-numeric: tabular-nums; }

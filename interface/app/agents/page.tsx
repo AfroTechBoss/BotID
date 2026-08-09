@@ -1,19 +1,22 @@
 'use client';
 import { useState } from 'react';
 import BotIdBadge from '@/components/BotIdBadge';
-import { SPARSE_AGENTS, DENSE_AGENTS, TIER_META, formatToken, formatNum, timeAgo, scoreColorVar, shortHash, pct } from '@/lib/mock-data';
+import { SPARSE_AGENTS, DENSE_AGENTS, TIER_META, formatToken, formatNum, timeAgo, scoreColorVar, shortHash, pct, MOCK_NOW } from '@/lib/mock-data';
 
 export default function Leaderboard() {
   const [density, setDensity] = useState<'sparse' | 'dense'>('sparse');
   const [minSample, setMinSample] = useState(true);
-  const now = Date.now();
+  // Fixed reference point, not Date.now(): this component renders on the server too, and a
+  // wall-clock read there disagrees with the client's read a moment later — "3h ago" vs "3h ago"
+  // is fine until it isn't, and React reports it as a hydration mismatch either way.
+  const now = MOCK_NOW;
 
   const all = density === 'sparse' ? SPARSE_AGENTS : DENSE_AGENTS;
   const list = [...(minSample ? all.filter((a) => a.settled >= 5) : all)].sort((a, b) => b.score - a.score);
 
   return (
     <>
-      <main style={{ padding: 'var(--space-6)', maxWidth: 1400 }}>
+      <main style={{ padding: 'var(--space-6)' }}>
         <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 'var(--space-3)' }}>
           <h1 style={{ fontSize: 28 }}>Leaderboard</h1>
           <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)' }}>

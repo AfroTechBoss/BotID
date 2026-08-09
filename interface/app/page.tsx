@@ -140,7 +140,7 @@ export default function Overview() {
             <h6 style={{ margin: 0 }}>Live feed</h6>
             <button className="btn btn-ghost" style={{ marginLeft: 'auto', fontSize: 12 }} onClick={() => setPaused((p) => !p)}>{paused ? 'Resume' : 'Pause'}</button>
           </div>
-          <div style={{ flex: 1, overflowY: 'auto', fontFamily: 'var(--font-mono)', fontSize: 11 }}>
+          <div className="feed-scroll" style={{ fontFamily: 'var(--font-mono)', fontSize: 11 }}>
             {feedRows.map((row) => (
               <a key={row.id} href={`/executions/${row.requestId}`} style={{ display: 'block', textDecoration: 'none', color: 'inherit', padding: '8px 12px', borderBottom: '1px solid var(--color-divider)' }}>
                 <div style={{ display: 'flex', gap: 8, alignItems: 'baseline' }}>

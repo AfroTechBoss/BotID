@@ -2,7 +2,7 @@
 export default function Docs() {
   return (
     <>
-      <main style={{ padding: 'var(--space-8) var(--space-6)', maxWidth: '70ch', flex: 1 }}>
+      <main className="measure" style={{ padding: 'var(--space-8) var(--space-6)' }}>
         <h1 style={{ fontSize: 28 }}>Docs</h1>
         <p>The interface is a read-only view over BotID&apos;s on-chain state. The protocol itself &mdash; contracts, circuits, event schema &mdash; lives in the repository, not here.</p>
         <div className="hr" />

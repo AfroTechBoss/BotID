@@ -16,11 +16,15 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     // The font classes carry --font-cabinet and --font-satoshi; globals.css reads them through
     // --font-heading and --font-body, so no component ever names a typeface directly.
-    <html lang="en" className={`${cabinet.variable} ${satoshi.variable}`}>
+    // data-theme is explicit rather than implied by :root so the value is inspectable and a
+    // toggle has something to write to. Dark is the default; 'light' is the only other value.
+    <html lang="en" data-theme="dark" className={`${cabinet.variable} ${satoshi.variable}`}>
       <body>
         <div className="page-frame">
           <Nav />
-          {children}
+          {/* Wrapper, not a bare {children}: it is what grows to fill the viewport, which is what
+              pins the footer to the bottom on short pages. */}
+          <div className="page-body">{children}</div>
           <Footer />
         </div>
       </body>

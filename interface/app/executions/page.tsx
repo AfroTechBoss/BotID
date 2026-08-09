@@ -23,7 +23,7 @@ export default function Executions() {
 
   return (
     <>
-      <main style={{ padding: 'var(--space-6)', maxWidth: 1400, width: '100%', flex: 1 }}>
+      <main style={{ padding: 'var(--space-6)', }}>
         <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 'var(--space-3)' }}>
           <h1 style={{ fontSize: 28 }}>Executions</h1>
           <span className="seg" style={{ fontSize: 12 }}>

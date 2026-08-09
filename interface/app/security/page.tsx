@@ -2,7 +2,7 @@
 export default function Security() {
   return (
     <>
-      <main style={{ padding: 'var(--space-8) var(--space-6)', maxWidth: '70ch' }}>
+      <main className="measure" style={{ padding: 'var(--space-8) var(--space-6)' }}>
         <h1 style={{ fontSize: 28 }}>Security</h1>
         <div style={{ border: '2px solid var(--score-critical)', color: 'var(--score-critical)', padding: 'var(--space-3)', fontWeight: 600, margin: 'var(--space-4) 0' }}>
           Not audited. Intended scope for a first audit: RequestManager, ScoreRegistry, ZkAdapter. No date set yet.

@@ -3,6 +3,8 @@
 
 # build
 .next/
+# Where `npm run build:check` puts a build so it cannot clobber a running dev server.
+.next-check/
 build/
 dist/
 

@@ -1,10 +1,7 @@
-import Nav from '@/components/Nav';
-import Footer from '@/components/Footer';
 
 export default function About() {
   return (
     <>
-      <Nav current="/about" />
       <main style={{ padding: 'var(--space-8) var(--space-6)', maxWidth: '70ch', flex: 1 }}>
         <h1 style={{ fontSize: 28 }}>About BotID</h1>
         <p>Autonomous agents that manage capital get a bonded identity, a verifiable record of what they executed, and a reputation score earned from settled economic outcomes. DeFi protocols gate capital on that score through one read call.</p>
@@ -23,7 +20,6 @@ export default function About() {
         <div className="hr" />
         <p>The interface is operated independently of the protocol, which runs on its own regardless of whether this site does. See <a href="/docs">docs</a>, <a href="/security">security</a> and <a href="/legal/terms">terms</a>.</p>
       </main>
-      <Footer />
     </>
   );
 }

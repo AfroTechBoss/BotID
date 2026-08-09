@@ -1,9 +1,7 @@
 'use client';
 import { useState } from 'react';
-import Nav from '@/components/Nav';
-import Footer from '@/components/Footer';
 import BotIdBadge from '@/components/BotIdBadge';
-import { SPARSE_AGENTS, DENSE_AGENTS, TIER_META, formatToken, formatNum, timeAgo, scoreColorVar, shortHash } from '@/lib/mock-data';
+import { SPARSE_AGENTS, DENSE_AGENTS, TIER_META, formatToken, formatNum, timeAgo, scoreColorVar, shortHash, pct } from '@/lib/mock-data';
 
 export default function Leaderboard() {
   const [density, setDensity] = useState<'sparse' | 'dense'>('sparse');
@@ -15,7 +13,6 @@ export default function Leaderboard() {
 
   return (
     <>
-      <Nav current="/agents" />
       <main style={{ padding: 'var(--space-6)', maxWidth: 1400 }}>
         <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 'var(--space-3)' }}>
           <h1 style={{ fontSize: 28 }}>Leaderboard</h1>
@@ -34,7 +31,7 @@ export default function Leaderboard() {
             {list.map((a, i) => {
               const tm = TIER_META[a.tier];
               const isStale = now - a.lastActiveAt > 7 * 86400000;
-              const creditPct = Math.round((a.openNotional / a.maxOpenNotional) * 100);
+              const creditPct = pct(a.openNotional, a.maxOpenNotional);
               const deltaLabel = a.delta === 0 ? '\u2013' : a.delta > 0 ? `\u25b2${a.delta}` : `\u25bc${Math.abs(a.delta)}`;
               return (
                 <tr key={a.id}>
@@ -73,7 +70,6 @@ export default function Leaderboard() {
           </div>
         )}
       </main>
-      <Footer />
     </>
   );
 }

@@ -1,9 +1,7 @@
-import Nav from '@/components/Nav';
 
 export default function Status() {
   return (
     <>
-      <Nav current="/status" />
       <main style={{ padding: 'var(--space-8) var(--space-6)', maxWidth: 800 }}>
         <h1 style={{ fontSize: 28 }}>Status</h1>
         <p className="text-muted" style={{ fontSize: 12 }}>Measured from this browser, not a global claim.</p>

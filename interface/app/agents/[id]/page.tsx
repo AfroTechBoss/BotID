@@ -1,9 +1,7 @@
 'use client';
 import { useState } from 'react';
-import Nav from '@/components/Nav';
-import Footer from '@/components/Footer';
 import BotIdBadge from '@/components/BotIdBadge';
-import { SAMPLE_AGENT, TIER_META, genScoreHistory, genExecutions, formatToken, formatNum, timeAgo, scoreColorVar, shortHash } from '@/lib/mock-data';
+import { SAMPLE_AGENT, TIER_META, genScoreHistory, genExecutions, formatToken, formatNum, timeAgo, scoreColorVar, shortHash, toBaseUnits, ratio, pct } from '@/lib/mock-data';
 
 const STATUS_COLOR: Record<string, string> = {
   Settled: 'var(--score-good)', Finalized: 'var(--tier-gold)', Challenged: 'var(--state-pending)',
@@ -15,13 +13,17 @@ export default function AgentProfile({ params }: { params: { id: string } }) {
   const a = SAMPLE_AGENT; // swap for a real lookup by params.id against the data-access layer
   const tm = TIER_META[a.tier];
   const history = genScoreHistory(a, 90);
+  // Notional at which a history marker reaches full radius. A constant so the chart is comparable
+  // between agents — scaling to each agent's own maximum would make a quiet agent's largest
+  // execution look identical to a busy one's.
+  const MARKER_FULL_SCALE = toBaseUnits(250000);
   const w = 640, h = 170, pad = 10;
   const yOf = (s: number) => pad + (1 - s / 10000) * (h - pad * 2);
   const xOf = (i: number) => (i / (history.length - 1)) * w;
   const pointsStr = history.map((p, i) => `${xOf(i).toFixed(1)},${yOf(p.score).toFixed(1)}`).join(' ');
   const markers = history.filter((p) => p.notional > 0).map((p) => ({
     x: xOf(history.indexOf(p)).toFixed(1), y: yOf(p.score).toFixed(1),
-    r: Math.max(1.5, Math.min(6, Math.sqrt(p.notional / 250000) * 6)).toFixed(1),
+    r: Math.max(1.5, Math.min(6, Math.sqrt(ratio(p.notional, MARKER_FULL_SCALE)) * 6)).toFixed(1),
     color: p.fault ? 'var(--score-critical)' : 'var(--color-neutral-700)', opacity: p.fault ? 1 : 0.45,
   }));
 
@@ -34,7 +36,6 @@ export default function AgentProfile({ params }: { params: { id: string } }) {
 
   return (
     <>
-      <Nav current="/agents/[id]" />
       <main style={{ padding: 'var(--space-6)', maxWidth: 1100 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 4 }}>
           <BotIdBadge tier={a.tier} hasFault={a.faults > 0} size={44} />
@@ -61,13 +62,13 @@ export default function AgentProfile({ params }: { params: { id: string } }) {
             <h6 style={{ color: 'color-mix(in srgb, var(--color-text) 60%, transparent)', marginBottom: 'var(--space-3)' }}>Credit</h6>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6, fontFamily: 'var(--font-mono)', fontSize: 13 }}>
               <Row label="bond" val={formatToken(a.bond)} />
-              <Row label="leverage" val={`${(a.maxOpenNotional / a.bond).toFixed(1)}\u00d7`} />
+              <Row label="leverage" val={`${ratio(a.maxOpenNotional, a.bond).toFixed(1)}\u00d7`} />
               <Row label="max open" val={formatToken(a.maxOpenNotional)} />
               <Row label="open" val={formatToken(a.openNotional)} />
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8 }}>
-              <div style={{ flex: 1, height: 8, background: 'var(--color-neutral-200)' }}><div style={{ height: '100%', width: `${Math.round((a.openNotional / a.maxOpenNotional) * 100)}%`, background: 'var(--color-accent)' }} /></div>
-              <span style={{ fontSize: 12 }} className="tabular">{Math.round((a.openNotional / a.maxOpenNotional) * 100)}%</span>
+              <div style={{ flex: 1, height: 8, background: 'var(--color-neutral-200)' }}><div style={{ height: '100%', width: `${pct(a.openNotional, a.maxOpenNotional)}%`, background: 'var(--color-accent)' }} /></div>
+              <span style={{ fontSize: 12 }} className="tabular">{pct(a.openNotional, a.maxOpenNotional)}%</span>
             </div>
           </div>
           <div style={{ padding: 'var(--space-4)' }}>
@@ -106,7 +107,6 @@ export default function AgentProfile({ params }: { params: { id: string } }) {
           </table>
         </section>
       </main>
-      <Footer />
     </>
   );
 }

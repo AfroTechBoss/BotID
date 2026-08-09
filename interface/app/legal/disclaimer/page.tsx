@@ -1,12 +1,9 @@
-import Nav from '@/components/Nav';
-import Footer from '@/components/Footer';
 
 const NAV = [['predict', 'Not a predictor'], ['neutral', '5000 is neutral'], ['tier', 'Tier vs performance'], ['capital', 'Reputation and capital'], ['smalln', 'Small-sample noise'], ['audit', 'Not audited'], ['risk', 'Other risks']];
 
 export default function Disclaimer() {
   return (
     <>
-      <Nav current="/legal/disclaimer" />
       <div style={{ display: 'grid', gridTemplateColumns: '220px minmax(0,68ch)', gap: 'var(--space-8)', padding: 'var(--space-8) var(--space-6)', flex: 1 }}>
         <aside style={{ position: 'sticky', top: 'var(--space-6)', alignSelf: 'start', fontSize: 13, display: 'flex', flexDirection: 'column', gap: 8 }}>
           {NAV.map(([id, label]) => <a key={id} href={`#${id}`}>{label}</a>)}
@@ -31,7 +28,6 @@ export default function Disclaimer() {
           <p>Smart-contract risk. Oracle and publisher-quorum risk. Chain-liveness risk. Key-management risk. None of these are reduced by a high score.</p>
         </main>
       </div>
-      <Footer />
     </>
   );
 }

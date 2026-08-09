@@ -1,12 +1,9 @@
-import Nav from '@/components/Nav';
-import Footer from '@/components/Footer';
 
 const NAV = [['what', 'What this is'], ['custody', 'No custody'], ['eligibility', 'Eligibility'], ['use', 'Acceptable use'], ['advice', 'No advice'], ['thirdcontent', 'Third-party content'], ['warranty', 'No warranty'], ['legal', 'Indemnity & law'], ['term', 'Termination']];
 
 export default function Terms() {
   return (
     <>
-      <Nav current="/legal/terms" />
       <div style={{ display: 'grid', gridTemplateColumns: '220px minmax(0,68ch)', gap: 'var(--space-8)', padding: 'var(--space-8) var(--space-6)', flex: 1 }}>
         <aside style={{ position: 'sticky', top: 'var(--space-6)', alignSelf: 'start', fontSize: 13, display: 'flex', flexDirection: 'column', gap: 8 }}>
           {NAV.map(([id, label]) => <a key={id} href={`#${id}`}>{label}</a>)}
@@ -34,7 +31,6 @@ export default function Terms() {
           <p>We can withdraw your access to this website. We cannot withdraw your access to the protocol &mdash; nobody can.</p>
         </main>
       </div>
-      <Footer />
     </>
   );
 }

@@ -1,7 +1,5 @@
 'use client';
 import { useState } from 'react';
-import Nav from '@/components/Nav';
-import Footer from '@/components/Footer';
 import { DENSE_AGENTS, TIER_META, genExecutions, formatToken, timeAgo, shortHash } from '@/lib/mock-data';
 
 const STATUS_COLOR: Record<string, string> = {
@@ -25,7 +23,6 @@ export default function Executions() {
 
   return (
     <>
-      <Nav current="/executions" />
       <main style={{ padding: 'var(--space-6)', maxWidth: 1400, width: '100%', flex: 1 }}>
         <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 'var(--space-3)' }}>
           <h1 style={{ fontSize: 28 }}>Executions</h1>
@@ -56,7 +53,6 @@ export default function Executions() {
         </table>
         {list.length === 0 && <p className="text-muted" style={{ textAlign: 'center', padding: 'var(--space-8) 0' }}>No executions match this filter yet.</p>}
       </main>
-      <Footer />
     </>
   );
 }

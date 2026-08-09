@@ -1,4 +1,14 @@
-@import url('https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;800&display=swap');
+/* Cabinet Grotesk Extrabold for titles, Satoshi Medium for everything that has to be read.
+   Neither is on Google Fonts; both are Fontshare (ITF), free for commercial use.
+
+   Satoshi is loaded at 500 and 700: the markup already leans on 600/700 for table emphasis and
+   nav state, and without a real bold face the browser synthesises one by smearing the 500 — which
+   looks like a rendering bug next to Cabinet Grotesk's genuine 800.
+
+   This is the CDN build, so first paint depends on api.fontshare.com. Self-hosting the four
+   .woff2 files under app/fonts/ and declaring them with next/font/local removes that third party
+   and the layout shift with it; that is the intended end state, it just needs the files. */
+@import url('https://api.fontshare.com/v2/css?f[]=cabinet-grotesk@800&f[]=satoshi@500,700&display=swap');
 
 :root {
   /* --- Modernist design system tokens (bound design system) --- */
@@ -17,9 +27,10 @@
   --color-accent-400: #ff9783; --color-accent-500: #ff563c; --color-accent-600: #dd2b0f;
   --color-accent-700: #ae1800; --color-accent-800: #7c1405; --color-accent-900: #4d170e;
 
-  --font-heading: "Archivo", system-ui, sans-serif;
+  --font-heading: "Cabinet Grotesk", system-ui, sans-serif;
   --font-heading-weight: 800;
-  --font-body: "Archivo", system-ui, sans-serif;
+  --font-body: "Satoshi", system-ui, sans-serif;
+  --font-body-weight: 500;
   --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
 
   --space-1: 4px; --space-2: 8px; --space-3: 12px; --space-4: 16px; --space-6: 24px; --space-8: 32px;
@@ -31,29 +42,51 @@
 
   /* --- BotID functional palette (§2.2 of the brief): tier and score are ORTHOGONAL axes.
      Tier owns hue-as-material (bronze/silver/gold). Score owns a diverging ramp around 5000.
-     Liveness is a single reserved signal. Never let these collapse into one "good/bad" impression. --- */
+     Liveness is a single reserved signal. Never let these collapse into one "good/bad" impression.
+
+     Four hue families, and no token may appear in two of them:
+
+       accent  ~30    the interface talking — links, primary actions. Never data.
+       score   30→152 a diverging ramp, red through neutral grey to green, pivoting at 5000.
+       tier    55→85  metals. Warm, low-chroma, and off the accent's hue so a Gold agent
+                      never reads as a button and never reads as a good score.
+       live    240    reserved for liveness and nothing else, which is only true if no other
+                      token borrows it.
+
+     The earlier version of this block aliased --tier-gold to --color-accent-500 and
+     --tier-silver to --color-neutral-500, which made them literally the same colours as
+     --score-weak and --score-neutral. A Gold agent and a failing agent rendered identically,
+     directly under a comment promising they never would. Aliasing across families is the one
+     thing this palette cannot survive. --- */
   --tier-bronze: oklch(52% 0.07 55);
-  --tier-silver: var(--color-neutral-500);
-  --tier-gold: var(--color-accent-500);
+  --tier-silver: oklch(62% 0.015 250);
+  --tier-gold: oklch(70% 0.11 85);
   --score-critical: var(--color-accent-700);
   --score-weak: var(--color-accent-500);
   --score-neutral: var(--color-neutral-500);
   --score-good: oklch(64% 0.13 152);
   --score-strong: oklch(56% 0.15 152);
-  --live: var(--color-accent-600);
-  --state-pending: var(--color-accent-500);
+  --live: oklch(58% 0.13 240);
+  --state-pending: oklch(60% 0.12 265);
   --state-slashed: oklch(40% 0.10 322);
 }
 
 * , *::before, *::after { box-sizing: border-box; }
 body {
   margin: 0; background: #e2e0e0; color: var(--color-text); font-family: var(--font-body);
-  font-size: 15px; line-height: 1.55;
+  font-weight: var(--font-body-weight); font-size: 15px; line-height: 1.55;
 }
+
+/* The two faces are split by job, not by tag depth. Cabinet Grotesk Extrabold is the loud voice —
+   page titles and the headline numerals — and it is used sparingly enough to still be loud.
+   Everything that exists to be read quietly, including the small uppercase section labels this
+   design leans on heavily, is Satoshi. Setting all six levels in Cabinet 800 would put an
+   extrabold display face on the label above every table, which is shouting at a filing cabinet. */
 h1, h2, h3, h4, h5, h6 {
-  font-family: var(--font-heading); font-weight: var(--font-heading-weight);
   line-height: 1.12; letter-spacing: -0.015em; margin: 0 0 var(--space-2);
 }
+h1, h2, h3 { font-family: var(--font-heading); font-weight: var(--font-heading-weight); }
+h4, h5, h6 { font-family: var(--font-body); font-weight: 700; }
 h1 { font-size: 42px; } h2 { font-size: 32px; } h3 { font-size: 25px; }
 h4 { font-size: 20px; } h5 { font-size: 16px; }
 h6 { font-size: 13px; letter-spacing: 0.08em; text-transform: uppercase; }
@@ -69,7 +102,9 @@ img { display: block; max-width: 100%; }
 
 .btn {
   display: inline-flex; align-items: center; justify-content: center; gap: 6px;
-  cursor: pointer; text-decoration: none; font-family: var(--font-heading); font-weight: var(--font-heading-weight);
+  /* Button labels are Satoshi 700, not Cabinet 800: at 14px the display face's tight extrabold
+     forms close up and a control starts competing with the page title for attention. */
+  cursor: pointer; text-decoration: none; font-family: var(--font-body); font-weight: 700;
   font-size: 14px; color: var(--color-text); background: transparent; border: 1px solid transparent;
   padding: var(--space-2) calc(var(--space-3) * 1.2); border-radius: var(--radius-md);
 }

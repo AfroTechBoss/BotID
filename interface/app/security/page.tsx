@@ -1,9 +1,7 @@
-import Nav from '@/components/Nav';
 
 export default function Security() {
   return (
     <>
-      <Nav current="/security" />
       <main style={{ padding: 'var(--space-8) var(--space-6)', maxWidth: '70ch' }}>
         <h1 style={{ fontSize: 28 }}>Security</h1>
         <div style={{ border: '2px solid var(--score-critical)', color: 'var(--score-critical)', padding: 'var(--space-3)', fontWeight: 600, margin: 'var(--space-4) 0' }}>

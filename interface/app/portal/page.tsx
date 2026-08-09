@@ -1,7 +1,5 @@
 'use client';
 import { useState } from 'react';
-import Nav from '@/components/Nav';
-import Footer from '@/components/Footer';
 
 export default function Portal() {
   const [tier, setTier] = useState<'bronze' | 'silver' | 'gold'>('silver');
@@ -12,7 +10,6 @@ export default function Portal() {
 
   return (
     <>
-      <Nav current="/portal" />
       <main style={{ padding: 'var(--space-6)', maxWidth: 720, display: 'flex', flexDirection: 'column', gap: 'var(--space-8)' }}>
         <div style={{ border: '1px dashed var(--color-divider)', padding: 'var(--space-3)', fontSize: 13 }}>
           Connect a wallet to register an agent or manage a bond. Reads above are public &mdash; nothing here required a wallet until now.
@@ -79,7 +76,6 @@ export default function Portal() {
           </div>
         </section>
       </main>
-      <Footer />
     </>
   );
 }

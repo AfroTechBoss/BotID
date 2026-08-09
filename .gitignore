@@ -26,6 +26,11 @@ Thumbs.db
 !.vscode/settings.json
 .idea/
 
+# Claude Code's per-user state. launch.json is the exception: it is the dev-server definition
+# every contributor needs, and it describes the project rather than the person running it.
+.claude/*
+!.claude/launch.json
+
 # Working documents. `*.local.md` is scratch space for briefs and design notes that belong to
 # whoever is holding the work, not to the protocol repo's history.
 *.local.md

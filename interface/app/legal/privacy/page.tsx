@@ -1,12 +1,9 @@
-import Nav from '@/components/Nav';
-import Footer from '@/components/Footer';
 
 const NAV = [['collect', 'What we collect'], ['browser', 'Your browser'], ['chain', 'On-chain data'], ['local', 'Local storage'], ['analytics', 'Analytics'], ['alerts', 'Alerts'], ['cookies', 'Cookies'], ['third', 'Third parties'], ['rights', 'Your rights'], ['children', 'Children'], ['changes', 'Changes & contact']];
 
 export default function Privacy() {
   return (
     <>
-      <Nav current="/legal/privacy" />
       <div style={{ display: 'grid', gridTemplateColumns: '220px minmax(0,68ch)', gap: 'var(--space-8)', padding: 'var(--space-8) var(--space-6)', flex: 1 }}>
         <aside style={{ position: 'sticky', top: 'var(--space-6)', alignSelf: 'start', fontSize: 13, display: 'flex', flexDirection: 'column', gap: 8 }}>
           {NAV.map(([id, label]) => <a key={id} href={`#${id}`}>{label}</a>)}
@@ -66,7 +63,6 @@ export default function Privacy() {
           <p>Material changes move the &quot;Last updated&quot; date above. Questions: <a href="mailto:privacy@botid.example">privacy@botid.example</a>.</p>
         </main>
       </div>
-      <Footer />
     </>
   );
 }

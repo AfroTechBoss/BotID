@@ -1,9 +1,7 @@
-import Nav from '@/components/Nav';
 
 export default function Brand() {
   return (
     <>
-      <Nav current="/brand" />
       <main style={{ padding: 'var(--space-8) var(--space-6)', maxWidth: 900 }}>
         <h1 style={{ fontSize: 28 }}>Brand</h1>
         <p className="text-muted">The BotIdBadge is the mark: score arc, tier construction, fault overlay &mdash; one object that is the data.</p>

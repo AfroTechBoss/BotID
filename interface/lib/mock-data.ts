@@ -1,6 +1,21 @@
-// Straight TypeScript port of the HTML prototypes' generator (lib/mock-data.js at the project root).
-// Swap these functions for the real typed data-access layer (§11 of the brief) — RPC for live
-// tail/point reads, Ponder for history/aggregates — keeping the same signatures.
+// Typed mock data standing in for the data layer. Swap these functions for the real typed
+// data-access layer (§11 of the brief) — RPC for live tail/point reads, Ponder for history and
+// aggregates — keeping the same signatures.
+//
+// Two properties this module has to hold, both of which it lost once already:
+//
+//  1. Determinism. Nothing here may read the wall clock at module scope. These values are
+//     produced during server rendering and again during hydration; if they disagree by so much
+//     as a millisecond React discards the server HTML and warns. Every timestamp is derived from
+//     MOCK_NOW, a fixed epoch.
+//  2. Base units. Capital amounts are bigint, never number — see lib/token.ts for why.
+
+import { applyBps, toBaseUnits } from './token';
+
+export { formatToken, formatTokenParts, BOND_TOKEN, toBaseUnits, ratio, pct } from './token';
+
+/** Fixed reference instant: 2026-08-09T12:00:00Z. Fixtures are relative to this, not to now. */
+export const MOCK_NOW = 1_754_740_800_000;
 
 function mulberry32(seed: number) {
   return function () {
@@ -24,26 +39,24 @@ export const TIER_META: Record<Tier, { label: string; rings: number; dot: boolea
   gold: { label: 'Gold', rings: 2, dot: true, color: 'var(--tier-gold)' },
 };
 
+/** Credit multiplier by tier, in basis points. Mirrors tierFactor × leverage on chain. */
+const LEVERAGE_BPS: Record<Tier, number> = { bronze: 25_000, silver: 42_000, gold: 60_000 };
+
 export interface Agent {
   id: number; address: string; operator: string; tier: Tier; score: number;
-  delta: number; settled: number; faults: number; bond: number; maxOpenNotional: number;
-  openNotional: number; lastActiveAt: number; modelCommitment: string;
+  delta: number; settled: number; faults: number;
+  bond: bigint; maxOpenNotional: bigint; openNotional: bigint;
+  lastActiveAt: number; modelCommitment: string;
 }
 
 export function shortHash(h: string, n = 4) {
   if (!h) return '';
-  return h.slice(0, n + 2) + '\u2026' + h.slice(-n);
+  return h.slice(0, n + 2) + '…' + h.slice(-n);
 }
 
-// Bond and notional are denominated in WBOT (the recommended bond token, §20.4) so credit and exposure move together.
-export function formatToken(n: number) {
-  if (n >= 1e6) return (n / 1e6).toFixed(n % 1e6 === 0 ? 0 : 1) + 'M WBOT';
-  if (n >= 1e3) return (n / 1e3).toFixed(n % 1e3 === 0 ? 0 : 1) + 'k WBOT';
-  return Math.round(n) + ' WBOT';
-}
 export function formatNum(n: number) { return n.toLocaleString('en-US'); }
 
-export function timeAgo(ts: number, now = Date.now()) {
+export function timeAgo(ts: number, now = MOCK_NOW) {
   const s = Math.max(0, Math.floor((now - ts) / 1000));
   if (s < 60) return s + 's ago';
   const m = Math.floor(s / 60); if (m < 60) return m + 'm ago';
@@ -60,16 +73,15 @@ export function scoreBand(score: number) {
 }
 export function scoreColorVar(score: number) { return `var(--score-${scoreBand(score)})`; }
 
-function makeAgent(id: number, opts: Partial<Agent> & { stale?: boolean } = {}): Agent {
+function makeAgent(id: number, opts: Partial<Omit<Agent, 'bond'>> & { bond?: number; stale?: boolean } = {}): Agent {
   const tier = opts.tier || pick(TIERS);
   const score = opts.score ?? Math.round(2000 + rnd() * 8000);
   const settled = opts.settled ?? Math.round(rnd() * 400);
   const faults = opts.faults ?? (rnd() < 0.12 ? Math.round(1 + rnd() * 3) : 0);
-  const bond = opts.bond ?? Math.round(5000 + rnd() * 200000);
-  const leverage = tier === 'gold' ? 6 : tier === 'silver' ? 4.2 : 2.5;
-  const maxOpenNotional = Math.round(bond * leverage);
-  const openNotional = Math.round(maxOpenNotional * rnd() * 0.6);
-  const lastActiveAt = Date.now() - Math.round(rnd() * (opts.stale ? 12 : 0.3) * 86400000);
+  const bond = toBaseUnits(opts.bond ?? Math.round(5000 + rnd() * 200000));
+  const maxOpenNotional = applyBps(bond, LEVERAGE_BPS[tier]);
+  const openNotional = applyBps(maxOpenNotional, Math.round(rnd() * 6000));
+  const lastActiveAt = MOCK_NOW - Math.round(rnd() * (opts.stale ? 12 : 0.3) * 86400000);
   return {
     id, address: addr(), operator: addr(), tier, score,
     delta: Math.round((rnd() - 0.4) * 80), settled, faults,
@@ -93,68 +105,120 @@ export interface FeedRow {
   detail: string; delta?: number; scoreFrom?: number; scoreTo?: number; bps?: number;
 }
 
-export function genFeedRow(agents: Agent[], now = Date.now()): FeedRow {
+import { formatToken as fmt } from './token';
+
+export function genFeedRow(agents: Agent[], now = MOCK_NOW): FeedRow {
   const agent = pick(agents);
   const verb = pick<Verb>(['REQUEST', 'DELIVER', 'DELIVER', 'SETTLE', 'SETTLE', 'CHALLENGE', 'EXPIRE', 'SLASH']);
-  const notional = Math.round(5000 + rnd() * 300000);
+  const notional = toBaseUnits(Math.round(5000 + rnd() * 300000));
   const requestId = reqId();
   const row: FeedRow = { id: reqId() + now + rnd(), time: now, verb, requestId, agentId: agent.id, tier: agent.tier, detail: '' };
-  if (verb === 'REQUEST') row.detail = `${formatToken(notional)} \u00b7 deliver by ${new Date(now + 3600e3).toLocaleTimeString('en-US', { hour12: false }).slice(0, 5)}`;
-  if (verb === 'DELIVER') row.detail = `${TIER_META[agent.tier].label.toUpperCase()} \u00b7 ${formatToken(notional)} \u00b7 6h window \u00b7 412k gas`;
+  if (verb === 'REQUEST') row.detail = `${fmt(notional)} · deliver by ${clock(now + 3600e3)}`;
+  if (verb === 'DELIVER') row.detail = `${TIER_META[agent.tier].label.toUpperCase()} · ${fmt(notional)} · 6h window · 412k gas`;
   if (verb === 'SETTLE') {
     const delta = Math.round((rnd() - 0.35) * 90);
     row.delta = delta; row.scoreFrom = agent.score; row.scoreTo = Math.max(0, Math.min(10000, agent.score + delta));
     row.bps = Math.round((rnd() - 0.3) * 60);
-    row.detail = `${row.bps >= 0 ? '+' : ''}${row.bps} bps \u00b7 in-spec \u00b7 ${formatNum(row.scoreFrom)} \u2192 ${formatNum(row.scoreTo)}`;
+    row.detail = `${row.bps >= 0 ? '+' : ''}${row.bps} bps · in-spec · ${formatNum(row.scoreFrom)} → ${formatNum(row.scoreTo)}`;
   }
-  if (verb === 'CHALLENGE') row.detail = `bond ${formatToken(5000)} \u00b7 answer by ${new Date(now + 7200e3).toLocaleTimeString('en-US', { hour12: false }).slice(0, 5)}`;
-  if (verb === 'EXPIRE') row.detail = `LIVENESS FAULT \u00b7 \u2212${Math.round(600 + rnd() * 1200)}`;
-  if (verb === 'SLASH') row.detail = `CHALLENGE LOST \u00b7 SLASHED ${formatToken(notional * 0.1)}`;
+  if (verb === 'CHALLENGE') row.detail = `bond ${fmt(toBaseUnits(5000))} · answer by ${clock(now + 7200e3)}`;
+  if (verb === 'EXPIRE') row.detail = `LIVENESS FAULT · −${Math.round(600 + rnd() * 1200)}`;
+  if (verb === 'SLASH') row.detail = `CHALLENGE LOST · SLASHED ${fmt(applyBps(notional, 1000))}`;
   return row;
+}
+
+/** UTC so a server render and a client render agree regardless of the reader's timezone. */
+function clock(ts: number) {
+  const d = new Date(ts);
+  return `${String(d.getUTCHours()).padStart(2, '0')}:${String(d.getUTCMinutes()).padStart(2, '0')}`;
 }
 
 export const EXECUTIONS_PER_DAY = Array.from({ length: 14 }, () => ({
   bronze: Math.round(rnd() * 12), silver: Math.round(rnd() * 8), gold: Math.round(rnd() * 5),
 }));
 
-export interface ScorePoint { day: number; score: number; notional: number; fault: boolean }
+export interface ScorePoint { day: number; score: number; notional: bigint; fault: boolean }
 
 export function genScoreHistory(agent: Agent, days = 90): ScorePoint[] {
   const target = agent.score;
   let s = target - 400 + (rnd() - 0.5) * 300;
   const points: ScorePoint[] = [];
   for (let i = days; i >= 0; i--) {
-    const notional = rnd() < 0.82 ? 0 : Math.round(5000 + rnd() * 180000);
-    const fault = notional > 0 && rnd() < 0.04;
-    if (notional > 0) {
+    const notionalWhole = rnd() < 0.82 ? 0 : Math.round(5000 + rnd() * 180000);
+    const fault = notionalWhole > 0 && rnd() < 0.04;
+    if (notionalWhole > 0) {
+      // The EWMA itself stays in float: it is a simulation of the on-chain update, not a
+      // capital amount, and nothing settles against it.
       const q = fault ? rnd() * 1500 : target - 600 + rnd() * 1200;
-      const w = Math.min(notional, 200000);
+      const w = Math.min(notionalWhole, 200000);
       s = s * 0.998 + (q - s * 0.998) * (w / (w + 90000));
     } else {
       s = s + (target - s) * 0.006;
     }
     s = Math.max(0, Math.min(10000, s));
-    points.push({ day: days - i, score: Math.round(s), notional, fault });
+    points.push({ day: days - i, score: Math.round(s), notional: toBaseUnits(notionalWhole), fault });
   }
   points[points.length - 1].score = target;
   return points;
 }
 
-export interface Execution { requestId: string; status: string; notional: number; bps: number; time: number }
-export function genExecutions(agent: Agent, n = 24): Execution[] {
+export interface Execution { requestId: string; status: string; notional: bigint; bps: number; time: number }
+export function genExecutions(agent: Agent, n = 24, now = MOCK_NOW): Execution[] {
   const statuses = ['Settled', 'Settled', 'Settled', 'Finalized', 'Challenged', 'Faulted', 'Expired', 'Pending'];
   return Array.from({ length: n }, (_, i) => ({
-    requestId: reqId(), status: pick(statuses), notional: Math.round(5000 + rnd() * 300000),
-    bps: Math.round((rnd() - 0.3) * 60), time: Date.now() - i * (3 + rnd() * 20) * 3600000,
+    requestId: reqId(), status: pick(statuses),
+    notional: toBaseUnits(Math.round(5000 + rnd() * 300000)),
+    bps: Math.round((rnd() - 0.3) * 60), time: now - i * (3 + rnd() * 20) * 3600000,
   }));
+}
+
+/**
+ * A single execution, derived from its requestId alone.
+ *
+ * Deliberately does NOT use `rnd`: that generator is module-scope and its sequence depends on how
+ * many times it has already been called, so a value drawn from it would differ between a server
+ * render and a client render of the same route. A detail page must be a pure function of its URL —
+ * that is the entire reason these pages are server components, and the reason a pasted link shows
+ * the same receipt to the sender and the recipient.
+ */
+export interface ExecutionDetail {
+  requestId: string; agent: Agent; tier: Tier; notional: bigint; feeBps: number;
+  deliveredAt: number; blocks: { request: number; deliver: number; finalize: number; settle: number };
+  scoreDelta: number; realizedBps: number;
+}
+
+function seedFrom(requestId: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < requestId.length; i++) { h ^= requestId.charCodeAt(i); h = Math.imul(h, 16777619); }
+  return h >>> 0;
+}
+
+export function getExecution(requestId: string): ExecutionDetail {
+  const r = mulberry32(seedFrom(requestId));
+  const agent = SPARSE_AGENTS[Math.floor(r() * SPARSE_AGENTS.length)];
+  const settleBlock = 8_412_900 + Math.floor(r() * 400);
+  return {
+    requestId,
+    agent,
+    tier: agent.tier,
+    notional: toBaseUnits(Math.round(5000 + r() * 300000)),
+    feeBps: Math.round(20 + r() * 80),
+    deliveredAt: MOCK_NOW - Math.round(1 + r() * 8) * 3600000,
+    blocks: {
+      request: settleBlock - 1878, deliver: settleBlock - 1660,
+      finalize: settleBlock - 20, settle: settleBlock,
+    },
+    scoreDelta: Math.round((r() - 0.3) * 90),
+    realizedBps: Math.round((r() - 0.3) * 60),
+  };
 }
 
 export function genFeedCells() {
   return {
     inputs: [
-      { label: 'BOT/USD', raw: 12500, feedId: '0x8f2a\u2026' },
-      { label: 'ETH/USD', raw: 34000, feedId: '0x1c4b\u2026' },
-      { label: 'BTC/USD', raw: 4200, feedId: '0x77de\u2026' },
+      { label: 'BOT/USD', raw: 12500, feedId: '0x8f2a…' },
+      { label: 'ETH/USD', raw: 34000, feedId: '0x1c4b…' },
+      { label: 'BTC/USD', raw: 4200, feedId: '0x77de…' },
     ],
     outputs: [{ label: 'hold', bps: 0 }, { label: 'allocate', bps: 10000 }, { label: 'hedge', bps: 0 }],
   };

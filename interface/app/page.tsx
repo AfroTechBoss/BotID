@@ -1,37 +1,50 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
-import Nav from '@/components/Nav';
 import BotIdBadge from '@/components/BotIdBadge';
-import Footer from '@/components/Footer';
 import {
   SPARSE_AGENTS, DENSE_AGENTS, TIER_META, EXECUTIONS_PER_DAY, genFeedRow,
-  formatToken, formatNum, timeAgo, scoreColorVar, shortHash, FeedRow, Agent,
+  formatToken, formatNum, timeAgo, scoreColorVar, shortHash, FeedRow, Agent, MOCK_NOW,
 } from '@/lib/mock-data';
 
 export default function Overview() {
   const [density, setDensity] = useState<'sparse' | 'dense'>('sparse');
   const [feedRows, setFeedRows] = useState<FeedRow[]>([]);
   const [paused, setPaused] = useState(false);
-  const [now, setNow] = useState(Date.now());
+  // Starts at MOCK_NOW so the server and the client render the same relative times, then the
+  // clock effect takes over on the client. Seeding this with Date.now() is a hydration mismatch.
+  const [now, setNow] = useState(MOCK_NOW);
   const [blockHeight, setBlockHeight] = useState(8412900);
-  const [network, setNetwork] = useState<'testnet' | 'mainnet'>('testnet');
   const agentsRef = useRef<Agent[]>(SPARSE_AGENTS);
 
+  const agents = density === 'sparse' ? SPARSE_AGENTS : DENSE_AGENTS;
+  useEffect(() => { agentsRef.current = agents; }, [agents]);
+
+  // Seed once. This used to live in the effect below, which depended on `paused` — so pausing
+  // the feed re-ran it and replaced every row with twelve fresh ones. You paused to read a row
+  // and the row disappeared.
   useEffect(() => {
-    setFeedRows(Array.from({ length: 12 }, (_, i) => genFeedRow(SPARSE_AGENTS, Date.now() - i * 15000)).reverse());
+    setFeedRows(
+      Array.from({ length: 12 }, (_, i) => genFeedRow(SPARSE_AGENTS, Date.now() - i * 15000)).reverse()
+    );
+  }, []);
+
+  // Pausing stops the timer instead of filtering inside it, so a paused feed costs nothing and
+  // resuming appends to the rows already on screen.
+  useEffect(() => {
+    if (paused) return;
     const feedTimer = setInterval(() => {
-      if (paused) return;
       setFeedRows((rows) => [genFeedRow(agentsRef.current, Date.now()), ...rows].slice(0, 40));
       setBlockHeight((b) => b + 1);
     }, 3200);
-    const clock = setInterval(() => setNow(Date.now()), 1000);
-    return () => { clearInterval(feedTimer); clearInterval(clock); };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    return () => clearInterval(feedTimer);
   }, [paused]);
 
-  const agents = density === 'sparse' ? SPARSE_AGENTS : DENSE_AGENTS;
-  agentsRef.current = agents;
-  const totalNotional = agents.reduce((s, a) => s + a.openNotional, 0);
+  useEffect(() => {
+    const clock = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(clock);
+  }, []);
+
+  const totalNotional = agents.reduce((s, a) => s + a.openNotional, 0n);
   const totalSettled = agents.reduce((s, a) => s + a.settled, 0);
   const totalFaults = agents.reduce((s, a) => s + a.faults, 0);
   const top = [...agents].sort((a, b) => b.score - a.score).slice(0, density === 'sparse' ? 3 : 6);
@@ -49,7 +62,6 @@ export default function Overview() {
 
   return (
     <>
-      <Nav current="/" />
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 380px', flex: 1, minHeight: 0 }}>
         <main style={{ padding: 'var(--space-6)', display: 'flex', flexDirection: 'column', gap: 'var(--space-8)', borderRight: '2px solid var(--color-divider)' }}>
           <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
@@ -130,7 +142,7 @@ export default function Overview() {
           </div>
           <div style={{ flex: 1, overflowY: 'auto', fontFamily: 'var(--font-mono)', fontSize: 11 }}>
             {feedRows.map((row) => (
-              <a key={row.id} href="/executions/sample" style={{ display: 'block', textDecoration: 'none', color: 'inherit', padding: '8px 12px', borderBottom: '1px solid var(--color-divider)' }}>
+              <a key={row.id} href={`/executions/${row.requestId}`} style={{ display: 'block', textDecoration: 'none', color: 'inherit', padding: '8px 12px', borderBottom: '1px solid var(--color-divider)' }}>
                 <div style={{ display: 'flex', gap: 8, alignItems: 'baseline' }}>
                   <span style={{ color: 'color-mix(in srgb, var(--color-text) 50%, transparent)', flex: 'none', width: 56 }}>{timeAgo(row.time, now)}</span>
                   <span style={{ fontWeight: 700, flex: 'none', width: 70, color: verbColor(row) }}>{row.verb}</span>
@@ -149,7 +161,7 @@ export default function Overview() {
         <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}><span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--live)' }} />RPC live</span>
         <span>block {formatNum(blockHeight)}</span>
         <span>indexer lag 0.4s</span>
-        <span style={{ marginLeft: 'auto' }}>{network === 'mainnet' ? 'mainnet' : 'testnet'}</span>
+        <span style={{ marginLeft: 'auto' }}>testnet</span>
       </footer>
     </>
   );

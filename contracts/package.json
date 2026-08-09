@@ -6,7 +6,9 @@
   "scripts": {
     "test": "hardhat test",
     "build": "hardhat compile",
-    "compile": "node compile.js"
+    "compile": "node compile.js",
+    "export-abi": "hardhat compile && node scripts/export-abi.js",
+    "check-abi": "hardhat compile && node scripts/export-abi.js --check"
   },
   "keywords": [],
   "author": "",

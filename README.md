@@ -103,6 +103,27 @@ Solc 0.8.24, `viaIR`, optimizer at 200 runs. The protocol contracts have no exte
 dependencies; Hardhat is used only to run the tests. `npm run compile` builds via a standalone
 solc driver with no framework at all.
 
+## ABIs
+
+`contracts/abi/` holds the consumer-facing ABIs as checked-in TypeScript, exported `as const` so
+viem and wagmi can infer call and return types from them. `artifacts/` is a build product and is
+gitignored, which is fine on a developer's machine and useless to anything that builds without a
+checkout of this repo.
+
+```bash
+cd contracts && npm run export-abi   # regenerate
+cd contracts && npm run check-abi    # fail if the committed output is stale
+```
+
+`check-abi` is the part worth wiring into CI. Without it, changing a contract signature and
+forgetting to re-export turns into a decoding failure in someone else's frontend, at runtime,
+with no obvious cause. With it, it is a build failure here that names the file.
+
+Mocks, libraries and test harnesses are not exported. Neither is the bond token: this repo's
+`IERC20` declares only the three functions `SafeTransfer` calls, so it has no `approve` and no
+`decimals` — use viem's complete `erc20Abi` rather than an official-looking interface that cannot
+approve a bond.
+
 ## Tests
 
 140 tests across five suites. They are organised around the attacks the design exists to

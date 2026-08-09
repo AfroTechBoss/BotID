@@ -1,0 +1,172 @@
+# BotID reference relayer
+
+Three off-chain roles, one small Node process each. Only dependency is `ethers`.
+
+| Role | Command | Key | What it does |
+|---|---|---|---|
+| **Agent** | `node src/index.js agent` | `OPERATOR_KEY` | Delivers work addressed to one agent id, and defends it against challenges |
+| **Watchtower** | `node src/index.js watchtower` | `WATCHTOWER_KEY` | Calls the enforcement functions nobody else is paid to call |
+| **Consumer** | `node src/index.js consumer …` | `CONSUMER_KEY` | Commissions work and reports outcomes — what a vault would do |
+
+## The agent loop
+
+```
+ExecutionRequested
+  → fetch the bundle at inputURI
+  → recompute its commitment and check it against the chain     ← the load-bearing step
+  → open the served readings against the committed valueHashes  ← the other half of it
+  → run the model (the circuit itself, at every tier)
+  → build the tier's attestation (signature / TEE quote / proof)
+  → deliver()
+```
+
+**The commitment check is the point.** `inputURI` is untrusted event data — a locator, not an
+authority. Whatever served it, the agent only ever runs on data that hashes to the commitment
+the consumer put on chain. A hostile URI can waste the agent's time; it cannot change what the
+agent is judged on. See `publisher.verify()`.
+
+On `ExecutionChallenged` the agent re-derives the answer from scratch. If the re-run does not
+reproduce the committed output, it **declines to contest** and takes the slash — the model was
+wrong or non-deterministic, and that is exactly the case the challenge mechanism exists to
+catch.
+
+## The watchtower
+
+Nothing in `ExecutionRouter` self-executes. Four guarantees are only real because somebody calls
+the function behind them:
+
+| Call | Without it |
+|---|---|
+| `markExpired` | An agent that takes work and vanishes is never faulted. **Pays a slash bounty — self-funding.** |
+| `slashUnresolvedChallenge` | An unanswered challenge sits forever. Bounty goes to the challenger, not the caller. |
+| `finalize` | A clean delivery never leaves its challenge window. |
+| `settleDefault` | A silent consumer holds the agent's exposure and fee hostage. |
+
+Permissionless and stateless — run several; the losers just waste gas on reverts.
+
+## Tiers
+
+**Bronze** works out of the box: the operator key signs the execution digest.
+
+**Silver** needs `ENCLAVE_KEY` and `MEASUREMENT`, and the enclave key must have been enrolled by
+a notary on `TeeAdapter`. Carry over the honest limitation from the contract: enrolment is
+notarised rather than parsed on chain, so the trust root is the notary set, not the CPU vendor.
+
+**Gold** proves with `circuits/prove.py`, which must have been built first (`../circuits`). The
+attestation is
+
+```
+abi.encode(bytes proof, uint256[] instances, ZkAdapter.Reveal[] reveals)
+```
+
+and the instance vector is the model's input tensor followed by its output tensor — nothing
+else:
+
+```
+instances[0 .. nIn)          input cells = value << inputScaleBits
+instances[nIn .. nIn + nOut) output cells
+```
+
+Nothing protocol-specific is in the circuit. `inputCommitment` and `outputCommitment` are keccak
+commitments, halo2 cannot compute keccak without a gadget `ezkl` does not expose, and binding
+them on chain costs 6 gas a word and checks against the router's own storage rather than against
+a number the prover chose. `ZkAdapter.sol` argues it out in full.
+
+`inputScaleBits` is read off `ZkAdapter.modelFor(...)` at startup, not configured locally. A
+wrong shift is not a security hole — it is a silent outage, in which every honest proof for the
+model is rejected — so the relayer takes it from the registration the adapter will actually
+check against.
+
+`EZKL_PROVER_CMD` replaces the prover with anything that takes the same JSON job on argv and
+prints `{"proof": "0x…"}` or bare hex: a proving queue, a bigger machine, an HSM.
+`ALLOW_DEV_PROOF=true` overrides it entirely and emits correct instances with empty proof bytes.
+That is only valid against `MockEzklVerifier`; a real verifier rejects it, which is the honest
+outcome for a relayer that has been told not to prove anything.
+
+## Models
+
+**The agent runs the circuit at every tier, Bronze included.** The output commitment goes on
+chain at delivery, long before anyone asks for a proof. An agent that computes its answer with a
+hand-written reimplementation of the model, and differs from the circuit in the last digit, has
+already committed to a number it cannot later prove — and it finds out when it is challenged,
+which is the most expensive possible moment. Shelling out to `circuits/run.py` makes the tiers
+agree by construction instead of by review. A Python start-up per request is the price; if it
+ever stops being worth paying, the fix is a long-lived worker speaking the same JSON, not a
+second implementation.
+
+`src/inference.js` is that boundary. `MODEL_RUNNER=reference` swaps in a pure-JS port of the
+integer reference for hosts without a Python toolchain. It is not an approximation —
+`pipeline.py` refuses to hand over a proving key it has not watched reproduce that exact
+function on every calibration sample — but it is a second implementation, and it is a liability
+the moment `spec.json` changes without it.
+
+## Reveals
+
+A bundle commits to `valueHash`, not to a number:
+
+```
+valueHash = keccak256(abi.encode(int256 value, bytes32 salt))
+```
+
+The salt matters because an input commitment is public from the moment `requestExecution` lands.
+Without it the values are recoverable by anyone willing to guess, including the agent being
+graded on them.
+
+So the consumer serves the readings alongside the bundle, and `publisher.open()` checks each one
+against the committed hash before the model sees it. The readings are exactly as untrusted as
+the bundle was: a URI that pairs a correct bundle with doctored values is rejected there rather
+than proven false on chain later.
+
+## Local end-to-end
+
+Build the circuit first — the agent runs it at every tier, so this is not a Gold-only step. See
+`../circuits/README.md`; `MODEL_RUNNER=reference` skips it at the cost of a second
+implementation.
+
+```bash
+cd circuits && python export_onnx.py && python pipeline.py
+```
+
+```bash
+cd contracts && npx hardhat node
+```
+
+```bash
+cd contracts && npx hardhat run scripts/deploy.js --network localhost && npx hardhat run scripts/seed.js --network localhost
+```
+
+```bash
+cd relayer && npm install && cp .env.example .env && node src/index.js agent
+```
+
+Then, in another shell:
+
+```bash
+node src/index.js consumer request --agent 1 --notional 100000 --fee 100
+```
+
+`--fee` is optional. The router rejects any fee below `minFeeBps` of notional, so a request that
+names no fee reads the floor off chain and pays exactly it — `--notional 100000` at the default
+10 bps is a fee of 100, which is what the line above spells out by hand.
+
+The agent delivers within a block or two. To exercise the escalation path, challenge it and
+watch the agent answer at Gold:
+
+```bash
+node src/index.js consumer challenge --request <requestId>
+```
+
+```bash
+node src/index.js consumer settle --request <requestId> --pnl -120
+```
+
+## Operational notes
+
+- **Separate the keys.** `OPERATOR_KEY` can only sign attestations; it cannot move the bond or
+  withdraw fees. Those are the agent owner's, and should not live on the relayer host.
+- **`deliverBy` is the deadline that costs money.** Missing it is a liveness slash plus a
+  permanent fault, so delivery is retried with backoff; reverts are not retried, because the
+  chain has already decided.
+- **`retry` distinguishes transient from permanent.** Repeating a revert burns gas and burns the
+  deadline a fallback might still have made.
+- Not audited. Not hardened for production key custody.

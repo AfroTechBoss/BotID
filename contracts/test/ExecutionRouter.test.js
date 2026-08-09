@@ -1,0 +1,659 @@
+﻿const { expect } = require("chai");
+const { ethers } = require("hardhat");
+const {
+  E18,
+  Tier,
+  Status,
+  coder,
+  now,
+  increaseTime,
+  fundedWallet,
+  signDigest,
+  executionDigest,
+  buildBundle,
+  revealsFor,
+  commitOutputs,
+  SCALE_BITS,
+  zkAttestation,
+  teeAttestation,
+  deployProtocol,
+  registerAgent,
+} = require("./helpers");
+
+const HOUR = 3600;
+const DAY = 24 * HOUR;
+const CLEAN = { realizedPnlBps: 0, slaBreached: false, limitBreached: false };
+
+let feedNonce = 0;
+
+/** A consumer protocol commissions an execution, fixing the input data itself. */
+async function commission(env, agentId, opts = {}) {
+  const ts = await now();
+  // A price quantised at the model's declared input scale, plus the salt that hides it until
+  // a Gold proof opens it. Distinct per request so no two commitments collide.
+  const feeds = [
+    {
+      feedId: ethers.id("BOT/USD"),
+      value: BigInt(12_500 + feedNonce),
+      salt: ethers.id(`salt-${feedNonce++}`),
+      timestamp: ts,
+    },
+  ];
+  const { bundle, commitment } = buildBundle(env.chainId, env.attestor.target, feeds, [env.publisher]);
+  const deliverBy = ts + (opts.window ?? HOUR);
+  const notional = opts.notional ?? E18(100_000);
+
+  // Default to exactly the fee floor, which is what a real consumer paying the minimum does.
+  // Cases that assert on fee flows pass an explicit fee.
+  const minFeeBps = await env.router.minFeeBps();
+  const fee = opts.fee ?? (notional * minFeeBps) / 10_000n;
+
+  const tx = await env.router
+    .connect(env.consumer)
+    .requestExecution(agentId, commitment, notional, fee, deliverBy, opts.inputURI ?? "");
+  const receipt = await tx.wait();
+  const event = receipt.logs
+    .map((l) => {
+      try {
+        return env.router.interface.parseLog(l);
+      } catch {
+        return null;
+      }
+    })
+    .find((e) => e && e.name === "ExecutionRequested");
+
+  return {
+    requestId: event.args.requestId,
+    bundle,
+    commitment,
+    deliverBy,
+    reveals: revealsFor(feeds),
+  };
+}
+
+// The outputs every delivery in this suite claims. Bronze commits to the hash; a Gold proof
+// later has to reproduce the vector itself, which is why they share one definition here.
+const OUTPUTS = [3300n, 6700n];
+const OUT_COMMITMENT = commitOutputs(OUTPUTS);
+
+function makeCtx(agent, req, outputCommitment) {
+  return {
+    requestId: req.requestId,
+    agentId: agent.agentId,
+    modelCommitment: agent.model,
+    inputCommitment: req.commitment,
+    outputCommitment,
+    deliverBy: req.deliverBy,
+    operator: agent.operator.address,
+  };
+}
+
+async function deliverBronze(env, agent, req, outputCommitment = OUT_COMMITMENT) {
+  const ctx = makeCtx(agent, req, outputCommitment);
+  const sig = signDigest(agent.operator, executionDigest(env.chainId, env.sigAdapter.target, ctx));
+  await env.router.connect(agent.operator).deliver(req.requestId, outputCommitment, req.bundle, sig);
+  return ctx;
+}
+
+describe("ExecutionRouter", function () {
+  let env, agent;
+
+  beforeEach(async function () {
+    env = await deployProtocol();
+    agent = await registerAgent(env, { bond: E18(1_000_000), tier: Tier.Bronze });
+    await env.zkAdapter.setVerifier(agent.model, env.verifier.target, SCALE_BITS);
+  });
+
+  describe("request", function () {
+    it("escrows the fee and reserves exposure", async function () {
+      const before = await env.token.balanceOf(env.consumer.address);
+      const req = await commission(env, agent.agentId);
+
+      expect(await env.token.balanceOf(env.consumer.address)).to.equal(before - E18(100));
+      expect(await env.token.balanceOf(env.router.target)).to.equal(E18(100));
+
+      const p = await env.registry.getProfile(agent.agentId);
+      expect(p.openNotional).to.equal(E18(100_000));
+
+      const r = await env.router.getRequest(req.requestId);
+      expect(r.status).to.equal(Status.Pending);
+      expect(r.consumer).to.equal(env.consumer.address);
+    });
+
+    it("refuses a notional beyond the agent's credit limit", async function () {
+      // Bond 1,000,000 x 1.0 leverage x 0.5 Bronze factor = 500,000.
+      await expect(commission(env, agent.agentId, { notional: E18(500_001) })).to.be.revertedWithCustomError(
+        env.registry,
+        "CreditExceeded"
+      );
+    });
+
+    it("refuses a deadline in the past", async function () {
+      const ts = await now();
+      await expect(
+        env.router.connect(env.consumer).requestExecution(agent.agentId, ethers.ZeroHash, 0, 0, ts, "")
+      ).to.be.revertedWithCustomError(env.router, "DeadlinePassed");
+    });
+
+    // The protocol's take is a cut of `fee`, and `fee` is set by the consumer. Without a floor,
+    // a consumer and an agent who know each other pay zero on chain, settle privately, and take
+    // the service for free — so the floor is priced against notional instead.
+    it("refuses a fee below the floor", async function () {
+      await expect(
+        commission(env, agent.agentId, { notional: E18(100_000), fee: E18(9) })
+      ).to.be.revertedWithCustomError(env.router, "FeeBelowFloor");
+    });
+
+    it("closes the collusion path: a zero fee on real notional is rejected", async function () {
+      await expect(
+        commission(env, agent.agentId, { notional: E18(100_000), fee: 0 })
+      ).to.be.revertedWithCustomError(env.router, "FeeBelowFloor");
+    });
+
+    it("accepts a fee exactly at the floor", async function () {
+      const req = await commission(env, agent.agentId, { notional: E18(100_000), fee: E18(100) });
+      expect((await env.router.getRequest(req.requestId)).fee).to.equal(E18(100));
+    });
+
+    it("scales the floor with notional", async function () {
+      // 10 bps: the same fee that clears 100,000 of notional is short against 400,000.
+      await expect(
+        commission(env, agent.agentId, { notional: E18(400_000), fee: E18(100) })
+      ).to.be.revertedWithCustomError(env.router, "FeeBelowFloor");
+      await commission(env, agent.agentId, { notional: E18(400_000), fee: E18(400) });
+    });
+
+    it("permits zero-notional requests to be free", async function () {
+      // Nothing is at risk, so there is nothing to price against.
+      const req = await commission(env, agent.agentId, { notional: 0, fee: 0 });
+      expect((await env.router.getRequest(req.requestId)).status).to.equal(Status.Pending);
+    });
+
+    it("lets the owner disable the floor for bootstrapping", async function () {
+      await env.router.setMinFeeBps(0);
+      const req = await commission(env, agent.agentId, { notional: E18(100_000), fee: 0 });
+      expect((await env.router.getRequest(req.requestId)).fee).to.equal(0);
+    });
+
+    it("caps the floor well below a halt", async function () {
+      // A floor near 100% of notional is not a fee, it is a halt that looks like a bug.
+      await expect(env.router.setMinFeeBps(1_001)).to.be.revertedWithCustomError(
+        env.router,
+        "InvalidParameter"
+      );
+      await env.router.setMinFeeBps(1_000);
+      expect(await env.router.minFeeBps()).to.equal(1_000);
+    });
+
+    it("only the owner may move the floor", async function () {
+      await expect(env.router.connect(env.consumer).setMinFeeBps(0)).to.be.reverted;
+    });
+
+    it("mints a distinct id per request", async function () {
+      const a = await commission(env, agent.agentId, { notional: E18(1000) });
+      const b = await commission(env, agent.agentId, { notional: E18(1000) });
+      expect(a.requestId).to.not.equal(b.requestId);
+    });
+  });
+
+  describe("delivery", function () {
+    it("accepts a signed delivery inside the deadline", async function () {
+      const req = await commission(env, agent.agentId);
+      await deliverBronze(env, agent, req);
+
+      const r = await env.router.getRequest(req.requestId);
+      expect(r.status).to.equal(Status.Delivered);
+      expect(r.tier).to.equal(Tier.Bronze);
+      expect(r.outputCommitment).to.equal(OUT_COMMITMENT);
+    });
+
+    it("rejects delivery from anyone but the agent's operator", async function () {
+      const req = await commission(env, agent.agentId);
+      const impostor = await fundedWallet(env.owner, "1");
+      const ctx = makeCtx(agent, req, ethers.id("out-1"));
+      const sig = signDigest(impostor, executionDigest(env.chainId, env.sigAdapter.target, ctx));
+
+      await expect(
+        env.router.connect(impostor).deliver(req.requestId, ethers.id("out-1"), req.bundle, sig)
+      ).to.be.revertedWithCustomError(env.router, "NotOperator");
+    });
+
+    it("rejects delivery after the deadline", async function () {
+      const req = await commission(env, agent.agentId);
+      await increaseTime(2 * HOUR);
+
+      const ctx = makeCtx(agent, req, ethers.id("out-1"));
+      const sig = signDigest(agent.operator, executionDigest(env.chainId, env.sigAdapter.target, ctx));
+      await expect(
+        env.router.connect(agent.operator).deliver(req.requestId, ethers.id("out-1"), req.bundle, sig)
+      ).to.be.revertedWithCustomError(env.router, "DeadlinePassed");
+    });
+
+    it("rejects inputs the agent chose for itself", async function () {
+      // The headline attack: run the model on fabricated data, attest it perfectly.
+      const req = await commission(env, agent.agentId);
+      const forged = buildBundle(
+        env.chainId,
+        env.attestor.target,
+        [{ feedId: ethers.id("BOT/USD"), valueHash: ethers.id("fake"), timestamp: await now() }],
+        [env.publisher]
+      );
+
+      const ctx = makeCtx(agent, req, ethers.id("out-1"));
+      const sig = signDigest(agent.operator, executionDigest(env.chainId, env.sigAdapter.target, ctx));
+      await expect(
+        env.router.connect(agent.operator).deliver(req.requestId, ethers.id("out-1"), forged.bundle, sig)
+      ).to.be.revertedWithCustomError(env.router, "InputAttestationFailed");
+    });
+
+    it("rejects an attestation minted for a different request", async function () {
+      const first = await commission(env, agent.agentId, { notional: E18(1000) });
+      const second = await commission(env, agent.agentId, { notional: E18(1000) });
+
+      const ctx = makeCtx(agent, first, ethers.id("out-1"));
+      const sig = signDigest(agent.operator, executionDigest(env.chainId, env.sigAdapter.target, ctx));
+
+      await expect(
+        env.router.connect(agent.operator).deliver(second.requestId, ethers.id("out-1"), second.bundle, sig)
+      ).to.be.revertedWithCustomError(env.router, "VerificationFailed");
+    });
+
+    it("cannot be delivered twice", async function () {
+      const req = await commission(env, agent.agentId);
+      await deliverBronze(env, agent, req);
+
+      const ctx = makeCtx(agent, req, ethers.id("out-1"));
+      const sig = signDigest(agent.operator, executionDigest(env.chainId, env.sigAdapter.target, ctx));
+      await expect(
+        env.router.connect(agent.operator).deliver(req.requestId, ethers.id("out-1"), req.bundle, sig)
+      ).to.be.revertedWithCustomError(env.router, "BadStatus");
+    });
+
+    it("finalizes a Gold delivery immediately, with no challenge window", async function () {
+      const gold = await registerAgent(env, { bond: E18(1_000_000), tier: Tier.Gold, model: ethers.id("gold-model") });
+      await env.zkAdapter.setVerifier(gold.model, env.verifier.target, SCALE_BITS);
+
+      const req = await commission(env, gold.agentId);
+      await env.router
+        .connect(gold.operator)
+        .deliver(
+          req.requestId,
+          OUT_COMMITMENT,
+          req.bundle,
+          zkAttestation(req.reveals, OUTPUTS)
+        );
+
+      const r = await env.router.getRequest(req.requestId);
+      expect(r.status).to.equal(Status.Finalized);
+      expect(r.tier).to.equal(Tier.Gold);
+
+      await expect(env.router.connect(env.challenger).challenge(req.requestId)).to.be.revertedWithCustomError(
+        env.router,
+        "BadStatus"
+      );
+    });
+
+    it("accepts a Silver delivery from an enrolled enclave", async function () {
+      const measurement = ethers.id("pcr0-x");
+      const enclave = await fundedWallet(env.owner, "1");
+      await env.teeAdapter.setNotary(env.owner.address, true);
+      await env.teeAdapter.setMeasurement(measurement, true);
+      await env.teeAdapter.enroll(enclave.address, measurement, (await now()) + 6 * DAY);
+
+      const silver = await registerAgent(env, { bond: E18(1_000_000), tier: Tier.Silver, model: ethers.id("llm") });
+      const req = await commission(env, silver.agentId);
+      const output = ethers.id("out-silver");
+      const ctx = makeCtx(silver, req, output);
+
+      const digest = ethers.keccak256(
+        coder.encode(
+          ["bytes32", "bytes32"],
+          [executionDigest(env.chainId, env.teeAdapter.target, ctx), measurement]
+        )
+      );
+      const attestation = teeAttestation(enclave.address, signDigest(enclave, digest));
+
+      await env.router.connect(silver.operator).deliver(req.requestId, output, req.bundle, attestation);
+      expect((await env.router.getRequest(req.requestId)).status).to.equal(Status.Delivered);
+    });
+  });
+
+  describe("settlement", function () {
+    it("pays the agent, cuts the protocol fee, releases exposure and lifts the score", async function () {
+      const req = await commission(env, agent.agentId, { notional: E18(100_000), fee: E18(100) });
+      await deliverBronze(env, agent, req);
+      await increaseTime(2 * HOUR);
+      await env.router.finalize(req.requestId);
+
+      const ownerBefore = await env.token.balanceOf(env.agentOwner.address);
+      const treasuryBefore = await env.token.balanceOf(env.treasury.address);
+
+      await env.router.connect(env.consumer).settle(req.requestId, CLEAN);
+
+      expect(await env.token.balanceOf(env.agentOwner.address)).to.equal(ownerBefore + E18(95));
+      expect(await env.token.balanceOf(env.treasury.address)).to.equal(treasuryBefore + E18(5));
+
+      const p = await env.registry.getProfile(agent.agentId);
+      expect(p.openNotional).to.equal(0);
+      expect(p.settledExecutions).to.equal(1);
+      expect(p.score).to.be.greaterThan(5000);
+      expect((await env.router.getRequest(req.requestId)).status).to.equal(Status.Settled);
+    });
+
+    it("weights the score update by capital at risk", async function () {
+      const small = await registerAgent(env, { bond: E18(1_000_000), model: ethers.id("m-small") });
+      const large = await registerAgent(env, { bond: E18(1_000_000), model: ethers.id("m-large") });
+
+      for (const [who, notional] of [
+        [small, E18(100)],
+        [large, E18(400_000)],
+      ]) {
+        const req = await commission(env, who.agentId, { notional });
+        await deliverBronze(env, who, req);
+        await increaseTime(2 * HOUR);
+        await env.router.finalize(req.requestId);
+        await env.router.connect(env.consumer).settle(req.requestId, CLEAN);
+      }
+
+      // A 100-unit execution barely registers; a 400,000-unit one dominates. Under the v0
+      // flat "+10 per verified execution" both would have moved the score identically.
+      const smallScore = Number((await env.registry.getProfile(small.agentId)).score);
+      const largeScore = Number((await env.registry.getProfile(large.agentId)).score);
+      expect(smallScore).to.be.at.most(5010);
+      expect(largeScore).to.be.greaterThan(8000);
+    });
+
+    it("lowers the score on a breached outcome", async function () {
+      const req = await commission(env, agent.agentId, { notional: E18(300_000) });
+      await deliverBronze(env, agent, req);
+      await increaseTime(2 * HOUR);
+      await env.router.finalize(req.requestId);
+
+      await env.router
+        .connect(env.consumer)
+        .settle(req.requestId, { realizedPnlBps: -3000, slaBreached: true, limitBreached: true });
+
+      expect((await env.registry.getProfile(agent.agentId)).score).to.be.lessThan(5000);
+    });
+
+    it("only the commissioning consumer may settle", async function () {
+      const req = await commission(env, agent.agentId);
+      await deliverBronze(env, agent, req);
+      await increaseTime(2 * HOUR);
+      await env.router.finalize(req.requestId);
+
+      await expect(
+        env.router.connect(env.other).settle(req.requestId, CLEAN)
+      ).to.be.revertedWithCustomError(env.router, "NotConsumer");
+    });
+
+    it("cannot settle before finalization", async function () {
+      const req = await commission(env, agent.agentId);
+      await deliverBronze(env, agent, req);
+      await expect(
+        env.router.connect(env.consumer).settle(req.requestId, CLEAN)
+      ).to.be.revertedWithCustomError(env.router, "BadStatus");
+    });
+
+    it("cannot finalize before the challenge window closes", async function () {
+      const req = await commission(env, agent.agentId);
+      await deliverBronze(env, agent, req);
+      await expect(env.router.finalize(req.requestId)).to.be.revertedWithCustomError(
+        env.router,
+        "DeadlineNotPassed"
+      );
+    });
+
+    it("lets anyone settle at par once the window lapses, so a silent consumer cannot grief", async function () {
+      const req = await commission(env, agent.agentId, { notional: E18(200_000) });
+      await deliverBronze(env, agent, req);
+      await increaseTime(2 * HOUR);
+      await env.router.finalize(req.requestId);
+
+      await expect(env.router.settleDefault(req.requestId)).to.be.revertedWithCustomError(
+        env.router,
+        "DeadlineNotPassed"
+      );
+
+      await increaseTime(8 * DAY);
+      await env.router.connect(env.other).settleDefault(req.requestId);
+
+      const p = await env.registry.getProfile(agent.agentId);
+      expect(p.openNotional).to.equal(0);
+      expect(p.score).to.be.greaterThan(5000);
+    });
+
+    it("refuses a late settle from the consumer", async function () {
+      const req = await commission(env, agent.agentId);
+      await deliverBronze(env, agent, req);
+      await increaseTime(2 * HOUR);
+      await env.router.finalize(req.requestId);
+      await increaseTime(8 * DAY);
+
+      await expect(
+        env.router.connect(env.consumer).settle(req.requestId, CLEAN)
+      ).to.be.revertedWithCustomError(env.router, "DeadlinePassed");
+    });
+  });
+
+  describe("liveness — the fault the v0 design could not observe", function () {
+    it("penalises an accepted request that was never delivered", async function () {
+      const req = await commission(env, agent.agentId, { notional: E18(100_000), fee: E18(100) });
+      const consumerBefore = await env.token.balanceOf(env.consumer.address);
+      const callerBefore = await env.token.balanceOf(env.other.address);
+
+      await increaseTime(2 * HOUR);
+      await env.router.connect(env.other).markExpired(req.requestId);
+
+      // 2% of a 1,000,000 bond, half of it to whoever reported the failure.
+      expect(await env.token.balanceOf(env.other.address)).to.equal(callerBefore + E18(10_000));
+      expect(await env.token.balanceOf(env.consumer.address)).to.equal(consumerBefore + E18(100));
+
+      const p = await env.registry.getProfile(agent.agentId);
+      expect(p.faults).to.equal(1);
+      expect(p.bond).to.equal(E18(980_000));
+      expect(p.openNotional).to.equal(0);
+      expect(p.score).to.equal(4250); // 5000 x (1 - 15%)
+      expect((await env.router.getRequest(req.requestId)).status).to.equal(Status.Expired);
+    });
+
+    it("cannot be reported before the deadline", async function () {
+      const req = await commission(env, agent.agentId);
+      await expect(env.router.markExpired(req.requestId)).to.be.revertedWithCustomError(
+        env.router,
+        "DeadlineNotPassed"
+      );
+    });
+
+    it("cannot be reported twice", async function () {
+      const req = await commission(env, agent.agentId);
+      await increaseTime(2 * HOUR);
+      await env.router.markExpired(req.requestId);
+      await expect(env.router.markExpired(req.requestId)).to.be.revertedWithCustomError(
+        env.router,
+        "BadStatus"
+      );
+    });
+
+    it("is not diluted by a large volume of clean executions", async function () {
+      for (let i = 0; i < 3; i++) {
+        const r = await commission(env, agent.agentId, { notional: E18(400_000) });
+        await deliverBronze(env, agent, r, ethers.id(`out-${i}`));
+        await increaseTime(2 * HOUR);
+        await env.router.finalize(r.requestId);
+        await env.router.connect(env.consumer).settle(r.requestId, CLEAN);
+      }
+      const before = Number((await env.registry.getProfile(agent.agentId)).score);
+      expect(before).to.be.greaterThan(9000);
+
+      const bad = await commission(env, agent.agentId, { notional: E18(1000) });
+      await increaseTime(2 * HOUR);
+      await env.router.markExpired(bad.requestId);
+
+      const after = Number((await env.registry.getProfile(agent.agentId)).score);
+      expect(after).to.be.lessThan(Math.floor(before * 0.9));
+    });
+  });
+
+  describe("challenge and escalation", function () {
+    it("returns the challenger's bond to the agent when a Gold proof arrives", async function () {
+      const req = await commission(env, agent.agentId);
+      await deliverBronze(env, agent, req);
+
+      const ownerBefore = await env.token.balanceOf(env.agentOwner.address);
+      const challengerBefore = await env.token.balanceOf(env.challenger.address);
+
+      await env.router.connect(env.challenger).challenge(req.requestId);
+      expect((await env.router.getRequest(req.requestId)).status).to.equal(Status.Challenged);
+
+      await env.router
+        .connect(agent.operator)
+        .resolveChallenge(req.requestId, zkAttestation(req.reveals, OUTPUTS));
+
+      const r = await env.router.getRequest(req.requestId);
+      expect(r.status).to.equal(Status.Finalized);
+      expect(r.tier).to.equal(Tier.Gold);
+      expect(await env.token.balanceOf(env.agentOwner.address)).to.equal(ownerBefore + E18(100));
+      expect(await env.token.balanceOf(env.challenger.address)).to.equal(challengerBefore - E18(100));
+    });
+
+    it("rejects an escalation proof that does not describe the delivered execution", async function () {
+      const req = await commission(env, agent.agentId);
+      await deliverBronze(env, agent, req);
+      await env.router.connect(env.challenger).challenge(req.requestId);
+
+      // A perfectly valid proof — of a different output vector than the one delivered under.
+      await expect(
+        env.router
+          .connect(agent.operator)
+          .resolveChallenge(req.requestId, zkAttestation(req.reveals, [10_000n, 0n]))
+      ).to.be.revertedWithCustomError(env.router, "VerificationFailed");
+    });
+
+    it("slashes the agent and pays the challenger when no proof arrives", async function () {
+      const req = await commission(env, agent.agentId, { notional: E18(100_000), fee: E18(100) });
+      await deliverBronze(env, agent, req);
+
+      const challengerBefore = await env.token.balanceOf(env.challenger.address);
+      const consumerBefore = await env.token.balanceOf(env.consumer.address);
+
+      await env.router.connect(env.challenger).challenge(req.requestId);
+      await increaseTime(7 * HOUR);
+      await env.router.connect(env.other).slashUnresolvedChallenge(req.requestId);
+
+      // 20% of a 1,000,000 bond slashed; half of that to the challenger, plus its bond back.
+      expect(await env.token.balanceOf(env.challenger.address)).to.equal(
+        challengerBefore + E18(100_000)
+      );
+      expect(await env.token.balanceOf(env.consumer.address)).to.equal(consumerBefore + E18(100));
+
+      const p = await env.registry.getProfile(agent.agentId);
+      expect(p.bond).to.equal(E18(800_000));
+      expect(p.faults).to.equal(1);
+      expect(p.openNotional).to.equal(0);
+      expect(p.score).to.equal(2000); // 5000 x (1 - 60%)
+      expect((await env.router.getRequest(req.requestId)).status).to.equal(Status.Faulted);
+    });
+
+    it("cannot be slashed while the escalation window is still open", async function () {
+      const req = await commission(env, agent.agentId);
+      await deliverBronze(env, agent, req);
+      await env.router.connect(env.challenger).challenge(req.requestId);
+
+      await expect(
+        env.router.slashUnresolvedChallenge(req.requestId)
+      ).to.be.revertedWithCustomError(env.router, "DeadlineNotPassed");
+    });
+
+    it("cannot be resolved once the escalation window closes", async function () {
+      const req = await commission(env, agent.agentId);
+      await deliverBronze(env, agent, req);
+      await env.router.connect(env.challenger).challenge(req.requestId);
+      await increaseTime(7 * HOUR);
+
+      await expect(
+        env.router
+          .connect(agent.operator)
+          .resolveChallenge(req.requestId, zkAttestation(req.reveals, OUTPUTS))
+      ).to.be.revertedWithCustomError(env.router, "DeadlinePassed");
+    });
+
+    it("cannot be challenged after the window closes", async function () {
+      const req = await commission(env, agent.agentId);
+      await deliverBronze(env, agent, req);
+      await increaseTime(2 * HOUR);
+
+      await expect(
+        env.router.connect(env.challenger).challenge(req.requestId)
+      ).to.be.revertedWithCustomError(env.router, "DeadlinePassed");
+    });
+
+    it("cannot be challenged twice", async function () {
+      const req = await commission(env, agent.agentId);
+      await deliverBronze(env, agent, req);
+      await env.router.connect(env.challenger).challenge(req.requestId);
+
+      await expect(
+        env.router.connect(env.other).challenge(req.requestId)
+      ).to.be.revertedWithCustomError(env.router, "BadStatus");
+    });
+  });
+
+  describe("configuration", function () {
+    it("refuses a settlement window that would outlive the unbonding period", async function () {
+      await expect(
+        env.router.setParameters(HOUR, 6 * HOUR, 25 * DAY, E18(100), 2000, 200, 5000, 500)
+      ).to.be.revertedWithCustomError(env.router, "InvalidParameter");
+    });
+
+    it("refuses an adapter registered under the wrong tier", async function () {
+      await expect(
+        env.router.setAdapter(Tier.Gold, env.sigAdapter.target)
+      ).to.be.revertedWithCustomError(env.router, "InvalidParameter");
+    });
+
+    it("reverts delivery when no adapter is configured for the agent's tier", async function () {
+      await env.router.setAdapter(Tier.Bronze, ethers.ZeroAddress);
+      const req = await commission(env, agent.agentId);
+
+      const ctx = makeCtx(agent, req, ethers.id("out-1"));
+      const sig = signDigest(agent.operator, executionDigest(env.chainId, env.sigAdapter.target, ctx));
+      await expect(
+        env.router.connect(agent.operator).deliver(req.requestId, ethers.id("out-1"), req.bundle, sig)
+      ).to.be.revertedWithCustomError(env.router, "NoAdapter");
+    });
+
+    it("only the owner may reconfigure", async function () {
+      await expect(
+        env.router.connect(env.other).setAdapter(Tier.Bronze, env.sigAdapter.target)
+      ).to.be.revertedWithCustomError(env.router, "NotOwner");
+    });
+
+    it("rejects operations on an unknown request", async function () {
+      await expect(env.router.finalize(ethers.id("nope"))).to.be.revertedWithCustomError(
+        env.router,
+        "UnknownRequest"
+      );
+    });
+  });
+
+  describe("engine access control", function () {
+    it("refuses writes from anyone but the registry and router", async function () {
+      await expect(
+        env.engine.connect(env.other).recordFault(agent.agentId, 0)
+      ).to.be.revertedWithCustomError(env.engine, "NotWriter");
+      await expect(env.engine.connect(env.other).initAgent(99)).to.be.revertedWithCustomError(
+        env.engine,
+        "NotWriter"
+      );
+    });
+
+    it("refuses to initialise an agent twice", async function () {
+      await env.engine.setWriter(env.owner.address, true);
+      await expect(env.engine.initAgent(agent.agentId)).to.be.revertedWithCustomError(
+        env.engine,
+        "AlreadyInitialized"
+      );
+    });
+  });
+});

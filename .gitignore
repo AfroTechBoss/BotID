@@ -1,0 +1,23 @@
+node_modules/
+package-lock.json
+out/
+artifacts/
+cache/
+.env
+.env.*
+!.env.example
+**/deployments/localhost-*.json
+relayer/.bundles/
+
+# Circuit build products. The proving key alone is ~150MB and the SRS is a download, so the
+# repo carries the sources that regenerate them (spec.json, export_onnx.py, pipeline.py) rather
+# than the products themselves. Verifier.sol is checked in as an exception — it is the artifact
+# that actually gets deployed, and it should be reviewable in a diff.
+circuits/build/*
+!circuits/build/Verifier.sol
+circuits/.venv/
+__pycache__/
+
+# Working documents. `*.local.md` is scratch space for briefs and design notes that belong to
+# whoever is holding the work, not to the protocol repo's history.
+*.local.md

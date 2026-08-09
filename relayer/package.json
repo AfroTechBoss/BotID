@@ -1,0 +1,21 @@
+{
+  "name": "botid-relayer",
+  "version": "0.1.0",
+  "description": "Reference relayer, watchtower and consumer client for the BotID protocol",
+  "license": "MIT",
+  "private": true,
+  "engines": {
+    "node": ">=20"
+  },
+  "bin": {
+    "botid": "src/index.js"
+  },
+  "scripts": {
+    "agent": "node src/index.js agent",
+    "watchtower": "node src/index.js watchtower",
+    "consumer": "node src/index.js consumer"
+  },
+  "dependencies": {
+    "ethers": "^6.17.0"
+  }
+}

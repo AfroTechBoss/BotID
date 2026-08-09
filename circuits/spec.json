@@ -1,0 +1,12 @@
+{
+  "name": "botid.reference-allocator.v1",
+  "feeds": 3,
+  "outputs": 3,
+  "decimals": 100,
+  "inputScaleBits": 8,
+  "maxAbsValue": 300000,
+  "description": "Equal weight among above-average feeds. A feed strictly above the bundle mean gets an equal share of the portfolio; every other feed gets nothing. Outputs are basis points and sum to 10000 whenever at least one feed is above the mean, and to 0 when they are all identical.",
+  "note": "modelCommitment = keccak256(utf8(name)). Every field here is part of the model's identity: changing the feed count, the output count, the scale or the domain changes the circuit, the verifying key and therefore the agent id. Reputation does not transfer across a change here.",
+  "scaleNote": "`decimals` is the unit a feed value is quoted in — 100 means cents. `inputScaleBits` is ezkl's `input_scale`: the public input cell holds `value << inputScaleBits`, and it is the third argument to ZkAdapter.setVerifier.",
+  "domainNote": "`maxAbsValue` is not a style choice, it is where the circuit stops working. halo2 decomposes intermediates in base 2^14 with two limbs, so no intermediate may exceed 2^28. The largest one here is n * maxAbsValue << inputScaleBits = 3 * 300000 * 256 = 2.3e8, just under. Raising either the domain or the scale past that point makes compilation fail outright rather than quietly lose precision — which is the good failure mode, and the reason both numbers live in this file."
+}

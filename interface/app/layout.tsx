@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import './globals.css';
+import { cabinet, satoshi } from './fonts';
 import Nav from '@/components/Nav';
 import Footer from '@/components/Footer';
 
@@ -13,7 +14,9 @@ export const metadata: Metadata = {
 // links required by §18 were missing from exactly the pages a stranger is most likely to land on.
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
+    // The font classes carry --font-cabinet and --font-satoshi; globals.css reads them through
+    // --font-heading and --font-body, so no component ever names a typeface directly.
+    <html lang="en" className={`${cabinet.variable} ${satoshi.variable}`}>
       <body>
         <div className="page-frame">
           <Nav />

@@ -18,6 +18,14 @@ circuits/build/*
 circuits/.venv/
 __pycache__/
 
+# Editors and OS.
+.DS_Store
+Thumbs.db
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+.idea/
+
 # Working documents. `*.local.md` is scratch space for briefs and design notes that belong to
 # whoever is holding the work, not to the protocol repo's history.
 *.local.md

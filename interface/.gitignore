@@ -1,0 +1,26 @@
+# Web-specific ignores. Anything repo-wide — node_modules, out, .env, *.local.md, editor and OS
+# noise — is in the root .gitignore and is not repeated here.
+
+# build
+.next/
+build/
+dist/
+
+# package managers
+.pnp
+.pnp.js
+.yarn/install-state.gz
+
+# typescript
+*.tsbuildinfo
+next-env.d.ts
+
+# test and tooling output
+coverage/
+playwright-report/
+test-results/
+.eslintcache
+.turbo/
+
+# deployment
+.vercel

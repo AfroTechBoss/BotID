@@ -209,9 +209,17 @@ The agent needs the circuit built first, because it runs it at every tier — se
 | Directory | What is in it |
 |---|---|
 | `contracts/` | The protocol. Solc 0.8.24, no external dependencies, 140 tests |
+| `contracts/abi/` | Consumer-facing ABIs as checked-in TypeScript. Generated, reviewed in diffs |
 | `circuits/` | The Gold tier's ONNX model, `ezkl` pipeline, and the run/prove entrypoints |
 | `relayer/` | Reference agent, watchtower and consumer. One dependency: `ethers` |
+| `interface/` | The web interface. Next.js, not yet built — see [`interface/README.md`](interface/README.md) |
 | `docs/` | The architecture, and the four attacks it exists to prevent |
+
+The interface shares this repository with the contracts rather than living in its own. It reads
+their ABIs directly from `contracts/abi/`, so a contract change and the frontend change it forces
+land in one commit and one review, and `npm run check-abi` can fail the build when they do not.
+The interface is still not a dependency of the protocol: the contracts run whether or not anything
+in `interface/` does.
 
 ## Status
 

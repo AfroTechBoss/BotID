@@ -10,11 +10,21 @@ export default function Portal() {
 
   return (
     <>
-      <main style={{ padding: 'var(--space-6)', maxWidth: 720, display: 'flex', flexDirection: 'column', gap: 'var(--space-8)' }}>
+      {/* Full width, and the three panels run across it rather than down a single 720px column.
+          The cap was defensible while this was one stacked form — a 1490px text input is as wrong
+          as a 1490px paragraph — but that argument only ever justified narrow *inputs*, not a
+          narrow page. As columns the fields stay the width a field should be and the screen is
+          used: registration, bond management and alerts are three independent tasks, and putting
+          them side by side means the unbonding queue is visible while you size a bond rather than
+          two scrolls below it. */}
+      <main style={{ padding: 'var(--space-6)', display: 'flex', flexDirection: 'column', gap: 'var(--space-6)' }}>
         <div style={{ border: '1px dashed var(--color-divider)', padding: 'var(--space-3)', fontSize: 13 }}>
           Connect a wallet to register an agent or manage a bond. Reads above are public &mdash; nothing here required a wallet until now.
         </div>
 
+        {/* 340px floor: the register panel's segmented tier control and its credit-line readout are
+            the widest things here, and they start wrapping below that. */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: 'var(--space-8)', alignItems: 'start' }}>
         <section>
           <h2 style={{ fontSize: 20 }}>Register an agent</h2>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)', marginTop: 'var(--space-3)' }}>
@@ -42,8 +52,9 @@ export default function Portal() {
           </div>
         </section>
 
-        <div className="hr" />
-
+        {/* The .hr rules that used to sit between these sections are gone: a horizontal rule
+            separates things stacked vertically, and these are now side by side. The grid gap
+            does that job. */}
         <section>
           <h2 style={{ fontSize: 20 }}>Bond management</h2>
           <div style={{ display: 'flex', gap: 'var(--space-2)', marginTop: 'var(--space-3)', flexWrap: 'wrap' }}>
@@ -64,8 +75,6 @@ export default function Portal() {
           </div>
         </section>
 
-        <div className="hr" />
-
         <section>
           <h2 style={{ fontSize: 20 }}>Alerts</h2>
           <p style={{ fontSize: 12 }} className="text-muted">Client-side subscription &mdash; fires only while this tab is open. No server watches on your behalf yet.</p>
@@ -75,6 +84,7 @@ export default function Portal() {
             <button className="btn btn-secondary btn-block">Save alert</button>
           </div>
         </section>
+        </div>
       </main>
     </>
   );

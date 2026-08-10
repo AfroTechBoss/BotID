@@ -4,11 +4,14 @@ const NAV = [['collect', 'What we collect'], ['browser', 'Your browser'], ['chai
 export default function Privacy() {
   return (
     <>
-      <div style={{ display: 'grid', gridTemplateColumns: '220px minmax(0,68ch)', gap: 'var(--space-8)', padding: 'var(--space-8) var(--space-6)', flex: 1 }}>
+      {/* 1fr, not 68ch: the article column takes whatever the screen has left after the nav rail,
+          and the measure lives on the paragraphs inside it instead (see .legal-body). The tables
+          on this page are the reason — they were being squeezed into a reading column. */}
+      <div style={{ display: 'grid', gridTemplateColumns: '220px minmax(0,1fr)', gap: 'var(--space-8)', padding: 'var(--space-8) var(--space-6)', flex: 1 }}>
         <aside style={{ position: 'sticky', top: 'var(--space-6)', alignSelf: 'start', fontSize: 13, display: 'flex', flexDirection: 'column', gap: 8 }}>
           {NAV.map(([id, label]) => <a key={id} href={`#${id}`}>{label}</a>)}
         </aside>
-        <main>
+        <main className="legal-body">
           <h1 style={{ fontSize: 28 }}>Privacy policy</h1>
           <p className="text-muted" style={{ fontSize: 12 }}>Last updated Aug 9, 2026</p>
           <p>What this interface collects is unusually little for a product in this space, and that is a genuine selling point, not boilerplate to skim past. There is no account, no sign-up, no email address on file unless you deliberately give us one to receive an alert, and we do not collect your wallet address ourselves.</p>

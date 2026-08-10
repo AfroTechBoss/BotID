@@ -4,11 +4,13 @@ const NAV = [['what', 'What this is'], ['custody', 'No custody'], ['eligibility'
 export default function Terms() {
   return (
     <>
-      <div style={{ display: 'grid', gridTemplateColumns: '220px minmax(0,68ch)', gap: 'var(--space-8)', padding: 'var(--space-8) var(--space-6)', flex: 1 }}>
+      {/* 1fr rather than 68ch — the column takes the screen, .legal-body keeps the measure on the
+          paragraphs. Same change as privacy and the risk disclosure. */}
+      <div style={{ display: 'grid', gridTemplateColumns: '220px minmax(0,1fr)', gap: 'var(--space-8)', padding: 'var(--space-8) var(--space-6)', flex: 1 }}>
         <aside style={{ position: 'sticky', top: 'var(--space-6)', alignSelf: 'start', fontSize: 13, display: 'flex', flexDirection: 'column', gap: 8 }}>
           {NAV.map(([id, label]) => <a key={id} href={`#${id}`}>{label}</a>)}
         </aside>
-        <main>
+        <main className="legal-body">
           <h1 style={{ fontSize: 28 }}>Terms of service</h1>
           <p className="text-muted" style={{ fontSize: 12 }}>Last updated Aug 9, 2026</p>
           <h3 id="what">What this is</h3>

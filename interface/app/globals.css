@@ -329,6 +329,14 @@ img { display: block; max-width: 100%; }
    where reading speed peaks — a 2560px-wide paragraph is not generous, it is unreadable. */
 .measure { max-width: 70ch; }
 
+/* The same rule applied one level down, for the legal pages. Those are a sticky section nav beside
+   a long article, and capping the *column* at 68ch left the right half of a wide screen empty. The
+   column now takes the width, and the measure moves onto the paragraphs inside it — which is where
+   it belonged anyway, since the tables in that article (local storage, third parties) are tables
+   and wanted the screen the whole time. Direct children only: a <p> nested inside a table cell or
+   a callout is that component's business, not this rule's. */
+.legal-body > p { max-width: 70ch; }
+
 /* The overview is a fixed screenful with its own scrolling regions, so it needs a definite
    height, not the min-height the other pages use. That definite height is what lets the columns
    inside it overflow at all: `overflow-y: auto` on an auto-height box does nothing, because a box

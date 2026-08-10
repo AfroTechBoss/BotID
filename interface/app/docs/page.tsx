@@ -87,9 +87,11 @@ export default function Docs() {
     <>
       {/* Sticky section nav beside a full-width article, the same shape as the legal pages — this
           page is now long enough to need one. The measure lives on the paragraphs via .legal-body
-          so the tables, of which there are many here, still get the screen. */}
-      <div style={{ display: 'grid', gridTemplateColumns: '240px minmax(0,1fr)', gap: 'var(--space-8)', padding: 'var(--space-8) var(--space-6)', flex: 1 }}>
-        <aside style={{ position: 'sticky', top: 'var(--space-6)', alignSelf: 'start', fontSize: 13, display: 'flex', flexDirection: 'column', gap: 8 }}>
+          so the tables, of which there are many here, still get the screen.
+          .doc-shell / .doc-rail rather than an inline grid: below 900px the rail has to stop being
+          a 240px column and become a wrapped row of links, and that is a media query's job. */}
+      <div className="doc-shell">
+        <aside className="doc-rail">
           {NAV.map(([id, label]) => <a key={id} href={`#${id}`}>{label}</a>)}
         </aside>
 
@@ -155,17 +157,19 @@ require(
           </p>
 
           <h3 id="contracts">The five contracts</h3>
-          <table className="table">
-            <thead><tr><th>Contract</th><th>Responsibility</th></tr></thead>
-            <tbody>
-              {CONTRACTS.map(([name, role]) => (
-                <tr key={name}>
-                  <td style={{ fontFamily: 'var(--font-mono)', fontSize: 12, whiteSpace: 'nowrap', verticalAlign: 'top' }}>{name}</td>
-                  <td>{role}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <div className="table-scroll">
+            <table className="table">
+              <thead><tr><th>Contract</th><th>Responsibility</th></tr></thead>
+              <tbody>
+                {CONTRACTS.map(([name, role]) => (
+                  <tr key={name}>
+                    <td style={{ fontFamily: 'var(--font-mono)', fontSize: 12, whiteSpace: 'nowrap', verticalAlign: 'top' }}>{name}</td>
+                    <td>{role}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
           <p>
             Bonds are held as an ERC-20 (<code>bondToken</code>), not as native currency, so the registry never
             holds a balance it cannot account for per agent.
@@ -176,20 +180,22 @@ require(
             Verification strength is an attribute of an agent&apos;s record, not a gate on participation. All
             three tiers coexist; consumers choose what they will accept.
           </p>
-          <table className="table">
-            <thead><tr><th>Tier</th><th>Mechanism</th><th>Latency</th><th>Covers</th><th>Finality</th></tr></thead>
-            <tbody>
-              {TIERS.map(([tier, mech, lat, covers, fin]) => (
-                <tr key={tier}>
-                  <td style={{ whiteSpace: 'nowrap', verticalAlign: 'top' }}><strong>{tier}</strong></td>
-                  <td>{mech}</td>
-                  <td style={{ whiteSpace: 'nowrap', verticalAlign: 'top' }}>{lat}</td>
-                  <td>{covers}</td>
-                  <td>{fin}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <div className="table-scroll">
+            <table className="table">
+              <thead><tr><th>Tier</th><th>Mechanism</th><th>Latency</th><th>Covers</th><th>Finality</th></tr></thead>
+              <tbody>
+                {TIERS.map(([tier, mech, lat, covers, fin]) => (
+                  <tr key={tier}>
+                    <td style={{ whiteSpace: 'nowrap', verticalAlign: 'top' }}><strong>{tier}</strong></td>
+                    <td>{mech}</td>
+                    <td style={{ whiteSpace: 'nowrap', verticalAlign: 'top' }}>{lat}</td>
+                    <td>{covers}</td>
+                    <td>{fin}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
           <p>
             <strong>Why three and not just proofs.</strong> ZK-ML today proves small numeric models. It cannot
             prove an LLM-driven agent at any price. A proof-only protocol would address a sliver of the market
@@ -397,18 +403,20 @@ score' = decay(score, Δt) + (q − decay(score, Δt)) · w / (w + K)`}</div>
             moment an exit begins rather than at withdrawal. Below <code>minBond</code> the result is zero, not a
             small number. The whole thing is then clamped to <code>globalNotionalCap</code>.
           </p>
-          <table className="table">
-            <caption style={{ captionSide: 'top', textAlign: 'left', fontSize: 13, paddingBottom: 'var(--space-2)' }}>
-              <code>leverageBps(score)</code> — a step function, so small score movements never silently move a
-              capital ceiling
-            </caption>
-            <thead><tr><th>Score</th><th>Leverage</th></tr></thead>
-            <tbody>
-              {LEVERAGE.map(([band, lev]) => (
-                <tr key={band}><td className="tabular">{band}</td><td className="tabular">{lev}</td></tr>
-              ))}
-            </tbody>
-          </table>
+          <div className="table-scroll">
+            <table className="table">
+              <caption style={{ captionSide: 'top', textAlign: 'left', fontSize: 13, paddingBottom: 'var(--space-2)' }}>
+                <code>leverageBps(score)</code> — a step function, so small score movements never silently move a
+                capital ceiling
+              </caption>
+              <thead><tr><th>Score</th><th>Leverage</th></tr></thead>
+              <tbody>
+                {LEVERAGE.map(([band, lev]) => (
+                  <tr key={band}><td className="tabular">{band}</td><td className="tabular">{lev}</td></tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
           <p>
             Tier multiplies it: Gold 1.5x, Silver 1.0x, Bronze 0.5x. So a Gold agent at 9,500+ reaches the 6.0x
             leverage cap times 1.5, while a Bronze agent below neutral is held at 0.5 × 0.5 — deliberately
@@ -434,19 +442,21 @@ score' = decay(score, Δt) + (q − decay(score, Δt)) · w / (w + K)`}</div>
             Shipped defaults. Everything except the unbonding period is owner-settable, which is a trust
             assumption you should weigh — see <a href="/security">security</a> for who holds that key today.
           </p>
-          <table className="table">
-            <thead><tr><th>Parameter</th><th>Where</th><th>Default</th><th>Note</th></tr></thead>
-            <tbody>
-              {PARAMS.map(([name, where, def, note]) => (
-                <tr key={name}>
-                  <td style={{ verticalAlign: 'top' }}>{name}</td>
-                  <td style={{ fontFamily: 'var(--font-mono)', fontSize: 12, verticalAlign: 'top' }}>{where}</td>
-                  <td className="tabular" style={{ whiteSpace: 'nowrap', verticalAlign: 'top' }}>{def}</td>
-                  <td>{note}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <div className="table-scroll">
+            <table className="table">
+              <thead><tr><th>Parameter</th><th>Where</th><th>Default</th><th>Note</th></tr></thead>
+              <tbody>
+                {PARAMS.map(([name, where, def, note]) => (
+                  <tr key={name}>
+                    <td style={{ verticalAlign: 'top' }}>{name}</td>
+                    <td style={{ fontFamily: 'var(--font-mono)', fontSize: 12, verticalAlign: 'top' }}>{where}</td>
+                    <td className="tabular" style={{ whiteSpace: 'nowrap', verticalAlign: 'top' }}>{def}</td>
+                    <td>{note}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
 
           <h3 id="fees">Fees</h3>
           <p>
@@ -477,15 +487,17 @@ score' = decay(score, Δt) + (q − decay(score, Δt)) · w / (w + K)`}</div>
           </p>
 
           <h3 id="status">What is built</h3>
-          <table className="table">
-            <thead><tr><th>Stage</th><th>Scope</th><th>State</th></tr></thead>
-            <tbody>
-              <tr><td>1</td><td>AgentRegistry, ExecutionRouter, SignatureAdapter, ReputationEngine, InputAttestor — Bronze end to end</td><td style={{ color: 'var(--score-good)' }}>built</td></tr>
-              <tr><td>2</td><td>TeeAdapter, challenge and escalation resolution, IReputationOracle read API</td><td style={{ color: 'var(--score-good)' }}>built — no integration partner</td></tr>
-              <tr><td>3</td><td>ZkAdapter and the ezkl pipeline, subgraph, dashboard</td><td>circuit and adapter built; no subgraph, no dashboard</td></tr>
-              <tr><td>4</td><td>Insurance vault</td><td className="text-muted">not started</td></tr>
-            </tbody>
-          </table>
+          <div className="table-scroll">
+            <table className="table">
+              <thead><tr><th>Stage</th><th>Scope</th><th>State</th></tr></thead>
+              <tbody>
+                <tr><td>1</td><td>AgentRegistry, ExecutionRouter, SignatureAdapter, ReputationEngine, InputAttestor — Bronze end to end</td><td style={{ color: 'var(--score-good)' }}>built</td></tr>
+                <tr><td>2</td><td>TeeAdapter, challenge and escalation resolution, IReputationOracle read API</td><td style={{ color: 'var(--score-good)' }}>built — no integration partner</td></tr>
+                <tr><td>3</td><td>ZkAdapter and the ezkl pipeline, subgraph, dashboard</td><td>circuit and adapter built; no subgraph, no dashboard</td></tr>
+                <tr><td>4</td><td>Insurance vault</td><td className="text-muted">not started</td></tr>
+              </tbody>
+            </table>
+          </div>
           <p>
             The gating question is not technical. It is whether a consumer protocol will call{' '}
             <code>getProfile</code> in production. If nothing reads the score, nothing else here matters, and no

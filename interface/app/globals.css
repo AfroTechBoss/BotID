@@ -390,3 +390,93 @@ img { display: block; max-width: 100%; }
 /* Rows are still capped at 40 in the component: this bounds the pixels, that bounds the memory. */
 .feed-scroll { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
 .tabular { font-variant-numeric: tabular-nums; }
+
+/* ─────────────────────────────────────────────────────────────────────────────────────────────
+   Narrow screens.
+
+   Everything below exists because the layouts above were written for a desktop and expressed in
+   inline styles, where a media query cannot reach them. So the multi-column shapes that had to
+   change at a breakpoint moved out of the pages and into these four classes: .table-scroll,
+   .stat-strip, .panel-split and .doc-shell. Any page needing one of those shapes should use the
+   class rather than inline a grid, or it will overflow on a phone again.
+
+   The nav's own two queries are not here — they live beside .nav, with the --nav-h arithmetic
+   they change. 720px is the shared breakpoint: it is where the header wraps, so the whole layout
+   changes character at one width rather than three.
+   ───────────────────────────────────────────────────────────────────────────────────────────── */
+
+/* A dense table has a floor: nine columns of hashes and figures do not fit 375px at any font size
+   worth reading, and the alternatives are worse. Collapsing rows into stacked cards throws away
+   column alignment, which is the entire reason a leaderboard is a table. So the table keeps its
+   shape and the *wrapper* scrolls — the page does not move, one region does.
+   The wrapper is inert on a desktop, where nothing overflows it. */
+.table-scroll { overflow-x: auto; overscroll-behavior-x: contain; }
+
+/* Reading a sentence in a 40px-wide column is not reading. Prose tables (the legal pages, the
+   parameter reference) keep wrapping and simply get tall; the dense numeric ones opt out and
+   scroll sideways instead, because a wrapped hash is unreadable in a different way. */
+@media (max-width: 720px) {
+  .table-dense { white-space: nowrap; }
+}
+
+/* The 4-up figure strips. Two columns on a phone rather than four, and the dividers become grid
+   gaps showing the page behind them — a 1px lattice is right at any count, where the border-right
+   on every child but the last it replaces was only right in a single row. */
+.stat-strip { display: grid; grid-template-columns: repeat(var(--cols, 4), 1fr); border-top: 2px solid var(--color-divider); border-bottom: 2px solid var(--color-divider); }
+.stat-strip > * + * { border-left: 1px solid var(--color-divider); }
+.stat-num { font-family: var(--font-heading); font-weight: 800; font-size: 34px; letter-spacing: -0.02em; }
+@media (max-width: 720px) {
+  .stat-strip { grid-template-columns: repeat(2, 1fr); gap: 1px; background: var(--color-divider); }
+  .stat-strip > * { background: var(--color-bg); }
+  .stat-strip > * + * { border-left: none; }
+  /* 34px was chosen against a quarter of 1490px. A quarter of 375 is 82px, and "285.5k WBOT" at
+     34px is 190. */
+  .stat-num { font-size: 22px; }
+}
+
+/* Two panels side by side, stacked when there is no room. The divider follows the axis: a vertical
+   rule between stacked panels is a line down the middle of nothing. */
+.panel-split { display: grid; grid-template-columns: 1fr 1fr; border-top: 2px solid var(--color-divider); border-bottom: 2px solid var(--color-divider); }
+.panel-split > * + * { border-left: 1px solid var(--color-divider); }
+@media (max-width: 720px) {
+  .panel-split { grid-template-columns: 1fr; }
+  .panel-split > * + * { border-left: none; border-top: 1px solid var(--color-divider); }
+}
+
+/* Sticky section rail beside a long article — docs, security and the four legal pages. The rail
+   width is a variable because the legal pages set 220px and docs needs 240px for "Input
+   attestation quorum" and friends.
+   Below 900px the rail stops being a column and becomes a wrapped row of links above the article.
+   It also stops being sticky: sticky is worth a third of a phone screen only if the reader can see
+   the article too. */
+.doc-shell { display: grid; grid-template-columns: var(--rail-w, 240px) minmax(0, 1fr); gap: var(--space-8); padding: var(--space-8) var(--space-6); flex: 1; }
+.doc-rail { position: sticky; top: var(--space-6); align-self: start; font-size: 13px; display: flex; flex-direction: column; gap: 8px; }
+@media (max-width: 900px) {
+  .doc-shell { grid-template-columns: minmax(0, 1fr); gap: var(--space-6); padding: var(--space-6) var(--space-4); }
+  .doc-rail { position: static; flex-direction: row; flex-wrap: wrap; gap: var(--space-2) var(--space-4); padding-bottom: var(--space-4); border-bottom: 2px solid var(--color-divider); }
+}
+
+/* The overview is the one page whose desktop layout is a premise rather than an arrangement: a
+   fixed screenful, split into two independently scrolling columns. Neither half of that premise
+   survives a phone — 380px of feed beside anything is the whole width, and a page made of two
+   inner scrollers inside a third is not navigable by thumb.
+   So below 900px it becomes an ordinary document that scrolls as one, and the feed is bounded by a
+   fraction of the screen instead of by the column it no longer has. The shell keeps min-height so
+   the site footer still starts below the fold. */
+.overview-grid { display: grid; grid-template-columns: 1fr 380px; flex: 1; min-height: 0; }
+.overview-main { border-right: 2px solid var(--color-divider); }
+@media (max-width: 900px) {
+  .overview-shell { height: auto; min-height: calc(100dvh - var(--nav-h)); }
+  .overview-shell main { overflow-y: visible; }
+  .overview-grid { grid-template-columns: minmax(0, 1fr); }
+  .overview-main { border-right: none; border-bottom: 2px solid var(--color-divider); }
+  .feed-scroll { flex: none; max-height: 70dvh; }
+}
+
+/* Footer. Three link groups and a bottom bar that spans them. Two columns on a phone rather than
+   auto-fit: the bottom bar's `grid-column: 1/-1` means the track count is not free to grow, and
+   three 105px columns wrap the longest link ("Architecture") mid-word. */
+.site-footer { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-6); }
+@media (max-width: 560px) {
+  .site-footer { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-6) var(--space-4); }
+}

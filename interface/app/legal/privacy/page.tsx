@@ -54,8 +54,8 @@ export default function Privacy() {
       {/* 1fr, not 68ch: the article column takes what the screen has left after the nav rail, and
           the measure lives on the paragraphs inside it (see .legal-body). The tables here are the
           reason — they were being squeezed into a reading column. */}
-      <div style={{ display: 'grid', gridTemplateColumns: '220px minmax(0,1fr)', gap: 'var(--space-8)', padding: 'var(--space-8) var(--space-6)', flex: 1 }}>
-        <aside style={{ position: 'sticky', top: 'var(--space-6)', alignSelf: 'start', fontSize: 13, display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <div className="doc-shell" style={{ ['--rail-w' as string]: '220px' } as React.CSSProperties}>
+        <aside className="doc-rail">
           {NAV.map(([id, label]) => <a key={id} href={`#${id}`}>{label}</a>)}
         </aside>
         <main className="legal-body">
@@ -145,18 +145,20 @@ export default function Privacy() {
             do not exist in the build; the correction is recorded on the{' '}
             <a href="/legal/cookies">cookie notice</a> rather than made silently.
           </p>
-          <table className="table">
-            <thead><tr><th>Name</th><th>Purpose</th><th>Lifetime</th></tr></thead>
-            <tbody>
-              {STORAGE.map(([k, p, l]) => (
-                <tr key={k}>
-                  <td style={{ fontFamily: 'var(--font-mono)', whiteSpace: 'nowrap', verticalAlign: 'top' }}>{k}</td>
-                  <td>{p}</td>
-                  <td style={{ verticalAlign: 'top' }}>{l}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <div className="table-scroll">
+            <table className="table">
+              <thead><tr><th>Name</th><th>Purpose</th><th>Lifetime</th></tr></thead>
+              <tbody>
+                {STORAGE.map(([k, p, l]) => (
+                  <tr key={k}>
+                    <td style={{ fontFamily: 'var(--font-mono)', whiteSpace: 'nowrap', verticalAlign: 'top' }}>{k}</td>
+                    <td>{p}</td>
+                    <td style={{ verticalAlign: 'top' }}>{l}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
 
           <h3 id="analytics">Analytics</h3>
           <p>
@@ -182,18 +184,20 @@ export default function Privacy() {
           </p>
 
           <h3 id="third">Third parties</h3>
-          <table className="table">
-            <thead><tr><th style={{ minWidth: 180 }}>Party</th><th>What they see</th><th>Note</th></tr></thead>
-            <tbody>
-              {THIRD.map(([party, sees, note]) => (
-                <tr key={party}>
-                  <td style={{ verticalAlign: 'top' }}><strong>{party}</strong></td>
-                  <td>{sees}</td>
-                  <td>{note}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <div className="table-scroll">
+            <table className="table">
+              <thead><tr><th style={{ minWidth: 180 }}>Party</th><th>What they see</th><th>Note</th></tr></thead>
+              <tbody>
+                {THIRD.map(([party, sees, note]) => (
+                  <tr key={party}>
+                    <td style={{ verticalAlign: 'top' }}><strong>{party}</strong></td>
+                    <td>{sees}</td>
+                    <td>{note}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
 
           <h3 id="basis">Legal basis for processing</h3>
           <p>Where the GDPR, UK GDPR or a comparable regime applies:</p>
@@ -227,16 +231,18 @@ export default function Privacy() {
             <a href="mailto:privacy@botid.example">privacy@botid.example</a>; we will respond within
             30 days and will not charge you for a first request.
           </p>
-          <table className="table">
-            <tbody>
-              {RIGHTS.map(([r, d]) => (
-                <tr key={r}>
-                  <td style={{ verticalAlign: 'top', minWidth: 180 }}><strong>{r}</strong></td>
-                  <td>{d}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <div className="table-scroll">
+            <table className="table">
+              <tbody>
+                {RIGHTS.map(([r, d]) => (
+                  <tr key={r}>
+                    <td style={{ verticalAlign: 'top', minWidth: 180 }}><strong>{r}</strong></td>
+                    <td>{d}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
           <p>
             <strong>The limit is worth restating.</strong> No exercise of any right can remove data
             from a blockchain, and no request to us can. If you are a California resident: we do not

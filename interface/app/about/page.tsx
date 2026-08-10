@@ -120,7 +120,7 @@ export default function About() {
         <h3>Four attacks it is designed around</h3>
         {/* auto-fit rather than a fixed count: four across on a wide screen, collapsing to three,
             two and one on the way down without a media query. */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 'var(--space-6)', alignItems: 'start', marginTop: 'var(--space-4)' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(280px, 100%), 1fr))', gap: 'var(--space-6)', alignItems: 'start', marginTop: 'var(--space-4)' }}>
           {ATTACKS.map(([t, d]) => (
             <div key={t}>
               <h4 style={{ marginBottom: 4 }}>{t}</h4>
@@ -161,16 +161,18 @@ export default function About() {
           This section is longer than the pitch, which is the correct ratio for anything asking you to
           rely on it.
         </p>
-        <table className="table">
-          <tbody>
-            {NOTDO.map(([claim, detail]) => (
-              <tr key={claim}>
-                <td style={{ verticalAlign: 'top', minWidth: 260 }}><strong>{claim}</strong></td>
-                <td>{detail}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <div className="table-scroll">
+          <table className="table">
+            <tbody>
+              {NOTDO.map(([claim, detail]) => (
+                <tr key={claim}>
+                  <td style={{ verticalAlign: 'top', minWidth: 260 }}><strong>{claim}</strong></td>
+                  <td>{detail}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
 
         <h3>Status, honestly</h3>
         <p>

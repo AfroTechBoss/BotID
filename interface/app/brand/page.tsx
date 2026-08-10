@@ -55,7 +55,7 @@ export default function Brand() {
           and what the palette rule exists to prevent. The sample said Gold was a gold ring; the
           product draws a gold dot inside a green ring. A brand page that contradicts the mark is
           worse than no brand page. */}
-      <div style={{ ...RULE, display: 'flex', gap: 'var(--space-8)', alignItems: 'flex-start' }}>
+      <div style={{ ...RULE, display: 'flex', flexWrap: 'wrap', gap: 'var(--space-6) var(--space-8)', alignItems: 'flex-start' }}>
         {TIERS.map((tier) => (
           <figure key={tier} style={{ margin: 0, textAlign: 'center', width: 120 }}>
             <BotIdBadge tier={tier} hasFault={false} size={56} />
@@ -71,7 +71,7 @@ export default function Brand() {
       </div>
 
       <h6 style={HEAD}>The second channel: fault status</h6>
-      <div style={{ ...RULE, display: 'flex', gap: 'var(--space-8)', alignItems: 'flex-start' }}>
+      <div style={{ ...RULE, display: 'flex', flexWrap: 'wrap', gap: 'var(--space-6) var(--space-8)', alignItems: 'flex-start' }}>
         {[false, true].map((hasFault) => (
           <figure key={String(hasFault)} style={{ margin: 0, textAlign: 'center', width: 120 }}>
             <BotIdBadge tier="gold" hasFault={hasFault} size={56} />
@@ -114,30 +114,32 @@ export default function Brand() {
         is a diverging ramp around 5000, tier is metal, liveness is one reserved signal. Ratios are
         measured against --color-bg in the dark theme, which is the default.
       </p>
-      <table className="table">
-        <thead>
-          <tr><th>Role</th><th>Token</th><th>Value</th><th>Swatch</th><th>Contrast on ground</th></tr>
-        </thead>
-        <tbody>
-          {PALETTE.map((p) => (
-            <tr key={p.token}>
-              <td>{p.role}</td>
-              <td style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>{p.token}</td>
-              <td style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>{p.value}</td>
-              <td>
-                <span
-                  aria-hidden="true"
-                  style={{ display: 'inline-block', width: 40, height: 16, background: `var(${p.token})`, border: '1px solid var(--color-divider)' }}
-                />
-              </td>
-              <td className="tabular">{p.ratio}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      <div className="table-scroll">
+        <table className="table">
+          <thead>
+            <tr><th>Role</th><th>Token</th><th>Value</th><th>Swatch</th><th>Contrast on ground</th></tr>
+          </thead>
+          <tbody>
+            {PALETTE.map((p) => (
+              <tr key={p.token}>
+                <td>{p.role}</td>
+                <td style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>{p.token}</td>
+                <td style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>{p.value}</td>
+                <td>
+                  <span
+                    aria-hidden="true"
+                    style={{ display: 'inline-block', width: 40, height: 16, background: `var(${p.token})`, border: '1px solid var(--color-divider)' }}
+                  />
+                </td>
+                <td className="tabular">{p.ratio}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
 
       <h6 style={HEAD}>Do / Don&apos;t</h6>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-4)', fontSize: 13 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(200px, 100%), 1fr))', gap: 'var(--space-4)', fontSize: 13 }}>
         <div>
           <strong>Do</strong>
           <ul>

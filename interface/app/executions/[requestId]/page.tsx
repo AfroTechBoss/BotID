@@ -45,17 +45,18 @@ export default function ExecutionDetail({ params }: { params: { requestId: strin
 
       <section>
         <h6 style={{ color: 'var(--text-muted)', marginBottom: 'var(--space-2)' }}>The claim</h6>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', borderTop: '2px solid var(--color-divider)', borderBottom: '2px solid var(--color-divider)', fontFamily: 'var(--font-mono)', fontSize: 13 }}>
-          <Cell label="AGENT" val={<Link href={`/agents/${e.agent.id}`}>#{e.agent.id}</Link>} border />
-          <Cell label="NOTIONAL" val={formatToken(e.notional)} border />
-          <Cell label="FEE" val={`${e.feeBps} bps`} border />
+        <div className="stat-strip" style={{ fontFamily: 'var(--font-mono)', fontSize: 13 }}>
+          <Cell label="AGENT" val={<Link href={`/agents/${e.agent.id}`}>#{e.agent.id}</Link>} />
+          <Cell label="NOTIONAL" val={formatToken(e.notional)} />
+          <Cell label="FEE" val={`${e.feeBps} bps`} />
           <Cell label="DELIVERED" val={timeAgo(e.deliveredAt)} />
         </div>
       </section>
 
       <section>
         <h6 style={{ color: 'var(--text-muted)', marginBottom: 'var(--space-2)' }}>Inputs</h6>
-        <table className="table">
+        <div className="table-scroll">
+        <table className="table table-dense">
           <thead><tr><th>Feed</th><th>Value</th><th>Publishers</th><th>valueHash</th></tr></thead>
           <tbody>
             {cells.inputs.map((c) => (
@@ -68,21 +69,26 @@ export default function ExecutionDetail({ params }: { params: { requestId: strin
             ))}
           </tbody>
         </table>
+        </div>
         <RecomputeCommitment commitment={inputCommitment} />
       </section>
 
       <section>
         <h6 style={{ color: 'var(--text-muted)', marginBottom: 'var(--space-2)' }}>Outputs</h6>
+        <div className="table-scroll">
         <table className="table">
           <thead><tr><th>Weight</th><th>Value</th></tr></thead>
           <tbody>{cells.outputs.map((o) => <tr key={o.label}><td>{o.label}</td><td className="tabular">{o.bps} bps</td></tr>)}</tbody>
         </table>
-        <div className="text-muted" style={{ fontSize: 11, marginTop: 4, fontFamily: 'var(--font-mono)' }}>outputCommitment 0x3f8c9e{'0'.repeat(58)}</div>
+        </div>
+        {/* Scrolls rather than wraps: a 64-character commitment broken across two lines is one the
+            reader has to mentally rejoin before they can compare it to anything. */}
+        <div className="text-muted table-scroll" style={{ fontSize: 11, marginTop: 4, fontFamily: 'var(--font-mono)', whiteSpace: 'nowrap' }}>outputCommitment 0x3f8c9e{'0'.repeat(58)}</div>
       </section>
 
       <section>
         <h6 style={{ color: 'var(--text-muted)', marginBottom: 'var(--space-2)' }}>Attestation</h6>
-        <div style={{ borderTop: '2px solid var(--color-divider)', borderBottom: '2px solid var(--color-divider)', padding: 'var(--space-3)', fontFamily: 'var(--font-mono)', fontSize: 13, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 'var(--space-3)' }}>
+        <div style={{ borderTop: '2px solid var(--color-divider)', borderBottom: '2px solid var(--color-divider)', padding: 'var(--space-3)', fontFamily: 'var(--font-mono)', fontSize: 13, display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: 'var(--space-3)' }}>
           <span>
             {final ? 'Groth16 proof' : e.tier === 'silver' ? 'TEE quote' : 'ECDSA signature'} &middot; verifier {shortHash('0x9c1e' + '0'.repeat(36))}
           </span>
@@ -94,7 +100,7 @@ export default function ExecutionDetail({ params }: { params: { requestId: strin
         <h6 style={{ color: 'var(--text-muted)', marginBottom: 'var(--space-2)' }}>
           Outcome &middot; <span style={{ textTransform: 'none', letterSpacing: 0, fontStyle: 'italic' }}>consumer-reported</span>
         </h6>
-        <div style={{ border: '1px dashed var(--color-divider)', padding: 'var(--space-3)', display: 'flex', gap: 'var(--space-6)', fontFamily: 'var(--font-mono)', fontSize: 13 }}>
+        <div style={{ border: '1px dashed var(--color-divider)', padding: 'var(--space-3)', display: 'flex', flexWrap: 'wrap', gap: 'var(--space-6)', fontFamily: 'var(--font-mono)', fontSize: 13 }}>
           <div>
             <div className="text-muted" style={{ fontSize: 10 }}>REALIZED PNL</div>
             <span style={{ color: e.realizedBps >= 0 ? 'var(--score-good)' : 'var(--score-critical)' }}>{e.realizedBps >= 0 ? '+' : ''}{e.realizedBps} bps</span>
@@ -112,6 +118,7 @@ export default function ExecutionDetail({ params }: { params: { requestId: strin
 
       <section>
         <h6 style={{ color: 'var(--text-muted)', marginBottom: 'var(--space-2)' }}>Timeline</h6>
+        <div className="table-scroll">
         <table className="table">
           <thead><tr><th>Event</th><th>Block</th><th>Time</th></tr></thead>
           <tbody>
@@ -129,14 +136,17 @@ export default function ExecutionDetail({ params }: { params: { requestId: strin
             ))}
           </tbody>
         </table>
+        </div>
       </section>
     </main>
   );
 }
 
-function Cell({ label, val, border }: { label: string; val: React.ReactNode; border?: boolean }) {
+// The `border` prop is gone: .stat-strip draws the dividers now, and it draws them on the axis the
+// cells are actually laid out on rather than always to the right.
+function Cell({ label, val }: { label: string; val: React.ReactNode }) {
   return (
-    <div style={{ padding: 'var(--space-3)', borderRight: border ? '1px solid var(--color-divider)' : undefined }}>
+    <div style={{ padding: 'var(--space-3)' }}>
       <div className="text-muted" style={{ fontSize: 10 }}>{label}</div>{val}
     </div>
   );

@@ -8,7 +8,11 @@ import { readTheme } from '@/lib/theme.server';
 // It reads the shared network now, so there is no way to render a footer that disagrees.
 export default function Footer() {
   return (
-    <footer style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 'var(--space-6)', padding: 'var(--space-6)', borderTop: '2px solid var(--color-divider)', fontSize: 12 }}>
+    // The column count lives in .site-footer because it has to change on a phone, where three 1fr
+    // columns are 105px each and wrap "Architecture" mid-word — and a media query cannot reach an
+    // inline style. auto-fit is wrong here: the bottom bar spans 1/-1, so a wider track count would
+    // leave the three link groups bunched in the left half of a desktop footer.
+    <footer className="site-footer" style={{ padding: 'var(--space-6)', borderTop: '2px solid var(--color-divider)', fontSize: 12 }}>
       <div>
         <h6 style={{ marginBottom: 8 }}>Protocol</h6>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -28,7 +32,7 @@ export default function Footer() {
           <Link href="/legal/disclaimer">Disclaimer</Link><Link href="/legal/cookies">Cookies</Link><Link href="/security">Security</Link>
         </div>
       </div>
-      <div style={{ gridColumn: '1/-1', display: 'flex', justifyContent: 'space-between', color: 'var(--text-subtle)', borderTop: '1px solid var(--color-divider)', paddingTop: 'var(--space-3)', marginTop: 'var(--space-2)' }}>
+      <div style={{ gridColumn: '1/-1', display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', gap: 'var(--space-2) var(--space-4)', color: 'var(--text-subtle)', borderTop: '1px solid var(--color-divider)', paddingTop: 'var(--space-3)', marginTop: 'var(--space-2)' }}>
         <span><NetworkLabel /></span>
         <span style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-4)' }}>
           {/* Read here rather than threaded down from the layout: the footer is already a server

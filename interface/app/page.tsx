@@ -75,9 +75,14 @@ export default function Overview() {
   return (
     // Exactly one screenful. The two columns and the status bar divide it up; nothing here grows
     // the document, so the site footer below stays exactly one scroll away.
+    //
+    // That is the desktop premise, and .overview-grid / .overview-main in globals.css unwind it
+    // below 900px: the columns stack, the inner scrollers give way to the page's own, and the feed
+    // is bounded by a fraction of the screen rather than by a column height. It has to live in CSS
+    // rather than here because a media query cannot reach an inline style.
     <div className="overview-shell">
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 380px', flex: 1, minHeight: 0 }}>
-        <main style={{ padding: 'var(--space-6)', display: 'flex', flexDirection: 'column', gap: 'var(--space-8)', borderRight: '2px solid var(--color-divider)' }}>
+      <div className="overview-grid">
+        <main className="overview-main" style={{ padding: 'var(--space-6)', display: 'flex', flexDirection: 'column', gap: 'var(--space-8)' }}>
           <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
             <span className="seg" style={{ fontSize: 12 }}>
               <label className="seg-opt"><input type="radio" checked={density === 'sparse'} onChange={() => setDensity('sparse')} />Sparse</label>
@@ -87,15 +92,15 @@ export default function Overview() {
 
           <section>
             <h6 style={{ marginBottom: 'var(--space-3)', color: 'var(--text-muted)' }}>Network</h6>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', borderTop: '2px solid var(--color-divider)', borderBottom: '2px solid var(--color-divider)' }}>
+            <div className="stat-strip">
               {[
                 ['Agents', agents.length, 'inherit'],
                 ['Open notional', formatToken(totalNotional), 'inherit'],
                 ['Settled', formatNum(totalSettled), 'inherit'],
                 ['Faults', totalFaults, totalFaults > 0 ? 'var(--score-critical)' : 'inherit'],
-              ].map(([label, val, color], i) => (
-                <div key={label as string} style={{ padding: 'var(--space-4)', borderRight: i < 3 ? '1px solid var(--color-divider)' : 'none' }}>
-                  <div className="tabular" style={{ fontFamily: 'var(--font-heading)', fontWeight: 800, fontSize: 34, letterSpacing: '-0.02em', color: color as string }}>{val}</div>
+              ].map(([label, val, color]) => (
+                <div key={label as string} style={{ padding: 'var(--space-4)' }}>
+                  <div className="tabular stat-num" style={{ color: color as string }}>{val}</div>
                   <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-subtle)', marginTop: 4 }}>{label}</div>
                 </div>
               ))}
@@ -103,7 +108,7 @@ export default function Overview() {
           </section>
 
           <section>
-            <h6 style={{ marginBottom: 'var(--space-3)', color: 'var(--text-muted)', display: 'flex', alignItems: 'baseline', gap: 12 }}>
+            <h6 style={{ marginBottom: 'var(--space-3)', color: 'var(--text-muted)', display: 'flex', flexWrap: 'wrap', alignItems: 'baseline', gap: 12 }}>
               Executions / day
               {/* The marks here used to be filled squares in the tier hue, which read as badges
                   and taught the wrong thing — a Bronze badge is a single *green* ring, and a solid
@@ -183,7 +188,8 @@ export default function Overview() {
 
           <section>
             <h6 style={{ marginBottom: 'var(--space-3)', color: 'var(--text-muted)' }}>Top agents</h6>
-            <table className="table">
+            <div className="table-scroll">
+            <table className="table table-dense">
               <thead><tr><th></th><th>Agent</th><th>Score</th><th>Tier</th><th>Notional</th><th>Settled</th><th>Faults</th></tr></thead>
               <tbody>
                 {top.map((a) => {
@@ -203,6 +209,7 @@ export default function Overview() {
                 })}
               </tbody>
             </table>
+            </div>
             {density === 'sparse' && <p className="text-muted" style={{ fontSize: 12, marginTop: 'var(--space-2)' }}>Three agents registered so far &mdash; this is a young network, not a broken table.</p>}
           </section>
         </main>
@@ -230,7 +237,9 @@ export default function Overview() {
           </div>
         </aside>
       </div>
-      <footer style={{ display: 'flex', gap: 'var(--space-6)', alignItems: 'center', padding: '6px var(--space-4)', borderTop: '2px solid var(--color-divider)', fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)' }}>
+      {/* Wraps: four readings at 11px clear 375px by about 20 pixels, which is not a margin worth
+          trusting to a font that renders slightly wider on someone else's phone. */}
+      <footer style={{ display: 'flex', flexWrap: 'wrap', columnGap: 'var(--space-6)', rowGap: 2, alignItems: 'center', padding: '6px var(--space-4)', borderTop: '2px solid var(--color-divider)', fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)' }}>
         <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}><span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--live)' }} />RPC live</span>
         <span>block {formatNum(blockHeight)}</span>
         <span>indexer lag 0.4s</span>

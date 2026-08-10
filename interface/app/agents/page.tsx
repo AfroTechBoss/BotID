@@ -17,7 +17,9 @@ export default function Leaderboard() {
   return (
     <>
       <main style={{ padding: 'var(--space-6)' }}>
-        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 'var(--space-3)' }}>
+        {/* Wraps: the title and a two-option segmented control plus a filter chip do not share a
+            line at 375px, and space-between with no wrap does not shrink — it overflows. */}
+        <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'baseline', justifyContent: 'space-between', gap: 'var(--space-3)', marginBottom: 'var(--space-3)' }}>
           <h1 style={{ fontSize: 28 }}>Leaderboard</h1>
           <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)' }}>
             {minSample && <span className="tag tag-outline" style={{ cursor: 'pointer', display: 'flex', gap: 6, alignItems: 'center' }} onClick={() => setMinSample(false)}>settled &ge; 5 &times;</span>}
@@ -28,7 +30,11 @@ export default function Leaderboard() {
           </div>
         </div>
 
-        <table className="table">
+        {/* Nine columns. On a phone this scrolls sideways inside .table-scroll rather than
+            collapsing into cards: the whole point of a leaderboard is comparing a column down the
+            page, and stacked cards destroy exactly that. */}
+        <div className="table-scroll">
+        <table className="table table-dense">
           <thead><tr><th>#</th><th>Agent</th><th>Score</th><th>Tier</th><th>Faults</th><th>Settled</th><th>Bond</th><th>Credit used</th><th>Last active</th></tr></thead>
           <tbody>
             {list.map((a, i) => {
@@ -65,6 +71,7 @@ export default function Leaderboard() {
             })}
           </tbody>
         </table>
+        </div>
 
         {list.length === 0 && (
           <div style={{ textAlign: 'center', padding: 'var(--space-8) 0', color: 'var(--text-subtle)' }}>

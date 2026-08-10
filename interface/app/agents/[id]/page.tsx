@@ -56,7 +56,8 @@ export default function AgentProfile({ params }: { params: { id: string } }) {
           width:100% and gets more resolution per day the wider it runs, and the executions table
           has six columns that were wrapping for no reason. */}
       <main style={{ padding: 'var(--space-6)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 4 }}>
+        {/* Wraps: badge, id, score and the alert button are ~330px of content plus a 44px badge. */}
+        <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 14, marginBottom: 4 }}>
           <BotIdBadge tier={a.tier} hasFault={a.faults > 0} size={44} />
           <h1 style={{ fontSize: 28, margin: 0 }}>agent #{a.id}</h1>
           <span style={{ fontFamily: 'var(--font-mono)', fontSize: 22, fontWeight: 700, color: scoreColorVar(a.score) }}>{formatNum(a.score)} {deltaLabel}</span>
@@ -148,8 +149,10 @@ export default function AgentProfile({ params }: { params: { id: string } }) {
           <div style={{ fontSize: 11, color: 'var(--text-subtle)', marginTop: 4 }}>dashed line = 5000 neutral &middot; point size = notional weight &middot; red = fault</div>
         </section>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', borderTop: '2px solid var(--color-divider)', borderBottom: '2px solid var(--color-divider)', marginBottom: 'var(--space-8)' }}>
-          <div style={{ padding: 'var(--space-4)', borderRight: '1px solid var(--color-divider)' }}>
+        {/* .panel-split rather than an inline 1fr 1fr, so these two stack below 720px and the
+            divider between them turns horizontal with them. */}
+        <div className="panel-split" style={{ marginBottom: 'var(--space-8)' }}>
+          <div style={{ padding: 'var(--space-4)' }}>
             <h6 style={{ color: 'var(--text-muted)', marginBottom: 'var(--space-3)' }}>Credit</h6>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6, fontFamily: 'var(--font-mono)', fontSize: 13 }}>
               <Row label="bond" val={formatToken(a.bond)} />
@@ -174,7 +177,7 @@ export default function AgentProfile({ params }: { params: { id: string } }) {
         </div>
 
         <section>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', marginBottom: 'var(--space-3)' }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 'var(--space-2)', marginBottom: 'var(--space-3)' }}>
             <h6 style={{ color: 'var(--text-muted)', margin: 0 }}>Executions</h6>
             <span className="seg" style={{ fontSize: 11, marginLeft: 'auto' }}>
               {(['all', 'settled', 'challenged', 'faulted'] as const).map((f) => (
@@ -182,7 +185,8 @@ export default function AgentProfile({ params }: { params: { id: string } }) {
               ))}
             </span>
           </div>
-          <table className="table">
+          <div className="table-scroll">
+          <table className="table table-dense">
             <thead><tr><th>Request</th><th>Status</th><th>Notional</th><th>Outcome</th><th>Time</th></tr></thead>
             <tbody>
               {execs.map((e) => (
@@ -196,6 +200,7 @@ export default function AgentProfile({ params }: { params: { id: string } }) {
               ))}
             </tbody>
           </table>
+          </div>
         </section>
       </main>
     </>

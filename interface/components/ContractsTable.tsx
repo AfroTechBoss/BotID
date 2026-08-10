@@ -30,24 +30,26 @@ export default function ContractsTable() {
   }
 
   return (
-    <table className="table">
-      <caption style={{ captionSide: 'top', textAlign: 'left', fontSize: 13, paddingBottom: 'var(--space-2)' }}>
-        Deployed on {network.name}{' '}
-        <span style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
-          chain {network.chainId}
-        </span>
-      </caption>
-      <thead>
-        <tr><th>Contract</th><th>Address</th></tr>
-      </thead>
-      <tbody>
-        {rows.map((c) => (
-          <tr key={c.name}>
-            <td>{c.name}</td>
-            <td><a href="#" style={{ fontFamily: 'var(--font-mono)' }}>{c.address}</a></td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
+    <div className="table-scroll">
+      <table className="table">
+        <caption style={{ captionSide: 'top', textAlign: 'left', fontSize: 13, paddingBottom: 'var(--space-2)' }}>
+          Deployed on {network.name}{' '}
+          <span style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+            chain {network.chainId}
+          </span>
+        </caption>
+        <thead>
+          <tr><th>Contract</th><th>Address</th></tr>
+        </thead>
+        <tbody>
+          {rows.map((c) => (
+            <tr key={c.name}>
+              <td>{c.name}</td>
+              <td><a href="#" style={{ fontFamily: 'var(--font-mono)' }}>{c.address}</a></td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }

@@ -160,39 +160,43 @@ export default function Security() {
           What the protocol defends against, what it does not, and which is which. The rows marked
           NOT mitigated are the ones worth your time.
         </p>
-        <table className="table">
-          <thead><tr><th style={{ minWidth: 160 }}>Threat</th><th>Attack</th><th>Status</th></tr></thead>
-          <tbody>
-            {THREATS.map(([name, attack, status]) => (
-              <tr key={name}>
-                <td style={{ verticalAlign: 'top' }}><strong>{name}</strong></td>
-                <td style={{ verticalAlign: 'top' }}>{attack}</td>
-                <td style={{ verticalAlign: 'top' }}>
-                  {status.startsWith('NOT mitigated') ? (
-                    <><strong style={{ color: 'var(--score-critical)' }}>NOT mitigated</strong>{status.slice('NOT mitigated'.length)}</>
-                  ) : status}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <div className="table-scroll">
+          <table className="table">
+            <thead><tr><th style={{ minWidth: 160 }}>Threat</th><th>Attack</th><th>Status</th></tr></thead>
+            <tbody>
+              {THREATS.map(([name, attack, status]) => (
+                <tr key={name}>
+                  <td style={{ verticalAlign: 'top' }}><strong>{name}</strong></td>
+                  <td style={{ verticalAlign: 'top' }}>{attack}</td>
+                  <td style={{ verticalAlign: 'top' }}>
+                    {status.startsWith('NOT mitigated') ? (
+                      <><strong style={{ color: 'var(--score-critical)' }}>NOT mitigated</strong>{status.slice('NOT mitigated'.length)}</>
+                    ) : status}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
 
         <h3>Trust assumptions</h3>
         <p>
           Verification narrows what you must trust; it does not eliminate it. Everything below is a
           thing you are trusting if you rely on a BotID score.
         </p>
-        <table className="table">
-          <thead><tr><th style={{ minWidth: 200 }}>Assumption</th><th>What it means</th></tr></thead>
-          <tbody>
-            {ASSUMPTIONS.map(([name, meaning]) => (
-              <tr key={name}>
-                <td style={{ verticalAlign: 'top' }}><strong>{name}</strong></td>
-                <td>{meaning}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <div className="table-scroll">
+          <table className="table">
+            <thead><tr><th style={{ minWidth: 200 }}>Assumption</th><th>What it means</th></tr></thead>
+            <tbody>
+              {ASSUMPTIONS.map(([name, meaning]) => (
+                <tr key={name}>
+                  <td style={{ verticalAlign: 'top' }}><strong>{name}</strong></td>
+                  <td>{meaning}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
 
         <h3>What a bond is, and what it is not</h3>
         <p>
@@ -231,7 +235,7 @@ export default function Security() {
           chain, and anyone citing one as coverage for this protocol is misrepresenting it.
         </p>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 'var(--space-6)', alignItems: 'start', marginTop: 'var(--space-8)' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(300px, 100%), 1fr))', gap: 'var(--space-6)', alignItems: 'start', marginTop: 'var(--space-8)' }}>
           <section>
             <h6 style={{ color: 'var(--text-muted)', marginBottom: 'var(--space-2)' }}>Responsible disclosure</h6>
             <p style={{ margin: 0 }}>

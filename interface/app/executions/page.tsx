@@ -24,7 +24,8 @@ export default function Executions() {
   return (
     <>
       <main style={{ padding: 'var(--space-6)', }}>
-        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 'var(--space-3)' }}>
+        {/* Wraps: five filter options and the title need more than 375px between them. */}
+        <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'baseline', justifyContent: 'space-between', gap: 'var(--space-3)', marginBottom: 'var(--space-3)' }}>
           <h1 style={{ fontSize: 28 }}>Executions</h1>
           <span className="seg" style={{ fontSize: 12 }}>
             {(['all', 'settled', 'challenged', 'faulted', 'pending'] as const).map((f) => (
@@ -32,7 +33,8 @@ export default function Executions() {
             ))}
           </span>
         </div>
-        <table className="table">
+        <div className="table-scroll">
+        <table className="table table-dense">
           <thead><tr><th>Request</th><th>Agent</th><th>Tier</th><th>Status</th><th>Notional</th><th>Outcome</th><th>Time</th></tr></thead>
           <tbody>
             {list.slice(0, 40).map((e) => {
@@ -51,6 +53,7 @@ export default function Executions() {
             })}
           </tbody>
         </table>
+        </div>
         {list.length === 0 && <p className="text-muted" style={{ textAlign: 'center', padding: 'var(--space-8) 0' }}>No executions match this filter yet.</p>}
       </main>
     </>

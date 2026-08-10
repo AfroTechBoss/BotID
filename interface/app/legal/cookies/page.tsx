@@ -33,22 +33,24 @@ export default function Cookies() {
         </p>
 
         <h3>Cookies, in full</h3>
-        <table className="table">
-          <thead><tr><th>Name</th><th>Purpose</th><th>Type</th><th>Lifetime</th><th>Attributes</th></tr></thead>
-          <tbody>
-            <tr>
-              <td style={{ fontFamily: 'var(--font-mono)', whiteSpace: 'nowrap', verticalAlign: 'top' }}>botid-theme</td>
-              <td>
-                Stores <code>light</code> or <code>dark</code>. Read on the server during render so the
-                first paint already matches your preference instead of flashing the wrong theme and
-                correcting itself.
-              </td>
-              <td style={{ verticalAlign: 'top' }}>Strictly necessary</td>
-              <td style={{ verticalAlign: 'top' }}>1 year</td>
-              <td style={{ fontFamily: 'var(--font-mono)', fontSize: 12, verticalAlign: 'top' }}>path=/; SameSite=Lax</td>
-            </tr>
-          </tbody>
-        </table>
+        <div className="table-scroll">
+          <table className="table">
+            <thead><tr><th>Name</th><th>Purpose</th><th>Type</th><th>Lifetime</th><th>Attributes</th></tr></thead>
+            <tbody>
+              <tr>
+                <td style={{ fontFamily: 'var(--font-mono)', whiteSpace: 'nowrap', verticalAlign: 'top' }}>botid-theme</td>
+                <td>
+                  Stores <code>light</code> or <code>dark</code>. Read on the server during render so the
+                  first paint already matches your preference instead of flashing the wrong theme and
+                  correcting itself.
+                </td>
+                <td style={{ verticalAlign: 'top' }}>Strictly necessary</td>
+                <td style={{ verticalAlign: 'top' }}>1 year</td>
+                <td style={{ fontFamily: 'var(--font-mono)', fontSize: 12, verticalAlign: 'top' }}>path=/; SameSite=Lax</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
         <p>
           That is the entire list. The value is the literal string <code>light</code> or{' '}
           <code>dark</code> — no identifier, no session token, no hash, nothing that could distinguish
@@ -78,18 +80,20 @@ export default function Cookies() {
         </p>
 
         <h3>What we deliberately do not load</h3>
-        <table className="table">
-          <tbody>
-            <tr><td style={{ verticalAlign: 'top', minWidth: 220 }}><strong>Analytics</strong></td><td>None. No Google Analytics, no Plausible, no Fathom, no Vercel Analytics, no self-hosted alternative.</td></tr>
-            <tr><td style={{ verticalAlign: 'top' }}><strong>Tag managers</strong></td><td>None. Nothing on this site can inject a script we did not write.</td></tr>
-            <tr><td style={{ verticalAlign: 'top' }}><strong>Advertising and conversion pixels</strong></td><td>None, from anyone.</td></tr>
-            <tr><td style={{ verticalAlign: 'top' }}><strong>Social embeds</strong></td><td>None. No Twitter/X widgets, no Discord embeds, no YouTube players — all of which set third-party cookies on load.</td></tr>
-            <tr><td style={{ verticalAlign: 'top' }}><strong>Third-party fonts</strong></td><td>None. Fonts are self-hosted and served from the same origin, so no font provider learns that you visited.</td></tr>
-            <tr><td style={{ verticalAlign: 'top' }}><strong>Third-party CDNs for code</strong></td><td>None. Every script and stylesheet comes from our own build.</td></tr>
-            <tr><td style={{ verticalAlign: 'top' }}><strong>Session recording / heatmaps</strong></td><td>None. Nobody is watching your cursor.</td></tr>
-            <tr><td style={{ verticalAlign: 'top' }}><strong>Cross-site tracking</strong></td><td>None. There is nothing for Do Not Track or Global Privacy Control to switch off.</td></tr>
-          </tbody>
-        </table>
+        <div className="table-scroll">
+          <table className="table">
+            <tbody>
+              <tr><td style={{ verticalAlign: 'top', minWidth: 220 }}><strong>Analytics</strong></td><td>None. No Google Analytics, no Plausible, no Fathom, no Vercel Analytics, no self-hosted alternative.</td></tr>
+              <tr><td style={{ verticalAlign: 'top' }}><strong>Tag managers</strong></td><td>None. Nothing on this site can inject a script we did not write.</td></tr>
+              <tr><td style={{ verticalAlign: 'top' }}><strong>Advertising and conversion pixels</strong></td><td>None, from anyone.</td></tr>
+              <tr><td style={{ verticalAlign: 'top' }}><strong>Social embeds</strong></td><td>None. No Twitter/X widgets, no Discord embeds, no YouTube players — all of which set third-party cookies on load.</td></tr>
+              <tr><td style={{ verticalAlign: 'top' }}><strong>Third-party fonts</strong></td><td>None. Fonts are self-hosted and served from the same origin, so no font provider learns that you visited.</td></tr>
+              <tr><td style={{ verticalAlign: 'top' }}><strong>Third-party CDNs for code</strong></td><td>None. Every script and stylesheet comes from our own build.</td></tr>
+              <tr><td style={{ verticalAlign: 'top' }}><strong>Session recording / heatmaps</strong></td><td>None. Nobody is watching your cursor.</td></tr>
+              <tr><td style={{ verticalAlign: 'top' }}><strong>Cross-site tracking</strong></td><td>None. There is nothing for Do Not Track or Global Privacy Control to switch off.</td></tr>
+            </tbody>
+          </table>
+        </div>
         <p>
           This is a security property as much as a privacy one: the supply chain you inherit by loading
           this page is our build and nothing else. Frontends in this industry are usually compromised

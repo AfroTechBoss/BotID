@@ -46,10 +46,14 @@ export default function ProofInspector({ params }: { params: { requestId: string
         <h6 style={{ color: 'var(--text-muted)', marginBottom: 'var(--space-2)' }}>
           Instance vector <span style={{ textTransform: 'none', letterSpacing: 0 }}>&mdash; split at n<sub>in</sub>=3</span>
         </h6>
-        <div style={{ fontFamily: 'var(--font-mono)', fontSize: 12, borderTop: '2px solid var(--color-divider)', borderBottom: '2px solid var(--color-divider)' }}>
+        {/* Scrolls sideways on a narrow screen instead of wrapping. Every row here is a fixed
+            column of cells — [i], the raw felt, the decoded value, the opening — and the whole
+            point is that they line up so a reader can check one against the next. Wrapping the
+            columns would break the alignment that is the artifact. */}
+        <div className="table-scroll" style={{ fontFamily: 'var(--font-mono)', fontSize: 12, borderTop: '2px solid var(--color-divider)', borderBottom: '2px solid var(--color-divider)' }}>
           <div style={{ padding: 'var(--space-2) var(--space-3)', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-subtle)', borderBottom: '1px solid var(--color-divider)' }}>Input cells &middot; value &laquo; 8</div>
           {inputCells.map((c) => (
-            <div key={c.i} style={{ display: 'flex', gap: 10, padding: '6px var(--space-3)', borderBottom: '1px solid var(--color-divider)', alignItems: 'baseline' }}>
+            <div key={c.i} style={{ display: 'flex', gap: 10, padding: '6px var(--space-3)', borderBottom: '1px solid var(--color-divider)', alignItems: 'baseline', whiteSpace: 'nowrap' }}>
               <span className="text-muted" style={{ width: 24 }}>[{c.i}]</span>
               <span className="tabular" style={{ width: 110 }}>{c.raw}</span>
               <span className="text-muted">&larr;</span>
@@ -59,7 +63,7 @@ export default function ProofInspector({ params }: { params: { requestId: string
           ))}
           <div style={{ padding: 'var(--space-2) var(--space-3)', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-subtle)', borderBottom: '1px solid var(--color-divider)' }}>Output cells</div>
           {outputCells.map((c) => (
-            <div key={c.i} style={{ display: 'flex', gap: 10, padding: '6px var(--space-3)', borderBottom: '1px solid var(--color-divider)', alignItems: 'baseline' }}>
+            <div key={c.i} style={{ display: 'flex', gap: 10, padding: '6px var(--space-3)', borderBottom: '1px solid var(--color-divider)', alignItems: 'baseline', whiteSpace: 'nowrap' }}>
               <span className="text-muted" style={{ width: 24 }}>[{c.i}]</span>
               <span className="tabular" style={{ width: 110 }}>{c.raw}</span>
               <span className="text-muted">&rarr;</span>
@@ -83,9 +87,9 @@ export default function ProofInspector({ params }: { params: { requestId: string
 
       <section>
         <h6 style={{ color: 'var(--text-muted)', marginBottom: 'var(--space-2)' }}>Circuit identity</h6>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', borderTop: '2px solid var(--color-divider)', borderBottom: '2px solid var(--color-divider)', fontFamily: 'var(--font-mono)', fontSize: 12 }}>
-          <Cell label="MODEL COMMITMENT" val={shortHash(e.agent.modelCommitment, 8)} border />
-          <Cell label="VERIFIER" val={`0x9c1e${'0'.repeat(36)}`} border />
+        <div className="stat-strip" style={{ ['--cols' as string]: 3, fontFamily: 'var(--font-mono)', fontSize: 12 } as React.CSSProperties}>
+          <Cell label="MODEL COMMITMENT" val={shortHash(e.agent.modelCommitment, 8)} />
+          <Cell label="VERIFIER" val={`0x9c1e${'0'.repeat(36)}`} />
           <Cell label="INPUT SCALE" val="8 bits" />
         </div>
         <p className="text-muted" style={{ fontSize: 11, marginTop: 6 }}>A change to any spec field means a new circuit, a new verifying key and a new agent id.</p>
@@ -94,9 +98,10 @@ export default function ProofInspector({ params }: { params: { requestId: string
   );
 }
 
-function Cell({ label, val, border }: { label: string; val: string; border?: boolean }) {
+// No `border` prop: .stat-strip owns the dividers, and on a phone it puts them between rows.
+function Cell({ label, val }: { label: string; val: string }) {
   return (
-    <div style={{ padding: 'var(--space-3)', borderRight: border ? '1px solid var(--color-divider)' : undefined, overflowWrap: 'anywhere' }}>
+    <div style={{ padding: 'var(--space-3)', overflowWrap: 'anywhere' }}>
       <div className="text-muted" style={{ fontSize: 10 }}>{label}</div>{val}
     </div>
   );

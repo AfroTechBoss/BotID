@@ -14,8 +14,16 @@ import { applyBps, toBaseUnits } from './token';
 
 export { formatToken, formatTokenParts, BOND_TOKEN, toBaseUnits, ratio, pct } from './token';
 
-/** Fixed reference instant: 2026-08-09T12:00:00Z. Fixtures are relative to this, not to now. */
-export const MOCK_NOW = 1_754_740_800_000;
+/**
+ * Fixed reference instant: 2026-08-09T12:00:00Z. Fixtures are relative to this, not to now.
+ *
+ * Written as a parsed date rather than a literal so the value cannot drift from the sentence
+ * describing it. It already had: the literal here was 1_754_740_800_000, which is 2026-08-09
+ * minus a year, so every rendered date — the 90-day score history, the 14-day bar chart, every
+ * "3h ago" — sat a year behind the legal pages and the README. Date.parse of an ISO-8601 string
+ * with an explicit Z is UTC on every engine, so this stays a constant and reads no clock.
+ */
+export const MOCK_NOW = Date.parse('2026-08-09T12:00:00Z');
 
 function mulberry32(seed: number) {
   return function () {

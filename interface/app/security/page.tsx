@@ -1,3 +1,4 @@
+import ContractsTable from '@/components/ContractsTable';
 
 export default function Security() {
   return (
@@ -9,16 +10,8 @@ export default function Security() {
         </div>
 
         <h6 style={{ color: 'var(--text-muted)', margin: 'var(--space-6) 0 var(--space-2)' }}>Deployed contracts</h6>
-        <p style={{ fontSize: 13 }}>This table is load-bearing: it is the canonical answer to &quot;is this the real BotID.&quot; Each address links to a verified explorer source page.</p>
-        <table className="table">
-          <thead><tr><th>Contract</th><th>Network</th><th>Address</th></tr></thead>
-          <tbody>
-            <tr><td>RequestManager</td><td>BOT testnet</td><td><a href="#" style={{ fontFamily: 'var(--font-mono)' }}>0x4a91&hellip;e02c</a></td></tr>
-            <tr><td>ScoreRegistry</td><td>BOT testnet</td><td><a href="#" style={{ fontFamily: 'var(--font-mono)' }}>0x7bd3&hellip;119a</a></td></tr>
-            <tr><td>ZkAdapter</td><td>BOT testnet</td><td><a href="#" style={{ fontFamily: 'var(--font-mono)' }}>0x9c1e&hellip;04f2</a></td></tr>
-            <tr><td>BondVault</td><td>BOT testnet</td><td><a href="#" style={{ fontFamily: 'var(--font-mono)' }}>0x2d6f&hellip;a877</a></td></tr>
-          </tbody>
-        </table>
+        <p style={{ fontSize: 13 }}>This table is load-bearing: it is the canonical answer to &quot;is this the real BotID.&quot; It follows the network selected in the nav, and it never falls back to another network&apos;s addresses &mdash; if nothing is deployed on the selected chain it says so.</p>
+        <ContractsTable />
 
         <h6 style={{ color: 'var(--text-muted)', margin: 'var(--space-6) 0 var(--space-2)' }}>Verifier &amp; model registrations</h6>
         <p style={{ fontSize: 13 }}>Read live from ZkAdapter &mdash; a page that reads its own claims off chain is on-brand.</p>

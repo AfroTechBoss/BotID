@@ -302,6 +302,30 @@ img { display: block; max-width: 100%; }
 /* The current page is not signalled by colour alone: at this size the accent against the body
    text is a hue difference a red-green colourblind reader cannot rely on. */
 .nav a[aria-current='page'] { text-decoration: underline; text-underline-offset: 5px; text-decoration-thickness: 2px; }
+/* The two auto margins are a pair, not a duplicate: free space splits between them, which is what
+   centres the menu between the wordmark and the controls. Removing either one would shove the
+   menu against whichever side kept its margin. */
+.nav-links { display: flex; align-items: center; gap: var(--space-4); min-width: 0; }
+.nav-actions { display: flex; align-items: center; gap: 10px; margin-left: auto; }
+
+/* The first media query in this file, and it exists because the header was the one part of the
+   layout with a hard minimum width: five links, a two-word wordmark, a network selector and a
+   button, in a row with no wrap and nothing allowed to shrink. That row wants ~700px. Below it the
+   nav simply overflowed, and since it is mounted in the root layout, every page on the site
+   scrolled sideways on a phone.
+   The header goes to two rows here: wordmark and controls above, menu below. Note that --nav-h is
+   restated rather than abandoned — .page-body and .overview-shell both measure the fold from it,
+   so the rule is not "the nav may not grow", it is "the nav and --nav-h must agree". 94px is what
+   the two rows measure at this padding. Nothing is truncated or hidden: shortening "Connect
+   wallet" or dropping links to a hamburger would both buy width by taking something away. */
+@media (max-width: 720px) {
+  :root { --nav-h: 94px; }
+  .nav { flex-wrap: wrap; align-content: center; row-gap: var(--space-2); padding: var(--space-2) var(--space-3); }
+  /* Order, not a separate row container: the controls stay beside the wordmark and the menu is
+     pushed past them, so the wrap point is structural rather than a width that happens to work. */
+  .nav-actions { order: 1; }
+  .nav-links { order: 2; flex-basis: 100%; justify-content: space-between; gap: var(--space-2); }
+}
 
 .table { width: 100%; border-collapse: collapse; font-size: 14px; }
 .table th { text-align: left; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-muted); padding: var(--space-2); border-bottom: 2px solid var(--color-divider); }

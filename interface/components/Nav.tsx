@@ -30,15 +30,22 @@ export default function Nav() {
       <Link href="/" className="nav-brand" style={{ color: 'inherit', textDecoration: 'none' }}>
         BotID Protocol
       </Link>
-      {LINKS.map(([href, label]) => (
-        <Link key={href} href={href} aria-current={isCurrent(href) ? 'page' : undefined}>
-          {label}
-        </Link>
-      ))}
-      <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 10 }}>
+      {/* The links and the controls are each wrapped in one box rather than sitting loose in the
+          nav's flex row. Loose, they were seven siblings that could only ever be one line: below
+          about 700px the row was 682px wide inside a 375px viewport and every page on the site
+          scrolled sideways. Grouped, the menu wraps to a second row as a unit — see the
+          media query in globals.css, which also restates --nav-h for the taller header. */}
+      <div className="nav-links">
+        {LINKS.map(([href, label]) => (
+          <Link key={href} href={href} aria-current={isCurrent(href) ? 'page' : undefined}>
+            {label}
+          </Link>
+        ))}
+      </div>
+      <div className="nav-actions">
         <NetworkSelect />
         <ConnectWalletButton />
-      </span>
+      </div>
     </nav>
   );
 }

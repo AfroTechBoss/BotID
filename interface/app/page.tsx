@@ -61,7 +61,9 @@ export default function Overview() {
   };
 
   return (
-    <>
+    // Exactly one screenful. The two columns and the status bar divide it up; nothing here grows
+    // the document, so the site footer below stays exactly one scroll away.
+    <div className="overview-shell">
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 380px', flex: 1, minHeight: 0 }}>
         <main style={{ padding: 'var(--space-6)', display: 'flex', flexDirection: 'column', gap: 'var(--space-8)', borderRight: '2px solid var(--color-divider)' }}>
           <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
@@ -163,6 +165,6 @@ export default function Overview() {
         <span>indexer lag 0.4s</span>
         <span style={{ marginLeft: 'auto' }}>testnet</span>
       </footer>
-    </>
+    </div>
   );
 }

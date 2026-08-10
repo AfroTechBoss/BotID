@@ -51,6 +51,10 @@
   --space-1: 4px; --space-2: 8px; --space-3: 12px; --space-4: 16px; --space-6: 24px; --space-8: 32px;
   --radius-sm: 0px; --radius-md: 0px; --radius-lg: 0px;
 
+  /* Layout arithmetic, not a theme value — it stays in :root and is deliberately not restated in
+     the light block, because the fold is in the same place in both themes. */
+  --nav-h: 62px;
+
   /* Heavier than the light theme's. A shadow on a dark surface has less luminance range to work
      with, so the same alpha reads as nothing at all. */
   --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.45);
@@ -137,6 +141,15 @@ body {
   font-weight: var(--font-body-weight); font-size: 15px; line-height: 1.55;
 }
 
+/* Scrollbars are hidden everywhere, not disabled: `overflow` is untouched, so the wheel, the
+   trackpad, the arrow keys, Page Up/Down, Home/End and the scroll-into-view a focused element
+   triggers all still work. Only the gutter is gone.
+   Note what this costs — a hidden scrollbar is also a missing affordance. Nothing on screen now
+   says "there is more below", so anything that scrolls has to imply it some other way: content
+   cut mid-row at the fold, a header that stays put, a page that visibly does not end. */
+* { scrollbar-width: none; -ms-overflow-style: none; }
+*::-webkit-scrollbar { width: 0; height: 0; }
+
 /* The two faces are split by job, not by tag depth. Cabinet Grotesk Extrabold is the loud voice —
    page titles and the headline numerals — and it is used sparingly enough to still be loud.
    Everything that exists to be read quietly, including the small uppercase section labels this
@@ -189,7 +202,11 @@ img { display: block; max-width: 100%; }
 .tag { display: inline-flex; align-items: center; font-size: 11px; letter-spacing: 0.02em; padding: 3px 10px; }
 .tag-outline { border: 1px solid var(--color-accent); color: var(--color-accent); }
 
-.nav { display: flex; align-items: center; gap: var(--space-4); padding: var(--space-3) var(--space-6); border-bottom: 2px solid var(--color-divider); }
+/* The height is pinned rather than derived from the padding and the line box, because
+   --nav-h is arithmetic that .page-body depends on: it is the one number that decides where the
+   fold falls. Left to content, it would drift by a pixel or two with the font metrics and take
+   the footer's position with it. 62px is exactly what the padding and line box produced. */
+.nav { height: var(--nav-h); display: flex; align-items: center; gap: var(--space-4); padding: var(--space-3) var(--space-6); border-bottom: 2px solid var(--color-divider); }
 .nav a { color: inherit; text-decoration: none; font-size: 14px; }
 /* Scoped to .nav so it outranks `.nav a` above. The brand became a link when the nav started
    deriving its own state, and a bare `.nav-brand` lost the cascade to it — the wordmark rendered
@@ -209,23 +226,32 @@ img { display: block; max-width: 100%; }
    floating in a band with dead canvas either side — wrong for a dashboard whose whole job is
    dense tables, and doubly wrong once the leaderboard added its own 1400px cap on top. Line
    length is still controlled, but per page and only where reading is the point (see .measure). */
-.page-frame { min-height: 100vh; background: var(--color-bg); display: flex; flex-direction: column; }
+.page-frame { background: var(--color-bg); display: flex; flex-direction: column; }
 
-/* The reason the footer used to sit halfway up the leaderboard. .page-frame is a flex column
-   100vh tall, but nothing inside it grew, so the footer landed wherever the content stopped.
-   /executions carried `flex: 1` inline and /agents did not — the same page-by-page drift that
-   put Nav and Footer in the layout. It is one rule now, so no page can forget it. */
-.page-body { flex: 1; display: flex; flex-direction: column; min-height: 0; }
-.page-body > main { flex: 1; width: 100%; }
+/* One screenful, exactly — nav plus body fill the viewport, so the footer always begins at the
+   fold and is reached by scrolling rather than by being pinned into view. Two earlier versions
+   were both wrong: a bare `flex: 1` inside a 100vh frame put the footer at the bottom of the
+   *screen* on a short page (it read as floating), and before that nothing grew at all, so it sat
+   halfway up the leaderboard.
+   min-height, not height: content longer than a screen still pushes the footer down normally.
+   dvh, not vh: on mobile, vh is the address-bar-collapsed height, which overshoots by ~60px and
+   would leave a strip of footer showing before any scrolling. */
+.page-body { min-height: calc(100dvh - var(--nav-h)); display: flex; flex-direction: column; }
+.page-body > main { flex: 1; width: 100%; min-height: 0; }
 
 /* Prose wants a measure; tables want the screen. ~70ch is roughly 12 words a line, which is
    where reading speed peaks — a 2560px-wide paragraph is not generous, it is unreadable. */
 .measure { max-width: 70ch; }
 
-/* The live feed scrolls inside itself instead of growing the page.
-   `overflow-y: auto` alone did nothing: an auto-height box never overflows, so every arriving row
-   made the document taller and pushed the footer further away — a feed left open for ten minutes
-   turned the overview into a mile of column. The cap is what makes the overflow real. Rows are
-   still capped at 40 in the component; this bounds the pixels, that bounds the memory. */
-.feed-scroll { flex: 1; overflow-y: auto; overscroll-behavior: contain; max-height: min(68vh, 720px); }
+/* The overview is a fixed screenful with its own scrolling regions, so it needs a definite
+   height, not the min-height the other pages use. That definite height is what lets the columns
+   inside it overflow at all: `overflow-y: auto` on an auto-height box does nothing, because a box
+   free to grow never overflows. That was the original bug — every arriving feed row made the
+   document taller until the overview was a mile of column. A `max-height: 68vh` cap fixed it by
+   guessing; this fixes it by arithmetic, and the feed now ends exactly where the screen does. */
+.overview-shell { height: calc(100dvh - var(--nav-h)); display: flex; flex-direction: column; }
+.overview-shell main { overflow-y: auto; }
+
+/* Rows are still capped at 40 in the component: this bounds the pixels, that bounds the memory. */
+.feed-scroll { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
 .tabular { font-variant-numeric: tabular-nums; }

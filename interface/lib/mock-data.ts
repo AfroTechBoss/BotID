@@ -15,15 +15,23 @@ import { applyBps, toBaseUnits } from './token';
 export { formatToken, formatTokenParts, BOND_TOKEN, toBaseUnits, ratio, pct } from './token';
 
 /**
- * Fixed reference instant: 2026-08-09T12:00:00Z. Fixtures are relative to this, not to now.
+ * Fixed reference instant. Fixtures are relative to this, not to `now`.
  *
- * Written as a parsed date rather than a literal so the value cannot drift from the sentence
- * describing it. It already had: the literal here was 1_754_740_800_000, which is 2026-08-09
- * minus a year, so every rendered date — the 90-day score history, the 14-day bar chart, every
- * "3h ago" — sat a year behind the legal pages and the README. Date.parse of an ISO-8601 string
- * with an explicit Z is UTC on every engine, so this stays a constant and reads no clock.
+ * Fixed for the lifetime of a build, but not fixed in the source: it is the top of the hour the
+ * build started, injected by next.config.js and inlined into both bundles. A hardcoded literal
+ * here went stale exactly as you would expect — it sat a year behind the legal pages until
+ * someone noticed the charts were dated 2025 — and the obvious repair, reading the clock at
+ * module scope, is the one thing this module may never do: the value is produced once during
+ * server rendering and again during hydration, and if the two disagree React discards the server
+ * HTML. Deciding it at build time satisfies both. See next.config.js for why the hour.
+ *
+ * The fallback covers execution outside a Next build — tsc, node scripts, tests — where nothing
+ * inlined the variable. It is truncated identically so those callers still get a round instant.
  */
-export const MOCK_NOW = Date.parse('2026-08-09T12:00:00Z');
+const BUILD_NOW = Number(process.env.NEXT_PUBLIC_MOCK_NOW);
+export const MOCK_NOW = Number.isFinite(BUILD_NOW) && BUILD_NOW > 0
+  ? BUILD_NOW
+  : Math.floor(Date.now() / 3_600_000) * 3_600_000;
 
 function mulberry32(seed: number) {
   return function () {

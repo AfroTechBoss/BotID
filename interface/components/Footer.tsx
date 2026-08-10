@@ -1,5 +1,7 @@
 import Link from 'next/link';
 import NetworkLabel from './NetworkLabel';
+import ThemeToggle from './ThemeToggle';
+import { readTheme } from '@/lib/theme.server';
 
 // The network name used to be a prop defaulting to 'testnet', which meant the footer said testnet
 // on every page regardless of what the nav switcher was set to — nothing ever passed the prop.
@@ -28,7 +30,12 @@ export default function Footer() {
       </div>
       <div style={{ gridColumn: '1/-1', display: 'flex', justifyContent: 'space-between', color: 'var(--text-subtle)', borderTop: '1px solid var(--color-divider)', paddingTop: 'var(--space-3)', marginTop: 'var(--space-2)' }}>
         <span><NetworkLabel /></span>
-        <span>v0.1.0 &middot; a1b2c3d</span>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-4)' }}>
+          {/* Read here rather than threaded down from the layout: the footer is already a server
+              component, and a prop would have to cross Nav and the page to get here. */}
+          <ThemeToggle initial={readTheme()} />
+          v0.1.0 &middot; a1b2c3d
+        </span>
       </div>
     </footer>
   );

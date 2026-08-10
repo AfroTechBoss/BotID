@@ -265,6 +265,27 @@ img { display: block; max-width: 100%; }
 .tag { display: inline-flex; align-items: center; font-size: 11px; letter-spacing: 0.02em; padding: 3px 10px; }
 .tag-outline { border: 1px solid var(--color-accent); color: var(--color-accent); }
 
+/* Chart readouts. A `title` attribute was doing this job before, which meant a ~1s delay, no
+   control over the content, and nothing at all for a keyboard. These are ordinary elements, so
+   they can carry a breakdown, and the charts that use them are focusable and answer to arrow
+   keys — the numbers should not be reachable by mouse only. */
+.chart-wrap { position: relative; }
+.chart-tip {
+  position: absolute; z-index: 30; pointer-events: none;
+  background: var(--color-surface); border: 1px solid var(--color-divider); box-shadow: var(--shadow-lg);
+  padding: 7px 10px; font-family: var(--font-mono); font-size: 11px; line-height: 1.6; white-space: nowrap;
+}
+.chart-tip-head {
+  font-family: var(--font-body); font-weight: 700; font-size: 10px; text-transform: uppercase;
+  letter-spacing: 0.08em; color: var(--text-muted); margin-bottom: 3px;
+}
+.chart-tip-row { display: flex; align-items: center; gap: 10px; }
+.chart-tip-row > :last-child { margin-left: auto; font-variant-numeric: tabular-nums; }
+.chart-tip-swatch { width: 8px; height: 8px; flex: none; }
+.chart-tip-total { border-top: 1px solid var(--color-divider); margin-top: 4px; padding-top: 4px; font-weight: 700; }
+.chart-col:focus-visible, .chart-svg:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+.chart-col[data-active] { filter: brightness(1.25); }
+
 /* The height is pinned rather than derived from the padding and the line box, because
    --nav-h is arithmetic that .page-body depends on: it is the one number that decides where the
    fold falls. Left to content, it would drift by a pixel or two with the font metrics and take

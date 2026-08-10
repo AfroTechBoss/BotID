@@ -1,15 +1,25 @@
 'use client';
 import { useState } from 'react';
 import BotIdBadge from '@/components/BotIdBadge';
-import { SAMPLE_AGENT, TIER_META, genScoreHistory, genExecutions, formatToken, formatNum, timeAgo, scoreColorVar, shortHash, toBaseUnits, ratio, pct } from '@/lib/mock-data';
+import { SAMPLE_AGENT, TIER_META, MOCK_NOW, genScoreHistory, genExecutions, formatToken, formatNum, timeAgo, scoreColorVar, shortHash, toBaseUnits, ratio, pct } from '@/lib/mock-data';
 
 const STATUS_COLOR: Record<string, string> = {
   Settled: 'var(--score-good)', Finalized: 'var(--tier-gold)', Challenged: 'var(--state-pending)',
   Faulted: 'var(--state-slashed)', Expired: 'var(--score-critical)', Pending: 'var(--color-neutral-500)',
 };
 
+// A history point's `day` is its index, counting up to the fixture instant. Formatted in UTC for
+// the same reason every other date here is: a value that depends on the reader's clock or timezone
+// renders differently on the server and in the browser.
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+function dayLabel(day: number, lastDay: number) {
+  const d = new Date(MOCK_NOW - (lastDay - day) * 86_400_000);
+  return `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
+}
+
 export default function AgentProfile({ params }: { params: { id: string } }) {
   const [filter, setFilter] = useState<'all' | 'settled' | 'challenged' | 'faulted'>('all');
+  const [hi, setHi] = useState<number | null>(null);   // index into `history` the readout is showing
   const a = SAMPLE_AGENT; // swap for a real lookup by params.id against the data-access layer
   const tm = TIER_META[a.tier];
   const history = genScoreHistory(a, 90);
@@ -49,11 +59,66 @@ export default function AgentProfile({ params }: { params: { id: string } }) {
 
         <section style={{ marginBottom: 'var(--space-8)' }}>
           <h6 style={{ marginBottom: 'var(--space-3)', color: 'var(--text-muted)' }}>Score history &middot; 90d</h6>
-          <svg viewBox="0 0 640 170" style={{ width: '100%', height: 170, display: 'block', borderTop: '2px solid var(--color-divider)', borderBottom: '2px solid var(--color-divider)' }}>
-            <line x1={0} y1={yOf(5000)} x2={640} y2={yOf(5000)} stroke="var(--color-neutral-400)" strokeWidth={1} strokeDasharray="4 4" />
-            <polyline points={pointsStr} fill="none" stroke="var(--color-neutral-600)" strokeWidth={1.5} />
-            {markers.map((m, i) => <circle key={i} cx={m.x} cy={m.y} r={m.r} fill={m.color} opacity={m.opacity} />)}
-          </svg>
+          <div className="chart-wrap" onMouseLeave={() => setHi(null)}>
+            <svg
+              className="chart-svg"
+              viewBox="0 0 640 170"
+              style={{ width: '100%', height: 170, display: 'block', borderTop: '2px solid var(--color-divider)', borderBottom: '2px solid var(--color-divider)' }}
+              role="img"
+              aria-label={`Score history, 90 days, ${formatNum(history[0].score)} to ${formatNum(a.score)}. Use the arrow keys to read individual days.`}
+              tabIndex={0}
+              onMouseMove={(e) => {
+                // Read the position off the rendered box, not the 640-unit viewBox: the svg is
+                // width:100% and the two only coincide at one window size.
+                const r = e.currentTarget.getBoundingClientRect();
+                const t = (e.clientX - r.left) / r.width;
+                setHi(Math.max(0, Math.min(history.length - 1, Math.round(t * (history.length - 1)))));
+              }}
+              onFocus={() => setHi((i) => i ?? history.length - 1)}
+              onBlur={() => setHi(null)}
+              onKeyDown={(e) => {
+                if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight' && e.key !== 'Home' && e.key !== 'End') return;
+                e.preventDefault();
+                setHi((i) => {
+                  const cur = i ?? history.length - 1;
+                  if (e.key === 'Home') return 0;
+                  if (e.key === 'End') return history.length - 1;
+                  const next = cur + (e.key === 'ArrowRight' ? 1 : -1);
+                  return Math.max(0, Math.min(history.length - 1, next));
+                });
+              }}
+            >
+              <line x1={0} y1={yOf(5000)} x2={640} y2={yOf(5000)} stroke="var(--color-neutral-400)" strokeWidth={1} strokeDasharray="4 4" />
+              <polyline points={pointsStr} fill="none" stroke="var(--color-neutral-600)" strokeWidth={1.5} />
+              {markers.map((m, i) => <circle key={i} cx={m.x} cy={m.y} r={m.r} fill={m.color} opacity={m.opacity} />)}
+              {hi !== null && (
+                <g pointerEvents="none">
+                  <line x1={xOf(hi)} y1={0} x2={xOf(hi)} y2={170} stroke="var(--color-accent)" strokeWidth={1} opacity={0.55} />
+                  <circle cx={xOf(hi)} cy={yOf(history[hi].score)} r={3.5} fill="var(--color-bg)" stroke="var(--color-accent)" strokeWidth={2} />
+                </g>
+              )}
+            </svg>
+            {hi !== null && (
+              <div
+                className="chart-tip"
+                style={{
+                  left: `${(hi / (history.length - 1)) * 100}%`,
+                  bottom: 8,
+                  transform: hi < 8 ? 'translateX(0)' : hi > history.length - 9 ? 'translateX(-100%)' : 'translateX(-50%)',
+                }}
+              >
+                <div className="chart-tip-head">{dayLabel(history[hi].day, history.length - 1)}</div>
+                <div className="chart-tip-row"><span>Score</span><span style={{ color: scoreColorVar(history[hi].score) }}>{formatNum(history[hi].score)}</span></div>
+                <div className="chart-tip-row"><span>Notional</span><span>{history[hi].notional > 0n ? formatToken(history[hi].notional) : '–'}</span></div>
+                <div className="chart-tip-row">
+                  <span>Outcome</span>
+                  <span style={{ color: history[hi].fault ? 'var(--score-critical)' : undefined }}>
+                    {history[hi].fault ? 'fault' : history[hi].notional > 0n ? 'in-spec' : 'no execution'}
+                  </span>
+                </div>
+              </div>
+            )}
+          </div>
           <div style={{ fontSize: 11, color: 'var(--text-subtle)', marginTop: 4 }}>dashed line = 5000 neutral &middot; point size = notional weight &middot; red = fault</div>
         </section>
 

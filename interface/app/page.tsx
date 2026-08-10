@@ -7,9 +7,19 @@ import {
   formatToken, formatNum, timeAgo, scoreColorVar, shortHash, FeedRow, Agent, MOCK_NOW,
 } from '@/lib/mock-data';
 
+// The bars are 14 consecutive days ending at the fixture instant. Derived from MOCK_NOW and
+// formatted in UTC for the same reason every other date here is: a value that depends on the
+// reader's clock or timezone renders differently on the server and in the browser.
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+function dayLabel(i: number) {
+  const d = new Date(MOCK_NOW - (EXECUTIONS_PER_DAY.length - 1 - i) * 86_400_000);
+  return `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]}`;
+}
+
 export default function Overview() {
   const { network } = useNetwork();
   const [density, setDensity] = useState<'sparse' | 'dense'>('sparse');
+  const [hoverDay, setHoverDay] = useState<number | null>(null);
   const [feedRows, setFeedRows] = useState<FeedRow[]>([]);
   const [paused, setPaused] = useState(false);
   // Starts at MOCK_NOW so the server and the client render the same relative times, then the
@@ -101,14 +111,60 @@ export default function Overview() {
                 <span><span style={{ color: 'var(--tier-gold)' }}>&#9632;</span> Gold</span>
               </span>
             </h6>
-            <div style={{ display: 'flex', alignItems: 'flex-end', gap: 4, height: 120, borderBottom: '2px solid var(--color-divider)', paddingBottom: 2 }}>
-              {EXECUTIONS_PER_DAY.map((d, i) => (
-                <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column-reverse', height: '100%' }} title={`${d.bronze + d.silver + d.gold} executions`}>
-                  <div style={{ height: Math.round((d.bronze / maxDay) * 110), background: 'var(--tier-bronze)' }} />
-                  <div style={{ height: Math.round((d.silver / maxDay) * 110), background: 'var(--tier-silver)' }} />
-                  <div style={{ height: Math.round((d.gold / maxDay) * 110), background: 'var(--tier-gold)' }} />
+            <div
+              className="chart-wrap"
+              style={{ display: 'flex', alignItems: 'flex-end', gap: 4, height: 120, borderBottom: '2px solid var(--color-divider)', paddingBottom: 2 }}
+              onMouseLeave={() => setHoverDay(null)}
+            >
+              {EXECUTIONS_PER_DAY.map((d, i) => {
+                const total = d.bronze + d.silver + d.gold;
+                return (
+                  <div
+                    key={i}
+                    className="chart-col"
+                    data-active={hoverDay === i || undefined}
+                    style={{ flex: 1, display: 'flex', flexDirection: 'column-reverse', height: '100%' }}
+                    tabIndex={0}
+                    // The readout is hover-only for a mouse, so the same numbers have to reach a
+                    // keyboard and a screen reader some other way. This is that way.
+                    aria-label={`${dayLabel(i)}: ${total} executions — ${d.bronze} bronze, ${d.silver} silver, ${d.gold} gold`}
+                    onMouseEnter={() => setHoverDay(i)}
+                    onFocus={() => setHoverDay(i)}
+                    onBlur={() => setHoverDay(null)}
+                  >
+                    <div style={{ height: Math.round((d.bronze / maxDay) * 110), background: 'var(--tier-bronze)' }} />
+                    <div style={{ height: Math.round((d.silver / maxDay) * 110), background: 'var(--tier-silver)' }} />
+                    <div style={{ height: Math.round((d.gold / maxDay) * 110), background: 'var(--tier-gold)' }} />
+                  </div>
+                );
+              })}
+
+              {hoverDay !== null && (
+                <div
+                  className="chart-tip"
+                  style={{
+                    left: `${((hoverDay + 0.5) / EXECUTIONS_PER_DAY.length) * 100}%`,
+                    bottom: 'calc(100% + 8px)',
+                    // Clamped at the ends rather than always centred: a centred tip on the first
+                    // or last column hangs off the panel and gets clipped by the column that
+                    // scrolls beside it.
+                    transform: hoverDay <= 1 ? 'translateX(-20%)' : hoverDay >= EXECUTIONS_PER_DAY.length - 2 ? 'translateX(-80%)' : 'translateX(-50%)',
+                  }}
+                >
+                  <div className="chart-tip-head">{dayLabel(hoverDay)}</div>
+                  {(['bronze', 'silver', 'gold'] as const).map((t) => (
+                    <div key={t} className="chart-tip-row">
+                      <span aria-hidden="true" className="chart-tip-swatch" style={{ background: `var(--tier-${t})` }} />
+                      <span>{TIER_META[t].label}</span>
+                      <span>{EXECUTIONS_PER_DAY[hoverDay][t]}</span>
+                    </div>
+                  ))}
+                  <div className="chart-tip-row chart-tip-total">
+                    <span>Total</span>
+                    <span>{EXECUTIONS_PER_DAY[hoverDay].bronze + EXECUTIONS_PER_DAY[hoverDay].silver + EXECUTIONS_PER_DAY[hoverDay].gold}</span>
+                  </div>
                 </div>
-              ))}
+              )}
             </div>
           </section>
 

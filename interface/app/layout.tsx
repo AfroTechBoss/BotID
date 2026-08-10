@@ -4,6 +4,7 @@ import { cabinet, satoshi } from './fonts';
 import Nav from '@/components/Nav';
 import Footer from '@/components/Footer';
 import { NetworkProvider } from '@/lib/network';
+import { readTheme } from '@/lib/theme.server';
 
 export const metadata: Metadata = {
   title: { default: 'BotID', template: '%s · BotID' },
@@ -17,9 +18,14 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     // The font classes carry --font-cabinet and --font-satoshi; globals.css reads them through
     // --font-heading and --font-body, so no component ever names a typeface directly.
-    // data-theme is explicit rather than implied by :root so the value is inspectable and a
-    // toggle has something to write to. Dark is the default; 'light' is the only other value.
-    <html lang="en" data-theme="dark" className={`${cabinet.variable} ${satoshi.variable}`}>
+    // data-theme is rendered by the server from the cookie, not written by a pre-paint script
+    // reading localStorage. The script version does not survive: <html> is a React-rendered
+    // element, and hydration strips attributes React does not own, so a stored light preference
+    // held only until the bundle loaded and then snapped back to dark. Reading a cookie the
+    // server can see makes the first paint already correct, with no mismatch to suppress.
+    // The cost is that this opts every route into dynamic rendering — acceptable here, where
+    // every page already renders per-request data.
+    <html lang="en" data-theme={readTheme()} className={`${cabinet.variable} ${satoshi.variable}`}>
       <body>
         {/* The provider wraps the whole frame, not just the nav, because the switcher in the nav
             and the labels in the footer and the status bars have to name the same chain. */}

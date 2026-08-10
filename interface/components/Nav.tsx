@@ -24,16 +24,11 @@ export default function Nav() {
 
   return (
     <nav className="nav">
+      {/* Wordmark only. The concentric ring that used to sit beside it was a fourth thing drawing
+          rings — after BotIdBadge, the live dots and the network dot — and being decorative rather
+          than carrying state it just diluted the ones that mean something. */}
       <Link href="/" className="nav-brand" style={{ color: 'inherit', textDecoration: 'none' }}>
-        <span
-          aria-hidden="true"
-          style={{
-            width: 14, height: 14, borderRadius: '50%', border: '2px solid var(--color-text)',
-            boxShadow: 'inset 0 0 0 3px var(--color-bg), inset 0 0 0 4px var(--color-text)',
-            display: 'inline-block',
-          }}
-        />
-        BOTID
+        BotID Protocol
       </Link>
       {LINKS.map(([href, label]) => (
         <Link key={href} href={href} aria-current={isCurrent(href) ? 'page' : undefined}>

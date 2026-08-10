@@ -242,7 +242,9 @@ img { display: block; max-width: 100%; }
 /* Scoped to .nav so it outranks `.nav a` above. The brand became a link when the nav started
    deriving its own state, and a bare `.nav-brand` lost the cascade to it — the wordmark rendered
    at 14px, the same size as the menu beside it. */
-.nav .nav-brand { font-family: var(--font-heading); font-weight: var(--font-heading-weight); font-size: 18px; margin-right: auto; display: flex; align-items: center; gap: 10px; }
+/* nowrap because the wordmark is two words now: wrapping it would grow the nav past --nav-h,
+   which is the number the whole fold is measured from. */
+.nav .nav-brand { font-family: var(--font-heading); font-weight: var(--font-heading-weight); font-size: 18px; margin-right: auto; display: flex; align-items: center; white-space: nowrap; }
 .nav a:hover, .nav a[aria-current='page'] { color: var(--color-accent); }
 /* The current page is not signalled by colour alone: at this size the accent against the body
    text is a hue difference a red-green colourblind reader cannot rely on. */

@@ -237,10 +237,11 @@ export default function Overview() {
           </div>
         </aside>
       </div>
-      {/* Wraps: four readings at 11px clear 375px by about 20 pixels, which is not a margin worth
-          trusting to a font that renders slightly wider on someone else's phone. */}
-      <footer style={{ display: 'flex', flexWrap: 'wrap', columnGap: 'var(--space-6)', rowGap: 2, alignItems: 'center', padding: '6px var(--space-4)', borderTop: '2px solid var(--color-divider)', fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)' }}>
-        <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}><span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--live)' }} />RPC live</span>
+      {/* One line at every width — see .overview-status. The type and the gutters are sized in the
+          stylesheet because both have to shrink on a phone to keep the four readings on one row,
+          and a media query cannot reach an inline style. */}
+      <footer className="overview-status">
+        <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><span style={{ width: 5, height: 5, borderRadius: '50%', background: 'var(--live)' }} />RPC live</span>
         <span>block {formatNum(blockHeight)}</span>
         <span>indexer lag 0.4s</span>
         <span style={{ marginLeft: 'auto' }}>{network.short}</span>

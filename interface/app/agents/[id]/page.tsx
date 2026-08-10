@@ -27,7 +27,11 @@ export default function AgentProfile({ params }: { params: { id: string } }) {
   // between agents — scaling to each agent's own maximum would make a quiet agent's largest
   // execution look identical to a busy one's.
   const MARKER_FULL_SCALE = toBaseUnits(250000);
-  const w = 640, h = 170, pad = 10;
+  // The viewBox aspect is now also the rendered aspect, since the svg takes its height from it —
+  // so h is a shape decision, not just a coordinate range. At the old 640x170 the chart came out
+  // 387px tall once the page went full width, which pushed the executions table off the fold.
+  // 640x120 lands it near 270px at a normal desktop width and keeps the 90-day line legible.
+  const w = 640, h = 120, pad = 10;
   const yOf = (s: number) => pad + (1 - s / 10000) * (h - pad * 2);
   const xOf = (i: number) => (i / (history.length - 1)) * w;
   const pointsStr = history.map((p, i) => `${xOf(i).toFixed(1)},${yOf(p.score).toFixed(1)}`).join(' ');
@@ -46,7 +50,12 @@ export default function AgentProfile({ params }: { params: { id: string } }) {
 
   return (
     <>
-      <main style={{ padding: 'var(--space-6)', maxWidth: 1100 }}>
+      {/* No width cap. The shell stopped capping itself at 1600px for the reason given in
+          globals.css — a dashboard of dense tables should not float in a band with dead canvas
+          either side — and a per-page cap here just reinstated that at 1100px. The score chart is
+          width:100% and gets more resolution per day the wider it runs, and the executions table
+          has six columns that were wrapping for no reason. */}
+      <main style={{ padding: 'var(--space-6)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 4 }}>
           <BotIdBadge tier={a.tier} hasFault={a.faults > 0} size={44} />
           <h1 style={{ fontSize: 28, margin: 0 }}>agent #{a.id}</h1>
@@ -62,14 +71,27 @@ export default function AgentProfile({ params }: { params: { id: string } }) {
           <div className="chart-wrap" onMouseLeave={() => setHi(null)}>
             <svg
               className="chart-svg"
-              viewBox="0 0 640 170"
-              style={{ width: '100%', height: 170, display: 'block', borderTop: '2px solid var(--color-divider)', borderBottom: '2px solid var(--color-divider)' }}
+              viewBox={`0 0 ${w} ${h}`}
+              // height:auto, not a fixed 170. With a fixed height the default preserveAspectRatio
+              // scales the viewBox to *fit*, so the drawing stayed 640 units wide and sat
+              // letterboxed in the middle of the box — 409px of dead canvas either side once the
+              // page went full width. Two things silently depended on that not happening: the
+              // hover handler maps the cursor across getBoundingClientRect().width, and the
+              // tooltip is positioned as a percentage of the same box. Both were reading a box
+              // wider than the chart they describe, so every readout was pulled toward the centre.
+              // Letting the height follow the viewBox aspect makes box and drawing the same thing
+              // again, which is what those two calculations already assumed.
+              // preserveAspectRatio="none" would also fill the width, but it stretches the markers
+              // into ellipses, and marker area is how this chart encodes notional weight.
+              style={{ width: '100%', height: 'auto', display: 'block', borderTop: '2px solid var(--color-divider)', borderBottom: '2px solid var(--color-divider)' }}
               role="img"
               aria-label={`Score history, 90 days, ${formatNum(history[0].score)} to ${formatNum(a.score)}. Use the arrow keys to read individual days.`}
               tabIndex={0}
               onMouseMove={(e) => {
-                // Read the position off the rendered box, not the 640-unit viewBox: the svg is
-                // width:100% and the two only coincide at one window size.
+                // Read the position off the rendered box in CSS pixels, not the 640-unit viewBox:
+                // the svg is width:100%, so the two are the same box at different scales. The
+                // fraction across is what matters and it survives the scaling — but only because
+                // the drawing fills the box, which is what height:auto above is protecting.
                 const r = e.currentTarget.getBoundingClientRect();
                 const t = (e.clientX - r.left) / r.width;
                 setHi(Math.max(0, Math.min(history.length - 1, Math.round(t * (history.length - 1)))));
@@ -88,13 +110,17 @@ export default function AgentProfile({ params }: { params: { id: string } }) {
                 });
               }}
             >
-              <line x1={0} y1={yOf(5000)} x2={640} y2={yOf(5000)} stroke="var(--color-neutral-400)" strokeWidth={1} strokeDasharray="4 4" />
-              <polyline points={pointsStr} fill="none" stroke="var(--color-neutral-600)" strokeWidth={1.5} />
+              {/* non-scaling-stroke throughout: the viewBox is now scaled up by whatever the
+                  window is wide divided by 640, and a 1px rule drawn at 2.3x reads as a 2px rule.
+                  The strokes here are hairlines by intent, so they opt out of the scaling that the
+                  geometry itself wants. */}
+              <line x1={0} y1={yOf(5000)} x2={w} y2={yOf(5000)} stroke="var(--color-neutral-400)" strokeWidth={1} strokeDasharray="4 4" vectorEffect="non-scaling-stroke" />
+              <polyline points={pointsStr} fill="none" stroke="var(--color-neutral-600)" strokeWidth={1.5} vectorEffect="non-scaling-stroke" />
               {markers.map((m, i) => <circle key={i} cx={m.x} cy={m.y} r={m.r} fill={m.color} opacity={m.opacity} />)}
               {hi !== null && (
                 <g pointerEvents="none">
-                  <line x1={xOf(hi)} y1={0} x2={xOf(hi)} y2={170} stroke="var(--color-accent)" strokeWidth={1} opacity={0.55} />
-                  <circle cx={xOf(hi)} cy={yOf(history[hi].score)} r={3.5} fill="var(--color-bg)" stroke="var(--color-accent)" strokeWidth={2} />
+                  <line x1={xOf(hi)} y1={0} x2={xOf(hi)} y2={h} stroke="var(--color-accent)" strokeWidth={1} opacity={0.55} vectorEffect="non-scaling-stroke" />
+                  <circle cx={xOf(hi)} cy={yOf(history[hi].score)} r={3.5} fill="var(--color-bg)" stroke="var(--color-accent)" strokeWidth={2} vectorEffect="non-scaling-stroke" />
                 </g>
               )}
             </svg>

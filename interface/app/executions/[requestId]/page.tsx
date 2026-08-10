@@ -26,7 +26,9 @@ export default function ExecutionDetail({ params }: { params: { requestId: strin
   const final = e.tier === 'gold';
 
   return (
-    <main style={{ padding: 'var(--space-6)', maxWidth: 860, display: 'flex', flexDirection: 'column', gap: 'var(--space-6)' }}>
+    // Uncapped, like the agent profile: this is a record of hashes and a 4-column claim grid, and
+    // mono type at 13px is the thing least helped by being squeezed into 860px.
+    <main style={{ padding: 'var(--space-6)', display: 'flex', flexDirection: 'column', gap: 'var(--space-6)' }}>
       <div style={{ border: `2px solid ${tm.color}`, padding: 'var(--space-4)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
           <span className="tag" style={{ background: `color-mix(in srgb, ${tm.color} 18%, transparent)`, color: tm.color }}>

@@ -31,7 +31,10 @@ export default function ProofInspector({ params }: { params: { requestId: string
   const command = 'ezkl verify --proof proof.json --settings settings.json --vk vk.key';
 
   return (
-    <main style={{ padding: 'var(--space-6)', maxWidth: 860, display: 'flex', flexDirection: 'column', gap: 'var(--space-6)' }}>
+    // Uncapped. The instance vector and the verify command are long mono strings that were
+    // wrapping mid-hash at 860px, which is the one place wrapping actively costs the reader
+    // something: a hash you have to mentally rejoin is a hash you cannot check by eye.
+    <main style={{ padding: 'var(--space-6)', display: 'flex', flexDirection: 'column', gap: 'var(--space-6)' }}>
       <div>
         <h1 style={{ fontSize: 26, marginBottom: 4 }}>Proof inspector</h1>
         <div className="text-muted" style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>

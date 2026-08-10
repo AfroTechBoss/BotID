@@ -37,9 +37,12 @@ const RULE: React.CSSProperties = {
 
 export default function Brand() {
   return (
-    <main style={{ padding: 'var(--space-8) var(--space-6)', maxWidth: 900 }}>
+    // Uncapped so the specimen rows get the room they are for. The intro keeps a measure of its
+    // own, because that part is reading and the swatches are not — the split globals.css
+    // describes, applied within one page rather than between pages.
+    <main style={{ padding: 'var(--space-8) var(--space-6)' }}>
       <h1 style={{ fontSize: 28 }}>Brand</h1>
-      <p className="text-muted">
+      <p className="text-muted measure">
         The BotIdBadge is the mark: ring construction is the tier, ring colour is fault status, and
         the two are independent. Everything below is rendered by the same components and tokens the
         rest of the interface uses, so this page cannot drift from what ships.

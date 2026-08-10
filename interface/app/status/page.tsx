@@ -2,7 +2,8 @@
 export default function Status() {
   return (
     <>
-      <main style={{ padding: 'var(--space-8) var(--space-6)', maxWidth: 800 }}>
+      {/* Two tables and one line of prose — table page, so no cap. */}
+      <main style={{ padding: 'var(--space-8) var(--space-6)' }}>
         <h1 style={{ fontSize: 28 }}>Status</h1>
         <p className="text-muted" style={{ fontSize: 12 }}>Measured from this browser, not a global claim.</p>
         <table className="table" style={{ marginTop: 'var(--space-4)' }}>

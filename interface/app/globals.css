@@ -576,10 +576,34 @@ img { display: block; max-width: 100%; }
   .feed-scroll { flex: none; max-height: 70dvh; }
 }
 
-/* Footer. Three link groups and a bottom bar that spans them. Two columns on a phone rather than
-   auto-fit: the bottom bar's `grid-column: 1/-1` means the track count is not free to grow, and
-   three 105px columns wrap the longest link ("Architecture") mid-word. */
-.site-footer { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-6); }
+/* Footer. Three link groups and a bottom bar that spans them, and the track count is fixed at three
+   at every width — auto-fit is wrong here because the bottom bar spans 1/-1, so a free track count
+   would leave the three groups bunched in the left half of a desktop footer.
+
+   It used to fall to two columns below 560px, which put Legal alone on a second row: the widest
+   group, the one carrying five links, reading as an afterthought rather than a peer of the two
+   above it. The reason was that three 1fr columns were 105px each and "Architecture" wrapped
+   mid-word — a type problem being solved with a layout change. So the type shrank instead. At 11px
+   the longest link measures ~68px, and the narrowest column the grid can produce is 93px at 320px
+   width, so the wrap that forced the second row cannot happen.
+
+   This is also simply a smaller footer. It is the last thing on the page and it is a set of links
+   nobody arrives for; it earns one line of type below the body scale and tighter padding than a
+   content section, not the same weight as the page above it. */
+.site-footer {
+  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-4);
+  padding: var(--space-4) var(--space-6);
+  border-top: 2px solid var(--color-divider);
+  font-size: 11px;
+}
+/* 10px against 11px links, so the label still reads as a heading through weight, uppercase and
+   letter-spacing rather than through size. h6 is 13px sitewide, which is a heading for a section of
+   the page; these three label a stack of four links. */
+.site-footer h6 { font-size: 10px; margin-bottom: var(--space-2); }
+.footer-links { display: flex; flex-direction: column; gap: 3px; }
 @media (max-width: 560px) {
-  .site-footer { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-6) var(--space-4); }
+  /* The gutters give up more than the type does. Padding is what the three columns are competing
+     with for width, and a footer link needs its characters more than the page needs its margin. */
+  .site-footer { gap: var(--space-3) var(--space-2); padding: var(--space-3); }
 }

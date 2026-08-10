@@ -8,26 +8,27 @@ import { readTheme } from '@/lib/theme.server';
 // It reads the shared network now, so there is no way to render a footer that disagrees.
 export default function Footer() {
   return (
-    // The column count lives in .site-footer because it has to change on a phone, where three 1fr
-    // columns are 105px each and wrap "Architecture" mid-word — and a media query cannot reach an
-    // inline style. auto-fit is wrong here: the bottom bar spans 1/-1, so a wider track count would
-    // leave the three link groups bunched in the left half of a desktop footer.
-    <footer className="site-footer" style={{ padding: 'var(--space-6)', borderTop: '2px solid var(--color-divider)', fontSize: 12 }}>
+    // Nothing about the footer's size is set here any more — padding, type scale, column count and
+    // the gaps between the groups all live in .site-footer, because every one of them has to change
+    // on a phone and a media query cannot reach an inline style. Three columns at every width is the
+    // point: the footer is the last thing on the page, and a group that drops to a second row reads
+    // as a separate block rather than a peer of the two above it.
+    <footer className="site-footer">
       <div>
-        <h6 style={{ marginBottom: 8 }}>Protocol</h6>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+        <h6>Protocol</h6>
+        <div className="footer-links">
           <Link href="/docs">Docs</Link><Link href="/docs">Repo</Link><Link href="/security">Contracts</Link><Link href="/docs">Architecture</Link>
         </div>
       </div>
       <div>
-        <h6 style={{ marginBottom: 8 }}>Interface</h6>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+        <h6>Interface</h6>
+        <div className="footer-links">
           <Link href="/status">Status</Link><Link href="/brand">Brand</Link><Link href="/about">About</Link>
         </div>
       </div>
       <div>
-        <h6 style={{ marginBottom: 8 }}>Legal</h6>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+        <h6>Legal</h6>
+        <div className="footer-links">
           <Link href="/legal/privacy">Privacy</Link><Link href="/legal/terms">Terms</Link>
           <Link href="/legal/disclaimer">Disclaimer</Link><Link href="/legal/cookies">Cookies</Link><Link href="/security">Security</Link>
         </div>

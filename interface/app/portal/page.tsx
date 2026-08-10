@@ -1,11 +1,46 @@
 'use client';
 import { useState } from 'react';
 
+type Tier = 'bronze' | 'silver' | 'gold';
+
+// Mirrors AgentRegistry. This panel used to read `{ bronze: 2.5, silver: 4.2, gold: 6 }[tier]`,
+// which made leverage look like a property of the tier — it is not, and the error flattered the
+// form badly: it promised a new Silver agent 4.2x when the contract gives it 1.0x.
+//
+// Leverage is a step function of *score*; tier only multiplies it. A registering agent has no
+// history, so it starts at NEUTRAL and gets the second band. Keeping the two functions separate
+// here, with the contract's bps units intact, is deliberate: the next person to compare this
+// against AgentRegistry.sol should be able to do it line by line.
+const NEUTRAL_SCORE = 5_000;
+const MIN_BOND = 500;
+const GLOBAL_NOTIONAL_CAP = 5_000_000;
+
+function leverageBps(score: number): number {
+  if (score < 5_000) return 5_000; // 0.5x — below neutral, undercollateralised is off
+  if (score < 7_000) return 10_000; // 1.0x
+  if (score < 8_500) return 20_000; // 2.0x
+  if (score < 9_500) return 40_000; // 4.0x
+  return 60_000; // 6.0x — the cap
+}
+
+const TIER_FACTOR_BPS: Record<Tier, number> = { bronze: 5_000, silver: 10_000, gold: 15_000 };
+
+/** bond × leverage(score) × tierFactor(tier), zero below minBond, clamped to the global cap. */
+function maxOpenNotional(bond: number, score: number, tier: Tier): number {
+  if (bond < MIN_BOND) return 0; // below the floor the answer is zero, not a small number
+  const notional = (bond * leverageBps(score) * TIER_FACTOR_BPS[tier]) / 1e8;
+  return Math.min(Math.round(notional), GLOBAL_NOTIONAL_CAP);
+}
+
+const multiple = (score: number, tier: Tier) =>
+  (leverageBps(score) * TIER_FACTOR_BPS[tier]) / 1e8;
+
 export default function Portal() {
-  const [tier, setTier] = useState<'bronze' | 'silver' | 'gold'>('silver');
+  const [tier, setTier] = useState<Tier>('silver');
   const [bond, setBond] = useState(100000);
-  const lev = { bronze: 2.5, silver: 4.2, gold: 6 }[tier];
-  const credit = Math.round(bond * lev);
+  const credit = maxOpenNotional(bond, NEUTRAL_SCORE, tier);
+  const capped = credit === GLOBAL_NOTIONAL_CAP;
+  const best = maxOpenNotional(bond, 10_000, tier);
   const fmt = (n: number) => (n >= 1e6 ? `${(n / 1e6).toFixed(1)}M WBOT` : `${(n / 1e3).toFixed(0)}k WBOT`);
 
   return (
@@ -43,10 +78,24 @@ export default function Portal() {
               <label>Bond ({fmt(bond)})</label>
               <input type="range" min={5000} max={500000} step={5000} value={bond} onChange={(e) => setBond(Number(e.target.value))} style={{ width: '100%' }} />
             </div>
-            <div style={{ borderTop: '2px solid var(--color-divider)', borderBottom: '2px solid var(--color-divider)', padding: 'var(--space-3)', display: 'flex', justifyContent: 'space-between', fontFamily: 'var(--font-mono)', fontSize: 14 }}>
-              <span className="text-muted">resulting credit line</span>
-              <span style={{ fontWeight: 700 }}>{fmt(credit)} max open notional</span>
+            {/* Labelled with the score it is computed at. An unlabelled credit line is how the old
+                tier-keyed number passed unnoticed — it looked like a fact about the tier. */}
+            <div style={{ borderTop: '2px solid var(--color-divider)', borderBottom: '2px solid var(--color-divider)', padding: 'var(--space-3)', display: 'flex', flexDirection: 'column', gap: 6, fontFamily: 'var(--font-mono)', fontSize: 14 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 'var(--space-3)' }}>
+                <span className="text-muted">credit line at registration</span>
+                <span style={{ fontWeight: 700 }}>{fmt(credit)} max open notional</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 'var(--space-3)', fontSize: 12 }}>
+                <span className="text-muted">score 5,000 (neutral) &times; {tier}</span>
+                <span className="text-muted">{multiple(NEUTRAL_SCORE, tier)}&times; bond</span>
+              </div>
             </div>
+            <p style={{ fontSize: 12, margin: 0 }} className="text-muted">
+              Leverage is a step function of score; the tier only multiplies it. A new agent starts at
+              5,000 with no history either way, so this is the floor rather than the number you keep.
+              Earn a score of 9,500 or above and this tier reaches {multiple(10_000, tier)}&times; &mdash;{' '}
+              {fmt(best)}{capped ? ', at the global cap' : ''}. See <a href="/docs#credit">the credit table</a>.
+            </p>
             <p style={{ fontSize: 12, color: 'var(--score-critical)' }}>Unbonding takes 21 days once requested. Read this before you post capital, not after.</p>
             <button className="btn btn-primary btn-block">Register agent</button>
           </div>

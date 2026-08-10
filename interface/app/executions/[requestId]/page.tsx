@@ -42,7 +42,7 @@ export default function ExecutionDetail({ params }: { params: { requestId: strin
       </div>
 
       <section>
-        <h6 style={{ color: 'color-mix(in srgb, var(--color-text) 60%, transparent)', marginBottom: 'var(--space-2)' }}>The claim</h6>
+        <h6 style={{ color: 'var(--text-muted)', marginBottom: 'var(--space-2)' }}>The claim</h6>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', borderTop: '2px solid var(--color-divider)', borderBottom: '2px solid var(--color-divider)', fontFamily: 'var(--font-mono)', fontSize: 13 }}>
           <Cell label="AGENT" val={<Link href={`/agents/${e.agent.id}`}>#{e.agent.id}</Link>} border />
           <Cell label="NOTIONAL" val={formatToken(e.notional)} border />
@@ -52,7 +52,7 @@ export default function ExecutionDetail({ params }: { params: { requestId: strin
       </section>
 
       <section>
-        <h6 style={{ color: 'color-mix(in srgb, var(--color-text) 60%, transparent)', marginBottom: 'var(--space-2)' }}>Inputs</h6>
+        <h6 style={{ color: 'var(--text-muted)', marginBottom: 'var(--space-2)' }}>Inputs</h6>
         <table className="table">
           <thead><tr><th>Feed</th><th>Value</th><th>Publishers</th><th>valueHash</th></tr></thead>
           <tbody>
@@ -70,7 +70,7 @@ export default function ExecutionDetail({ params }: { params: { requestId: strin
       </section>
 
       <section>
-        <h6 style={{ color: 'color-mix(in srgb, var(--color-text) 60%, transparent)', marginBottom: 'var(--space-2)' }}>Outputs</h6>
+        <h6 style={{ color: 'var(--text-muted)', marginBottom: 'var(--space-2)' }}>Outputs</h6>
         <table className="table">
           <thead><tr><th>Weight</th><th>Value</th></tr></thead>
           <tbody>{cells.outputs.map((o) => <tr key={o.label}><td>{o.label}</td><td className="tabular">{o.bps} bps</td></tr>)}</tbody>
@@ -79,7 +79,7 @@ export default function ExecutionDetail({ params }: { params: { requestId: strin
       </section>
 
       <section>
-        <h6 style={{ color: 'color-mix(in srgb, var(--color-text) 60%, transparent)', marginBottom: 'var(--space-2)' }}>Attestation</h6>
+        <h6 style={{ color: 'var(--text-muted)', marginBottom: 'var(--space-2)' }}>Attestation</h6>
         <div style={{ borderTop: '2px solid var(--color-divider)', borderBottom: '2px solid var(--color-divider)', padding: 'var(--space-3)', fontFamily: 'var(--font-mono)', fontSize: 13, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 'var(--space-3)' }}>
           <span>
             {final ? 'Groth16 proof' : e.tier === 'silver' ? 'TEE quote' : 'ECDSA signature'} &middot; verifier {shortHash('0x9c1e' + '0'.repeat(36))}
@@ -89,7 +89,7 @@ export default function ExecutionDetail({ params }: { params: { requestId: strin
       </section>
 
       <section>
-        <h6 style={{ color: 'color-mix(in srgb, var(--color-text) 60%, transparent)', marginBottom: 'var(--space-2)' }}>
+        <h6 style={{ color: 'var(--text-muted)', marginBottom: 'var(--space-2)' }}>
           Outcome &middot; <span style={{ textTransform: 'none', letterSpacing: 0, fontStyle: 'italic' }}>consumer-reported</span>
         </h6>
         <div style={{ border: '1px dashed var(--color-divider)', padding: 'var(--space-3)', display: 'flex', gap: 'var(--space-6)', fontFamily: 'var(--font-mono)', fontSize: 13 }}>
@@ -109,7 +109,7 @@ export default function ExecutionDetail({ params }: { params: { requestId: strin
       </section>
 
       <section>
-        <h6 style={{ color: 'color-mix(in srgb, var(--color-text) 60%, transparent)', marginBottom: 'var(--space-2)' }}>Timeline</h6>
+        <h6 style={{ color: 'var(--text-muted)', marginBottom: 'var(--space-2)' }}>Timeline</h6>
         <table className="table">
           <thead><tr><th>Event</th><th>Block</th><th>Time</th></tr></thead>
           <tbody>

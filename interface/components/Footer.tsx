@@ -26,7 +26,7 @@ export default function Footer() {
           <Link href="/legal/disclaimer">Disclaimer</Link><Link href="/legal/cookies">Cookies</Link><Link href="/security">Security</Link>
         </div>
       </div>
-      <div style={{ gridColumn: '1/-1', display: 'flex', justifyContent: 'space-between', color: 'color-mix(in srgb, var(--color-text) 55%, transparent)', borderTop: '1px solid var(--color-divider)', paddingTop: 'var(--space-3)', marginTop: 'var(--space-2)' }}>
+      <div style={{ gridColumn: '1/-1', display: 'flex', justifyContent: 'space-between', color: 'var(--text-subtle)', borderTop: '1px solid var(--color-divider)', paddingTop: 'var(--space-3)', marginTop: 'var(--space-2)' }}>
         <span><NetworkLabel /></span>
         <span>v0.1.0 &middot; a1b2c3d</span>
       </div>

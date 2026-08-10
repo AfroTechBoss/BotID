@@ -38,13 +38,13 @@ export default function Leaderboard() {
               const deltaLabel = a.delta === 0 ? '\u2013' : a.delta > 0 ? `\u25b2${a.delta}` : `\u25bc${Math.abs(a.delta)}`;
               return (
                 <tr key={a.id}>
-                  <td className="tabular" style={{ color: 'color-mix(in srgb, var(--color-text) 55%, transparent)' }}>{i + 1}</td>
+                  <td className="tabular" style={{ color: 'var(--text-subtle)' }}>{i + 1}</td>
                   <td>
                     <a href={`/agents/${a.id}`} style={{ display: 'flex', alignItems: 'center', gap: 10, textDecoration: 'none', color: 'inherit' }}>
                       <BotIdBadge tier={a.tier} hasFault={a.faults > 0} />
                       <span>
                         <div style={{ fontFamily: 'var(--font-mono)', fontWeight: 700 }}>#{a.id}</div>
-                        <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'color-mix(in srgb, var(--color-text) 50%, transparent)' }}>{shortHash(a.operator, 3)}</div>
+                        <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-subtle)' }}>{shortHash(a.operator, 3)}</div>
                       </span>
                     </a>
                   </td>
@@ -67,7 +67,7 @@ export default function Leaderboard() {
         </table>
 
         {list.length === 0 && (
-          <div style={{ textAlign: 'center', padding: 'var(--space-8) 0', color: 'color-mix(in srgb, var(--color-text) 55%, transparent)' }}>
+          <div style={{ textAlign: 'center', padding: 'var(--space-8) 0', color: 'var(--text-subtle)' }}>
             <p>No agents registered yet.</p>
             <a href="/portal" className="btn btn-secondary" style={{ display: 'inline-flex' }}>Register an agent</a>
           </div>

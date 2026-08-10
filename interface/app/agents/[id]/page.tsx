@@ -43,23 +43,23 @@ export default function AgentProfile({ params }: { params: { id: string } }) {
           <span style={{ fontFamily: 'var(--font-mono)', fontSize: 22, fontWeight: 700, color: scoreColorVar(a.score) }}>{formatNum(a.score)} {deltaLabel}</span>
           <button className="btn btn-secondary" style={{ marginLeft: 'auto' }}>Set alert</button>
         </div>
-        <div style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'color-mix(in srgb, var(--color-text) 60%, transparent)', marginBottom: 'var(--space-6)' }}>
+        <div style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-muted)', marginBottom: 'var(--space-6)' }}>
           {shortHash(a.address)} &middot; <span className="tag" style={{ background: `color-mix(in srgb, ${tm.color} 18%, transparent)`, color: tm.color }}>{tm.label}</span> &middot; operator {shortHash(a.operator, 3)} &middot; active {timeAgo(a.lastActiveAt)}
         </div>
 
         <section style={{ marginBottom: 'var(--space-8)' }}>
-          <h6 style={{ marginBottom: 'var(--space-3)', color: 'color-mix(in srgb, var(--color-text) 60%, transparent)' }}>Score history &middot; 90d</h6>
+          <h6 style={{ marginBottom: 'var(--space-3)', color: 'var(--text-muted)' }}>Score history &middot; 90d</h6>
           <svg viewBox="0 0 640 170" style={{ width: '100%', height: 170, display: 'block', borderTop: '2px solid var(--color-divider)', borderBottom: '2px solid var(--color-divider)' }}>
             <line x1={0} y1={yOf(5000)} x2={640} y2={yOf(5000)} stroke="var(--color-neutral-400)" strokeWidth={1} strokeDasharray="4 4" />
             <polyline points={pointsStr} fill="none" stroke="var(--color-neutral-600)" strokeWidth={1.5} />
             {markers.map((m, i) => <circle key={i} cx={m.x} cy={m.y} r={m.r} fill={m.color} opacity={m.opacity} />)}
           </svg>
-          <div style={{ fontSize: 11, color: 'color-mix(in srgb, var(--color-text) 50%, transparent)', marginTop: 4 }}>dashed line = 5000 neutral &middot; point size = notional weight &middot; red = fault</div>
+          <div style={{ fontSize: 11, color: 'var(--text-subtle)', marginTop: 4 }}>dashed line = 5000 neutral &middot; point size = notional weight &middot; red = fault</div>
         </section>
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', borderTop: '2px solid var(--color-divider)', borderBottom: '2px solid var(--color-divider)', marginBottom: 'var(--space-8)' }}>
           <div style={{ padding: 'var(--space-4)', borderRight: '1px solid var(--color-divider)' }}>
-            <h6 style={{ color: 'color-mix(in srgb, var(--color-text) 60%, transparent)', marginBottom: 'var(--space-3)' }}>Credit</h6>
+            <h6 style={{ color: 'var(--text-muted)', marginBottom: 'var(--space-3)' }}>Credit</h6>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6, fontFamily: 'var(--font-mono)', fontSize: 13 }}>
               <Row label="bond" val={formatToken(a.bond)} />
               <Row label="leverage" val={`${ratio(a.maxOpenNotional, a.bond).toFixed(1)}\u00d7`} />
@@ -72,7 +72,7 @@ export default function AgentProfile({ params }: { params: { id: string } }) {
             </div>
           </div>
           <div style={{ padding: 'var(--space-4)' }}>
-            <h6 style={{ color: 'color-mix(in srgb, var(--color-text) 60%, transparent)', marginBottom: 'var(--space-3)' }}>Model</h6>
+            <h6 style={{ color: 'var(--text-muted)', marginBottom: 'var(--space-3)' }}>Model</h6>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6, fontFamily: 'var(--font-mono)', fontSize: 13 }}>
               <Row label="commitment" val={shortHash(a.modelCommitment)} />
               <Row label="name" val="botid.reference-allocator.v1" />
@@ -84,7 +84,7 @@ export default function AgentProfile({ params }: { params: { id: string } }) {
 
         <section>
           <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', marginBottom: 'var(--space-3)' }}>
-            <h6 style={{ color: 'color-mix(in srgb, var(--color-text) 60%, transparent)', margin: 0 }}>Executions</h6>
+            <h6 style={{ color: 'var(--text-muted)', margin: 0 }}>Executions</h6>
             <span className="seg" style={{ fontSize: 11, marginLeft: 'auto' }}>
               {(['all', 'settled', 'challenged', 'faulted'] as const).map((f) => (
                 <label key={f} className="seg-opt"><input type="radio" checked={filter === f} onChange={() => setFilter(f)} />{f}</label>
@@ -100,7 +100,7 @@ export default function AgentProfile({ params }: { params: { id: string } }) {
                   <td><span className="tag" style={{ background: `color-mix(in srgb, ${STATUS_COLOR[e.status]} 16%, transparent)`, color: STATUS_COLOR[e.status] }}>{e.status}</span></td>
                   <td className="tabular">{formatToken(e.notional)}</td>
                   <td className="tabular" style={{ color: e.status === 'Settled' ? (e.bps >= 0 ? 'var(--score-good)' : 'var(--score-critical)') : 'inherit' }}>{e.status === 'Settled' ? `${e.bps >= 0 ? '+' : ''}${e.bps} bps` : '\u2013'}</td>
-                  <td style={{ fontSize: 12, color: 'color-mix(in srgb, var(--color-text) 55%, transparent)' }}>{timeAgo(e.time)}</td>
+                  <td style={{ fontSize: 12, color: 'var(--text-subtle)' }}>{timeAgo(e.time)}</td>
                 </tr>
               ))}
             </tbody>

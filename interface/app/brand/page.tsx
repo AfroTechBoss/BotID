@@ -27,7 +27,7 @@ const PALETTE: { role: string; token: string; value: string; ratio: string }[] =
 
 const HEAD: React.CSSProperties = {
   margin: 'var(--space-6) 0 var(--space-3)',
-  color: 'color-mix(in srgb, var(--color-text) 60%, transparent)',
+  color: 'var(--text-muted)',
 };
 const RULE: React.CSSProperties = {
   borderTop: '2px solid var(--color-divider)',

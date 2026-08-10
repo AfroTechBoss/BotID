@@ -45,7 +45,7 @@ export default function Executions() {
                   <td><span className="tag" style={{ background: `color-mix(in srgb, ${STATUS_COLOR[e.status]} 16%, transparent)`, color: STATUS_COLOR[e.status] }}>{e.status}</span></td>
                   <td className="tabular">{formatToken(e.notional)}</td>
                   <td className="tabular" style={{ color: e.status === 'Settled' ? (e.bps >= 0 ? 'var(--score-good)' : 'var(--score-critical)') : 'inherit' }}>{e.status === 'Settled' ? `${e.bps >= 0 ? '+' : ''}${e.bps} bps` : '\u2013'}</td>
-                  <td style={{ fontSize: 12, color: 'color-mix(in srgb, var(--color-text) 55%, transparent)' }}>{timeAgo(e.time)}</td>
+                  <td style={{ fontSize: 12, color: 'var(--text-subtle)' }}>{timeAgo(e.time)}</td>
                 </tr>
               );
             })}

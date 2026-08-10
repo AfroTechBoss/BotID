@@ -76,7 +76,7 @@ export default function Overview() {
           </div>
 
           <section>
-            <h6 style={{ marginBottom: 'var(--space-3)', color: 'color-mix(in srgb, var(--color-text) 60%, transparent)' }}>Network</h6>
+            <h6 style={{ marginBottom: 'var(--space-3)', color: 'var(--text-muted)' }}>Network</h6>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', borderTop: '2px solid var(--color-divider)', borderBottom: '2px solid var(--color-divider)' }}>
               {[
                 ['Agents', agents.length, 'inherit'],
@@ -86,14 +86,14 @@ export default function Overview() {
               ].map(([label, val, color], i) => (
                 <div key={label as string} style={{ padding: 'var(--space-4)', borderRight: i < 3 ? '1px solid var(--color-divider)' : 'none' }}>
                   <div className="tabular" style={{ fontFamily: 'var(--font-heading)', fontWeight: 800, fontSize: 34, letterSpacing: '-0.02em', color: color as string }}>{val}</div>
-                  <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'color-mix(in srgb, var(--color-text) 55%, transparent)', marginTop: 4 }}>{label}</div>
+                  <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-subtle)', marginTop: 4 }}>{label}</div>
                 </div>
               ))}
             </div>
           </section>
 
           <section>
-            <h6 style={{ marginBottom: 'var(--space-3)', color: 'color-mix(in srgb, var(--color-text) 60%, transparent)', display: 'flex', alignItems: 'baseline', gap: 12 }}>
+            <h6 style={{ marginBottom: 'var(--space-3)', color: 'var(--text-muted)', display: 'flex', alignItems: 'baseline', gap: 12 }}>
               Executions / day
               <span style={{ textTransform: 'none', letterSpacing: 0, fontSize: 11, display: 'flex', gap: 10 }}>
                 <span><span style={{ color: 'var(--tier-bronze)' }}>&#9632;</span> Bronze</span>
@@ -113,7 +113,7 @@ export default function Overview() {
           </section>
 
           <section>
-            <h6 style={{ marginBottom: 'var(--space-3)', color: 'color-mix(in srgb, var(--color-text) 60%, transparent)' }}>Top agents</h6>
+            <h6 style={{ marginBottom: 'var(--space-3)', color: 'var(--text-muted)' }}>Top agents</h6>
             <table className="table">
               <thead><tr><th></th><th>Agent</th><th>Score</th><th>Tier</th><th>Notional</th><th>Settled</th><th>Faults</th></tr></thead>
               <tbody>
@@ -148,12 +148,12 @@ export default function Overview() {
             {feedRows.map((row) => (
               <a key={row.id} href={`/executions/${row.requestId}`} style={{ display: 'block', textDecoration: 'none', color: 'inherit', padding: '8px 12px', borderBottom: '1px solid var(--color-divider)' }}>
                 <div style={{ display: 'flex', gap: 8, alignItems: 'baseline' }}>
-                  <span style={{ color: 'color-mix(in srgb, var(--color-text) 50%, transparent)', flex: 'none', width: 56 }}>{timeAgo(row.time, now)}</span>
+                  <span style={{ color: 'var(--text-subtle)', flex: 'none', width: 56 }}>{timeAgo(row.time, now)}</span>
                   <span style={{ fontWeight: 700, flex: 'none', width: 70, color: verbColor(row) }}>{row.verb}</span>
                   <span style={{ color: 'color-mix(in srgb, var(--color-text) 70%, transparent)' }}>{shortHash(row.requestId)}</span>
                 </div>
                 <div style={{ display: 'flex', gap: 8, marginTop: 2, paddingLeft: 64 }}>
-                  <span style={{ color: 'color-mix(in srgb, var(--color-text) 60%, transparent)' }}>agent #{row.agentId}</span>
+                  <span style={{ color: 'var(--text-muted)' }}>agent #{row.agentId}</span>
                   <span>{row.detail}</span>
                 </div>
               </a>
@@ -161,7 +161,7 @@ export default function Overview() {
           </div>
         </aside>
       </div>
-      <footer style={{ display: 'flex', gap: 'var(--space-6)', alignItems: 'center', padding: '6px var(--space-4)', borderTop: '2px solid var(--color-divider)', fontSize: 11, fontFamily: 'var(--font-mono)', color: 'color-mix(in srgb, var(--color-text) 60%, transparent)' }}>
+      <footer style={{ display: 'flex', gap: 'var(--space-6)', alignItems: 'center', padding: '6px var(--space-4)', borderTop: '2px solid var(--color-divider)', fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)' }}>
         <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}><span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--live)' }} />RPC live</span>
         <span>block {formatNum(blockHeight)}</span>
         <span>indexer lag 0.4s</span>

@@ -40,11 +40,11 @@ export default function ProofInspector({ params }: { params: { requestId: string
       </div>
 
       <section>
-        <h6 style={{ color: 'color-mix(in srgb, var(--color-text) 60%, transparent)', marginBottom: 'var(--space-2)' }}>
+        <h6 style={{ color: 'var(--text-muted)', marginBottom: 'var(--space-2)' }}>
           Instance vector <span style={{ textTransform: 'none', letterSpacing: 0 }}>&mdash; split at n<sub>in</sub>=3</span>
         </h6>
         <div style={{ fontFamily: 'var(--font-mono)', fontSize: 12, borderTop: '2px solid var(--color-divider)', borderBottom: '2px solid var(--color-divider)' }}>
-          <div style={{ padding: 'var(--space-2) var(--space-3)', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'color-mix(in srgb, var(--color-text) 55%, transparent)', borderBottom: '1px solid var(--color-divider)' }}>Input cells &middot; value &laquo; 8</div>
+          <div style={{ padding: 'var(--space-2) var(--space-3)', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-subtle)', borderBottom: '1px solid var(--color-divider)' }}>Input cells &middot; value &laquo; 8</div>
           {inputCells.map((c) => (
             <div key={c.i} style={{ display: 'flex', gap: 10, padding: '6px var(--space-3)', borderBottom: '1px solid var(--color-divider)', alignItems: 'baseline' }}>
               <span className="text-muted" style={{ width: 24 }}>[{c.i}]</span>
@@ -54,7 +54,7 @@ export default function ProofInspector({ params }: { params: { requestId: string
               <span style={{ color: 'var(--score-good)' }}>&#10003; opens {c.hash}</span>
             </div>
           ))}
-          <div style={{ padding: 'var(--space-2) var(--space-3)', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'color-mix(in srgb, var(--color-text) 55%, transparent)', borderBottom: '1px solid var(--color-divider)' }}>Output cells</div>
+          <div style={{ padding: 'var(--space-2) var(--space-3)', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-subtle)', borderBottom: '1px solid var(--color-divider)' }}>Output cells</div>
           {outputCells.map((c) => (
             <div key={c.i} style={{ display: 'flex', gap: 10, padding: '6px var(--space-3)', borderBottom: '1px solid var(--color-divider)', alignItems: 'baseline' }}>
               <span className="text-muted" style={{ width: 24 }}>[{c.i}]</span>
@@ -73,13 +73,13 @@ export default function ProofInspector({ params }: { params: { requestId: string
       </section>
 
       <section>
-        <h6 style={{ color: 'color-mix(in srgb, var(--color-text) 60%, transparent)', marginBottom: 'var(--space-2)' }}>Verification actions</h6>
+        <h6 style={{ color: 'var(--text-muted)', marginBottom: 'var(--space-2)' }}>Verification actions</h6>
         <VerifyActions command={command} verifiedAtBlock={e.blocks.settle + 12} />
         <div style={{ marginTop: 8, fontFamily: 'var(--font-mono)', fontSize: 11, background: 'var(--color-surface)', padding: 'var(--space-2) var(--space-3)', border: '1px solid var(--color-divider)' }}>{command}</div>
       </section>
 
       <section>
-        <h6 style={{ color: 'color-mix(in srgb, var(--color-text) 60%, transparent)', marginBottom: 'var(--space-2)' }}>Circuit identity</h6>
+        <h6 style={{ color: 'var(--text-muted)', marginBottom: 'var(--space-2)' }}>Circuit identity</h6>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', borderTop: '2px solid var(--color-divider)', borderBottom: '2px solid var(--color-divider)', fontFamily: 'var(--font-mono)', fontSize: 12 }}>
           <Cell label="MODEL COMMITMENT" val={shortHash(e.agent.modelCommitment, 8)} border />
           <Cell label="VERIFIER" val={`0x9c1e${'0'.repeat(36)}`} border />

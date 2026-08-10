@@ -308,38 +308,98 @@ img { display: block; max-width: 100%; }
 .nav-links { display: flex; align-items: center; gap: var(--space-4); min-width: 0; }
 .nav-actions { display: flex; align-items: center; gap: 10px; margin-left: auto; }
 
+.select-name-short { display: none; }
+
+/* The hamburger is a phone control only. Hiding it with display:none rather than visibility or a
+   zero size is deliberate: it drops out of the tab order and the accessibility tree at the same
+   time as it leaves the picture, so a desktop reader never tabs onto a button that would offer to
+   reveal a menu already in front of them. */
+.nav-toggle { display: none; }
+/* Square, and sized off the neighbouring .btn's line box rather than a chosen height, so the three
+   controls stay one row of equal blocks. The 44px minimum is the touch target: 24px of bars is
+   plenty to see and not enough to hit with a thumb. */
+.nav-toggle { width: 44px; min-height: 44px; padding: 0; flex: none; }
+/* One element draws three bars — itself plus its two pseudo-elements — because the alternative is
+   three spans in the markup for something that carries no meaning at all. The whole icon is
+   aria-hidden; the button's label is what gets announced. */
+.nav-toggle-bars { position: relative; display: block; width: 20px; height: 2px; background: currentColor; }
+.nav-toggle-bars::before, .nav-toggle-bars::after { content: ''; position: absolute; left: 0; width: 20px; height: 2px; background: currentColor; }
+.nav-toggle-bars::before { top: -6px; }
+.nav-toggle-bars::after { top: 6px; }
+/* Driven off aria-expanded, not a second data attribute, so there is exactly one source of truth
+   for "open" and the cross cannot end up showing while the menu is shut. The middle bar is
+   transparent rather than removed, so the two that rotate keep their positions. */
+.nav-toggle[aria-expanded='true'] .nav-toggle-bars { background: transparent; }
+.nav-toggle[aria-expanded='true'] .nav-toggle-bars::before { top: 0; transform: rotate(45deg); }
+.nav-toggle[aria-expanded='true'] .nav-toggle-bars::after { top: 0; transform: rotate(-45deg); }
+@media (prefers-reduced-motion: no-preference) {
+  .nav-toggle-bars, .nav-toggle-bars::before, .nav-toggle-bars::after { transition: top 120ms ease, transform 120ms ease, background-color 120ms ease; }
+}
+
 /* The first media query in this file, and it exists because the header was the one part of the
    layout with a hard minimum width: five links, a two-word wordmark, a network selector and a
    button, in a row with no wrap and nothing allowed to shrink. That row wants ~700px. Below it the
    nav simply overflowed, and since it is mounted in the root layout, every page on the site
    scrolled sideways on a phone.
-   The header goes to two rows here: wordmark and controls above, menu below. Note that --nav-h is
-   restated rather than abandoned — .page-body and .overview-shell both measure the fold from it,
-   so the rule is not "the nav may not grow", it is "the nav and --nav-h must agree". 94px is what
-   the two rows measure at this padding. Nothing is truncated or hidden: shortening "Connect
-   wallet" or dropping links to a hamburger would both buy width by taking something away. */
-.select-name-short { display: none; }
 
+   The menu leaves the row here and hangs under a toggle. The previous fix wrapped it to a second
+   row instead, which fit but cost 24px of every phone screen to a strip of five links that are not
+   what anyone opened the page to read — and --nav-h is subtracted from the viewport by .page-body
+   and .overview-shell, so those 24px came off the fold on every route. One row of controls is the
+   trade: the menu costs nothing until it is asked for. Hence --nav-h is *not* restated below —
+   the header is a single row again, so the file's own 62px is correct.
+
+   The panel is positioned rather than in flow for the same arithmetic reason. In flow it would
+   grow the nav on open, and a header that changes height when you touch it drags the fold — and
+   the whole page under it — down by 200px. Positioned, it overlays, and --nav-h stays true. */
 @media (max-width: 720px) {
-  :root { --nav-h: 86px; }
-  .nav { flex-wrap: wrap; align-content: center; row-gap: var(--space-2); padding: var(--space-2) var(--space-3); }
-  /* Order, not a second container: the controls stay on the wordmark's line and the menu is pushed
-     past them, so the wrap point is structural rather than a width that happens to work. */
-  .nav-actions { order: 1; }
-  /* Centred rather than space-between: justifying to the edges reads as an even row at 375px and
-     as five links flung to the corners at 719px. Centred, the menu keeps the same cluster shape it
-     has on the desktop header at every width. */
-  .nav-links { order: 2; flex-basis: 100%; justify-content: center; }
+  /* The containing block for the panel. The nav is the right one rather than .page-frame because
+     the panel's edges are the header's edges, so left/right/top need no offsets to maintain. */
+  .nav { position: relative; padding: var(--space-2) var(--space-3); }
+  .nav-toggle { display: inline-flex; }
   .nav-brand-rest { display: none; }
+
+  .nav-links {
+    display: none;
+    /* +2px clears the nav's own bottom border. box-sizing is border-box globally, so 100% of the
+       padding box lands *on* that border, and the panel's first divider would double it. */
+    position: absolute; top: calc(100% + 2px); left: 0; right: 0;
+    flex-direction: column; align-items: stretch; gap: 0;
+    /* Opaque, and above the chart tooltip's 30 — but below the network listbox's 40, which is a
+       sibling that can be open at the same time and should win, being the more specific action. */
+    background: var(--color-bg); z-index: 35;
+    border-bottom: 2px solid var(--color-divider);
+    padding: 0 var(--space-3) var(--space-2);
+    /* A five-item menu cannot need this, but the menu is a list and lists grow. Scrolling at 80%
+       of the viewport also leaves the page visibly behind the panel, which is what tells a reader
+       the thing is a layer and not a new screen. */
+    max-height: 80dvh; overflow-y: auto;
+  }
+  .nav-links[data-open] { display: flex; }
+  /* A row, not a link on a line: the target is the full width of the panel, which is the only
+     shape a thumb can be confident about. 44px matches the toggle that opened it. */
+  .nav-links a { display: flex; align-items: center; min-height: 44px; font-size: 15px; border-bottom: 1px solid var(--color-divider); }
+  .nav-links a:last-child { border-bottom: none; }
+  /* The desktop underline marks the current page in a row where the links sit side by side. In a
+     stacked list it reads as a divider in the wrong place; the accent bar down the left edge says
+     the same thing in the axis the list actually runs along. Still not colour alone. */
+  .nav-links a[aria-current='page'] { text-decoration: none; box-shadow: inset 3px 0 0 var(--color-accent); padding-left: var(--space-3); }
 }
 
-/* Second step for the narrow end of the phone range. At 320px the top row is ~30px short even
-   with the short wordmark, and the cost of getting there is the network's long name and some
-   button padding — both of which have exact equivalents that say the same thing. Without this the
-   row wraps a third time and the pinned --nav-h clips it. */
+/* Second step for the narrow end of the phone range. At 320px the row is short of width even with
+   the short wordmark, and the cost of getting there is the network's long name and some button
+   padding — both of which have exact equivalents that say the same thing. Without this the row
+   overflows, and since the nav is mounted in the root layout that is every page scrolling sideways.
+
+   Note this is scoped to .nav-actions and not to .nav-links as well: below 720px .nav-links is the
+   stacked panel, where the gap is deliberately 0 and the dividers do the separating. Loosening the
+   gap there would put daylight between a row and its own divider. */
 @media (max-width: 400px) {
-  .nav-actions, .nav-links { gap: var(--space-2); }
+  .nav-actions { gap: var(--space-2); }
   .nav-actions .btn { padding-left: var(--space-2); padding-right: var(--space-2); }
+  /* Excluding the toggle: it is a fixed-width square holding a centred icon, so the padding those
+     two use to shed width would only shrink the box the bars are centred in. */
+  .nav-actions .nav-toggle { padding: 0; }
   .select-name-long { display: none; }
   .select-name-short { display: inline; }
 }

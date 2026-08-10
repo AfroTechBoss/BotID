@@ -1,12 +1,14 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
 import BotIdBadge from '@/components/BotIdBadge';
+import { useNetwork } from '@/lib/network';
 import {
   SPARSE_AGENTS, DENSE_AGENTS, TIER_META, EXECUTIONS_PER_DAY, genFeedRow,
   formatToken, formatNum, timeAgo, scoreColorVar, shortHash, FeedRow, Agent, MOCK_NOW,
 } from '@/lib/mock-data';
 
 export default function Overview() {
+  const { network } = useNetwork();
   const [density, setDensity] = useState<'sparse' | 'dense'>('sparse');
   const [feedRows, setFeedRows] = useState<FeedRow[]>([]);
   const [paused, setPaused] = useState(false);
@@ -163,7 +165,7 @@ export default function Overview() {
         <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}><span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--live)' }} />RPC live</span>
         <span>block {formatNum(blockHeight)}</span>
         <span>indexer lag 0.4s</span>
-        <span style={{ marginLeft: 'auto' }}>testnet</span>
+        <span style={{ marginLeft: 'auto' }}>{network.short}</span>
       </footer>
     </div>
   );

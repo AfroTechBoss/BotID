@@ -199,6 +199,37 @@ img { display: block; max-width: 100%; }
 .seg-opt:has(input:checked) { background: var(--color-accent); color: var(--color-bg); }
 .seg-opt input { position: absolute; opacity: 0; width: 0; height: 0; }
 
+/* Custom listbox, because a native <select> only lets you style the closed control — the open
+   list is drawn by the OS and arrives white-on-white over a dark page. See NetworkSelect.tsx.
+   The trigger deliberately adds no padding or font-size of its own: it is a plain .btn, so it
+   matches the height of any other .btn beside it without a number to keep in sync. */
+.select { position: relative; }
+.select-trigger { font-variant-numeric: tabular-nums; }
+
+/* Geometry, not hue. Filled = mainnet, hollow = testnet, both in currentColor — the palette's
+   four hue families are spoken for (accent, score, tier, live) and a network indicator belongs to
+   none of them. Borrowing --live here would have made "this is mainnet" and "the RPC is up" the
+   same colour, which is exactly the collapse the palette comment forbids. */
+.select-dot { width: 7px; height: 7px; border-radius: 50%; border: 1.5px solid currentColor; flex: none; }
+.select-dot[data-network='mainnet'] { background: currentColor; }
+
+.select-caret { width: 0; height: 0; border-left: 4px solid transparent; border-right: 4px solid transparent; border-top: 5px solid currentColor; margin-left: 2px; transition: transform 120ms ease; }
+.select-caret[data-open] { transform: rotate(180deg); }
+
+.select-list {
+  position: absolute; top: calc(100% + 6px); right: 0; z-index: 40; min-width: 100%;
+  margin: 0; padding: 0; list-style: none; white-space: nowrap;
+  background: var(--color-surface); border: 1px solid var(--color-divider); box-shadow: var(--shadow-lg);
+}
+.select-option { display: flex; align-items: center; gap: 8px; padding: 8px 12px; font-size: 13px; cursor: pointer; }
+.select-option + .select-option { border-top: 1px solid var(--color-divider); }
+.select-option[data-active] { background: color-mix(in srgb, var(--color-text) 9%, transparent); }
+.select-option-name { font-weight: 700; }
+.select-option-chain { margin-left: auto; font-family: var(--font-mono); font-size: 11px; color: color-mix(in srgb, var(--color-text) 60%, transparent); }
+/* The current network is marked, not merely highlighted: hover and selection are different facts
+   and the row under the cursor is not necessarily the one in use. */
+.select-option[aria-selected='true'] .select-option-name::after { content: ' \2713'; color: var(--color-accent); }
+
 .tag { display: inline-flex; align-items: center; font-size: 11px; letter-spacing: 0.02em; padding: 3px 10px; }
 .tag-outline { border: 1px solid var(--color-accent); color: var(--color-accent); }
 

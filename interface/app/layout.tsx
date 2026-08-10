@@ -3,6 +3,7 @@ import './globals.css';
 import { cabinet, satoshi } from './fonts';
 import Nav from '@/components/Nav';
 import Footer from '@/components/Footer';
+import { NetworkProvider } from '@/lib/network';
 
 export const metadata: Metadata = {
   title: { default: 'BotID', template: '%s · BotID' },
@@ -20,13 +21,17 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     // toggle has something to write to. Dark is the default; 'light' is the only other value.
     <html lang="en" data-theme="dark" className={`${cabinet.variable} ${satoshi.variable}`}>
       <body>
-        <div className="page-frame">
-          <Nav />
-          {/* Wrapper, not a bare {children}: it is what grows to fill the viewport, which is what
-              pins the footer to the bottom on short pages. */}
-          <div className="page-body">{children}</div>
-          <Footer />
-        </div>
+        {/* The provider wraps the whole frame, not just the nav, because the switcher in the nav
+            and the labels in the footer and the status bars have to name the same chain. */}
+        <NetworkProvider>
+          <div className="page-frame">
+            <Nav />
+            {/* Wrapper, not a bare {children}: it is what carries the viewport-height rule, which
+                is what puts the first pixel of the footer exactly on the fold. */}
+            <div className="page-body">{children}</div>
+            <Footer />
+          </div>
+        </NetworkProvider>
       </body>
     </html>
   );

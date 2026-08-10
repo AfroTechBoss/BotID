@@ -105,10 +105,23 @@ export default function Overview() {
           <section>
             <h6 style={{ marginBottom: 'var(--space-3)', color: 'var(--text-muted)', display: 'flex', alignItems: 'baseline', gap: 12 }}>
               Executions / day
-              <span style={{ textTransform: 'none', letterSpacing: 0, fontSize: 11, display: 'flex', gap: 10 }}>
-                <span><span style={{ color: 'var(--tier-bronze)' }}>&#9632;</span> Bronze</span>
-                <span><span style={{ color: 'var(--tier-silver)' }}>&#9632;</span> Silver</span>
-                <span><span style={{ color: 'var(--tier-gold)' }}>&#9632;</span> Gold</span>
+              {/* The marks here used to be filled squares in the tier hue, which read as badges
+                  and taught the wrong thing — a Bronze badge is a single *green* ring, and a solid
+                  bronze block next to the word "Bronze" says otherwise. These are the real badges.
+                  The colour key the squares used to provide moves onto the label text, which is
+                  enough to match a word to a band, and the hover readout carries filled swatches
+                  in the bar colours for anyone reading the numbers rather than the shape. */}
+              <span style={{ textTransform: 'none', letterSpacing: 0, fontSize: 11, display: 'flex', gap: 12 }}>
+                {(['bronze', 'silver', 'gold'] as const).map((t) => (
+                  <span key={t} style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                    {/* Hidden from assistive tech: the badge announces "Bronze tier, no faults"
+                        and the word beside it already says Bronze. */}
+                    <span aria-hidden="true" style={{ display: 'inline-flex' }}>
+                      <BotIdBadge tier={t} hasFault={false} size={14} />
+                    </span>
+                    <span style={{ color: `var(--tier-${t})` }}>{TIER_META[t].label}</span>
+                  </span>
+                ))}
               </span>
             </h6>
             <div

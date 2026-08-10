@@ -32,6 +32,9 @@ function maxOpenNotional(bond: number, score: number, tier: Tier): number {
   return Math.min(Math.round(notional), GLOBAL_NOTIONAL_CAP);
 }
 
+// Rendered twice — once as track segments, once as labels — so it lives here rather than inline.
+const UNBONDING_STEPS = ['Requested', 'Day 7', 'Day 14', 'Day 21 — withdrawable'] as const;
+
 const multiple = (score: number, tier: Tier) =>
   (leverageBps(score) * TIER_FACTOR_BPS[tier]) / 1e8;
 
@@ -113,12 +116,20 @@ export default function Portal() {
           </div>
           <div style={{ marginTop: 'var(--space-4)' }}>
             <div className="text-muted" style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6 }}>Unbonding queue</div>
-            <div style={{ display: 'flex', alignItems: 'center' }}>
-              {['Requested', 'Day 7', 'Day 14', 'Day 21 \u2014 withdrawable'].map((label, i) => (
-                <div key={label} style={{ flex: 1, textAlign: 'center' }}>
-                  <div style={{ height: 4, background: i === 0 ? 'var(--color-accent)' : 'var(--color-neutral-300)' }} />
-                  <div style={{ fontSize: 11, marginTop: 4 }}>{label}</div>
-                </div>
+            {/* Two grid rows, not four flex columns. This was a row of column stacks with
+                align-items:center, so each stack held its own bar segment \u2014 and the moment
+                "Day 21 \u2014 withdrawable" wrapped to two lines, that column grew, centring pushed
+                the three shorter columns down, and the track came apart into four baselines.
+                Aligning to flex-start would straighten it today and break again on the next
+                label that wraps, or at the next breakpoint where one does. Putting the segments
+                on their own grid row makes it structural: the track cannot bend, because no
+                label shares a row with it. */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', rowGap: 4 }}>
+              {UNBONDING_STEPS.map((label, i) => (
+                <div key={label} style={{ height: 4, background: i === 0 ? 'var(--color-accent)' : 'var(--color-neutral-300)' }} />
+              ))}
+              {UNBONDING_STEPS.map((label) => (
+                <div key={label} style={{ fontSize: 11, textAlign: 'center', paddingInline: 2 }}>{label}</div>
               ))}
             </div>
           </div>

@@ -21,15 +21,22 @@ export interface Contract {
  * page's answer to "is this the real BotID", so showing a testnet address under a mainnet heading
  * would be the single most damaging thing it could get wrong.
  *
- * BotID is unaudited and has no mainnet deployment, so mainnet is empty and stays empty until
- * one exists.
+ * Both lists are empty, and that is the current truth rather than an oversight. The only
+ * deployment artifact in the repository is contracts/deployments/localhost-31337.json — a local
+ * devnet. Nothing is deployed to Bohr or to BOT Chain.
+ *
+ * This file previously listed four testnet addresses under the names RequestManager,
+ * ScoreRegistry, ZkAdapter and BondVault. Three of those contracts do not exist in this protocol
+ * (the real set is AgentRegistry, ExecutionRouter, InputAttestor, ReputationEngine, the three
+ * adapters and the bond token), and the addresses were placeholders for a deployment that had not
+ * happened. That is precisely the failure mode the comment above says this table exists to
+ * prevent, so the entries are gone rather than corrected: an invented address under a real
+ * contract name is worse than no address at all.
+ *
+ * When a deployment exists, populate this from contracts/deployments/<network>-<chainId>.json and
+ * nowhere else.
  */
 export const CONTRACTS: Record<NetworkId, Contract[]> = {
-  testnet: [
-    { name: 'RequestManager', address: '0x4a91…e02c' },
-    { name: 'ScoreRegistry', address: '0x7bd3…119a' },
-    { name: 'ZkAdapter', address: '0x9c1e…04f2' },
-    { name: 'BondVault', address: '0x2d6f…a877' },
-  ],
+  testnet: [],
   mainnet: [],
 };

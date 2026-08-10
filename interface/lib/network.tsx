@@ -17,9 +17,14 @@ export interface Network {
   chainId: number;
 }
 
+// Chain ids come from docs/architecture.md, which records them alongside the bn254 precompile
+// probe run against each RPC on 2026-08-09. They were 71101/71100 here, which matched nothing:
+// Bohr is 968 at https://rpc.bohr.life and BOT Chain is 677 at https://rpc.botchain.ai. A wrong
+// chain id on an interface whose security page exists to answer "is this the real BotID" is not a
+// cosmetic error, so it is worth stating where the right ones came from.
 export const NETWORKS: Network[] = [
-  { id: 'testnet', name: 'Bohr Testnet', short: 'testnet', chainId: 71_101 },
-  { id: 'mainnet', name: 'BOT Chain', short: 'mainnet', chainId: 71_100 },
+  { id: 'testnet', name: 'Bohr Testnet', short: 'testnet', chainId: 968 },
+  { id: 'mainnet', name: 'BOT Chain', short: 'mainnet', chainId: 677 },
 ];
 
 interface NetworkContextValue {

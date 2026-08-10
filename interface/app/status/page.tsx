@@ -19,8 +19,8 @@ export default function Status() {
         <table className="table">
           <thead><tr><th>Contract</th><th>Event</th><th>Block</th></tr></thead>
           <tbody>
-            <tr><td>RequestManager</td><td>ExecutionSettled</td><td style={{ fontFamily: 'var(--font-mono)' }}>8,412,900</td></tr>
-            <tr><td>ScoreRegistry</td><td>ScoreUpdated</td><td style={{ fontFamily: 'var(--font-mono)' }}>8,412,900</td></tr>
+            <tr><td>ExecutionRouter</td><td>ExecutionSettled</td><td style={{ fontFamily: 'var(--font-mono)' }}>8,412,900</td></tr>
+            <tr><td>ReputationEngine</td><td>ScoreUpdated</td><td style={{ fontFamily: 'var(--font-mono)' }}>8,412,900</td></tr>
             <tr><td>ZkAdapter</td><td>VerifierSet</td><td style={{ fontFamily: 'var(--font-mono)' }}>8,120,441</td></tr>
           </tbody>
         </table>

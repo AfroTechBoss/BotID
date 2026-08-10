@@ -307,8 +307,15 @@ img { display: block; max-width: 100%; }
    menu against whichever side kept its margin. */
 .nav-links { display: flex; align-items: center; gap: var(--space-4); min-width: 0; }
 .nav-actions { display: flex; align-items: center; gap: 10px; margin-left: auto; }
+/* No box of its own on a wide header. `display: contents` drops the wrapper's own box and promotes
+   its two children to flex items of .nav, so the desktop row is laid out as though .nav-menu were
+   not in the markup — which is the point: the wrapper exists for the phone panel, and it should not
+   cost the desktop header a nested flex context or a second place for the auto margins to land. */
+.nav-menu { display: contents; }
 
-.select-name-short { display: none; }
+/* The brand's second word is never dropped now. It was cut below 720px to buy width for the network
+   selector and Connect wallet standing next to it; those are in the panel, so the top row is a
+   wordmark and a 44px square and there is nothing to buy. */
 
 /* The hamburger is a phone control only. Hiding it with display:none rather than visibility or a
    zero size is deliberate: it drops out of the tab order and the accessibility tree at the same
@@ -342,12 +349,14 @@ img { display: block; max-width: 100%; }
    nav simply overflowed, and since it is mounted in the root layout, every page on the site
    scrolled sideways on a phone.
 
-   The menu leaves the row here and hangs under a toggle. The previous fix wrapped it to a second
-   row instead, which fit but cost 24px of every phone screen to a strip of five links that are not
-   what anyone opened the page to read — and --nav-h is subtracted from the viewport by .page-body
-   and .overview-shell, so those 24px came off the fold on every route. One row of controls is the
-   trade: the menu costs nothing until it is asked for. Hence --nav-h is *not* restated below —
-   the header is a single row again, so the file's own 62px is correct.
+   Everything the toggle reveals leaves the row here — the links and the two controls both. The
+   previous fix wrapped the links to a second row instead, which fit but cost 24px of every phone
+   screen to a strip of five links that are not what anyone opened the page to read; and --nav-h is
+   subtracted from the viewport by .page-body and .overview-shell, so those 24px came off the fold
+   on every route. Moving the controls in as well is what leaves the top row holding two items,
+   which is why the full "BotID Protocol" wordmark can come back below — it was cut to buy width for
+   a network selector that is no longer standing next to it. Hence --nav-h is *not* restated: the
+   header is one row of two things, so the file's own 62px is correct.
 
    The panel is positioned rather than in flow for the same arithmetic reason. In flow it would
    grow the nav on open, and a header that changes height when you touch it drags the fold — and
@@ -357,51 +366,59 @@ img { display: block; max-width: 100%; }
      the panel's edges are the header's edges, so left/right/top need no offsets to maintain. */
   .nav { position: relative; padding: var(--space-2) var(--space-3); }
   .nav-toggle { display: inline-flex; }
-  .nav-brand-rest { display: none; }
 
-  .nav-links {
+  /* The wrapper stops being transparent and becomes the panel itself. */
+  .nav-menu {
     display: none;
     /* +2px clears the nav's own bottom border. box-sizing is border-box globally, so 100% of the
        padding box lands *on* that border, and the panel's first divider would double it. */
     position: absolute; top: calc(100% + 2px); left: 0; right: 0;
     flex-direction: column; align-items: stretch; gap: 0;
-    /* Opaque, and above the chart tooltip's 30 — but below the network listbox's 40, which is a
-       sibling that can be open at the same time and should win, being the more specific action. */
+    /* Opaque, and above the chart tooltip's 30. The network listbox's 40 is now a descendant rather
+       than a sibling, so it paints above this by containment and the two numbers no longer race. */
     background: var(--color-bg); z-index: 35;
     border-bottom: 2px solid var(--color-divider);
-    padding: 0 var(--space-3) var(--space-2);
-    /* A five-item menu cannot need this, but the menu is a list and lists grow. Scrolling at 80%
-       of the viewport also leaves the page visibly behind the panel, which is what tells a reader
-       the thing is a layer and not a new screen. */
-    max-height: 80dvh; overflow-y: auto;
+    padding: 0 var(--space-3) var(--space-3);
+    /* Deliberately *not* max-height + overflow-y: auto. That clips absolutely positioned
+       descendants, and the panel now contains one — the network listbox, which opens downward from
+       a trigger near the bottom edge and has to escape. The content is a fixed five links and two
+       controls, ~330px against 650px of usable height on the shortest phone this targets, so there
+       is nothing to scroll. If the menu ever grows enough to need it, the listbox has to move to a
+       portal first. */
   }
-  .nav-links[data-open] { display: flex; }
+  .nav-menu[data-open] { display: flex; }
+
+  .nav-links { flex-direction: column; align-items: stretch; gap: 0; }
   /* A row, not a link on a line: the target is the full width of the panel, which is the only
      shape a thumb can be confident about. 44px matches the toggle that opened it. */
   .nav-links a { display: flex; align-items: center; min-height: 44px; font-size: 15px; border-bottom: 1px solid var(--color-divider); }
-  .nav-links a:last-child { border-bottom: none; }
   /* The desktop underline marks the current page in a row where the links sit side by side. In a
      stacked list it reads as a divider in the wrong place; the accent bar down the left edge says
      the same thing in the axis the list actually runs along. Still not colour alone. */
   .nav-links a[aria-current='page'] { text-decoration: none; box-shadow: inset 3px 0 0 var(--color-accent); padding-left: var(--space-3); }
-}
 
-/* Second step for the narrow end of the phone range. At 320px the row is short of width even with
-   the short wordmark, and the cost of getting there is the network's long name and some button
-   padding — both of which have exact equivalents that say the same thing. Without this the row
-   overflows, and since the nav is mounted in the root layout that is every page scrolling sideways.
+  /* Stacked full-width rather than a row of two, and it is the touch target that decides it: side
+     by side inside a 296px panel at 320px each control gets ~145px, which is under the width
+     "Bohr Testnet" needs and leaves two half-buttons to hit. Full width also means the network name
+     never has to be abbreviated here, which is what retires the short-name swap the old top row
+     needed.
 
-   Note this is scoped to .nav-actions and not to .nav-links as well: below 720px .nav-links is the
-   stacked panel, where the gap is deliberately 0 and the dividers do the separating. Loosening the
-   gap there would put daylight between a row and its own divider. */
-@media (max-width: 400px) {
-  .nav-actions { gap: var(--space-2); }
-  .nav-actions .btn { padding-left: var(--space-2); padding-right: var(--space-2); }
-  /* Excluding the toggle: it is a fixed-width square holding a centred icon, so the padding those
-     two use to shed width would only shrink the box the bars are centred in. */
-  .nav-actions .nav-toggle { padding: 0; }
-  .select-name-long { display: none; }
-  .select-name-short { display: inline; }
+     margin-left goes back to 0 because `auto` is what pushed the controls to the right of the
+     desktop row, and in a stacked panel it would push them off the top. */
+  .nav-actions { flex-direction: column; align-items: stretch; gap: var(--space-2); margin-left: 0; margin-top: var(--space-3); }
+  /* .select is the positioning parent for the listbox, so it is the element that has to span the
+     panel — widening only the trigger inside it would leave the popup measuring from a 0-width box. */
+  .nav-actions .select, .nav-actions .select-trigger, .nav-actions .btn { width: 100%; min-height: 44px; }
+  /* Left-aligned, not centred as .btn defaults to: a centred label in a full-width stacked row puts
+     the text somewhere different on every row depending on its length. These still sit a button's
+     worth of padding inside the links above them, which is wanted — the inset plus the border is
+     what reads as a control rather than a sixth link. */
+  .nav-actions .select-trigger, .nav-actions .btn { justify-content: flex-start; }
+  /* The caret belongs at the far edge of a full-width trigger, where it points at the list it opens,
+     rather than trailing the name in the middle of the row. */
+  .nav-actions .select-caret { margin-left: auto; }
+  /* Full width, so the listbox should match the trigger rather than hug its right edge. */
+  .nav-actions .select-list { left: 0; right: 0; }
 }
 
 .table { width: 100%; border-collapse: collapse; font-size: 14px; }

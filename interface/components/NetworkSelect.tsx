@@ -37,7 +37,24 @@ export default function NetworkSelect() {
   };
 
   const onKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Escape') { setOpen(false); trigger.current?.focus(); return; }
+    if (e.key === 'Escape') {
+      // Escape closes one layer, the innermost. Below 720px this trigger lives inside the nav's
+      // hamburger panel, which closes on Escape too, so without a marker the single press collapsed
+      // both and the reader lost the menu they were working in.
+      //
+      // preventDefault is that marker, and stopPropagation is not: React dispatches from the root
+      // container, so by the time a listener on the document runs, stopping propagation is already
+      // too late — measured, not assumed. defaultPrevented rides on the native event and is still
+      // readable there whatever the order. Escape has no default action on a button, so spending it
+      // as a signal costs nothing.
+      //
+      // Guarded on `open` rather than unconditional: with the list already shut, Escape here *is*
+      // meant to reach the panel and dismiss it.
+      if (open) e.preventDefault();
+      setOpen(false);
+      trigger.current?.focus();
+      return;
+    }
     if (e.key === 'Tab') { setOpen(false); return; }
     if (!open) {
       if (e.key === 'Enter' || e.key === ' ' || e.key === 'ArrowDown' || e.key === 'ArrowUp') {
@@ -73,11 +90,13 @@ export default function NetworkSelect() {
         {/* The dot is the live indicator the status bars use, so the nav and the footer agree
             about which network is live without repeating the word. */}
         <span aria-hidden="true" className="select-dot" data-network={network.id} />
-        {/* Both names are rendered and one is hidden by width, because the narrowest phones cannot
-            fit "Bohr Testnet" in the header row. The short form is the same field the footer and
-            the status bars use, so nothing is invented for the small screen. */}
-        <span className="select-name-long">{network.name}</span>
-        <span className="select-name-short">{network.short}</span>
+        {/* One name. This used to render both and hide one by width, because the narrowest phones
+            could not fit "Bohr Testnet" into the header row alongside the wordmark and Connect
+            wallet. Below 720px the trigger is no longer in that row — it is a full-width control in
+            the hamburger panel, which has room for the long name at 320px — so the short form here
+            was a span that could never be seen. `network.short` is still what NetworkLabel and the
+            overview's status line render; it is only this abbreviation that is gone. */}
+        <span>{network.name}</span>
         <span aria-hidden="true" className="select-caret" data-open={open || undefined} />
       </button>
 

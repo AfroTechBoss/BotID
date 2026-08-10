@@ -25,11 +25,15 @@ function mulberry32(seed: number) {
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
 }
+// The module-scope stream. Safe for the fixtures built once at module load below, because those
+// run in a fixed order exactly once per module instance. NOT safe inside anything called during
+// render — see genExecutions and genScoreHistory, which take their own stream for that reason.
 const rnd = mulberry32(42);
-const pick = <T,>(arr: T[]): T => arr[Math.floor(rnd() * arr.length)];
-const hex = (n: number) => Array.from({ length: n }, () => '0123456789abcdef'[Math.floor(rnd() * 16)]).join('');
-const addr = () => '0x' + hex(40);
-const reqId = () => '0x' + hex(64);
+const pick = <T,>(arr: T[], r: () => number = rnd): T => arr[Math.floor(r() * arr.length)];
+const hex = (n: number, r: () => number = rnd) =>
+  Array.from({ length: n }, () => '0123456789abcdef'[Math.floor(r() * 16)]).join('');
+const addr = (r: () => number = rnd) => '0x' + hex(40, r);
+const reqId = (r: () => number = rnd) => '0x' + hex(64, r);
 
 export type Tier = 'bronze' | 'silver' | 'gold';
 export const TIERS: Tier[] = ['bronze', 'silver', 'gold'];
@@ -94,9 +98,18 @@ export const SPARSE_AGENTS: Agent[] = [
   makeAgent(3, { tier: 'silver', score: 7910, settled: 44, faults: 0 }),
   makeAgent(11, { tier: 'bronze', score: 5002, settled: 2, faults: 1 }),
 ];
-export const DENSE_AGENTS: Agent[] = Array.from({ length: 42 }, (_, i) => makeAgent(i + 1));
-DENSE_AGENTS[0] = SPARSE_AGENTS[0];
-DENSE_AGENTS[1] = SPARSE_AGENTS[1];
+// The three featured agents first, then the generated ones that do not collide with them. This
+// used to overwrite slots 0 and 1, which dropped ids 1 and 2 and left ids 3 and 7 in the list
+// twice — two different objects claiming the same agent. Nothing caught it while every generated
+// value came off a shared stream, because the duplicates still differed; the moment fixtures are
+// keyed by agent id, two agents with one id produce byte-identical rows and collide as React keys.
+// Still 42 agents, and #11 is now the same agent the overview features rather than a lookalike.
+export const DENSE_AGENTS: Agent[] = [
+  ...SPARSE_AGENTS,
+  ...Array.from({ length: 42 }, (_, i) => makeAgent(i + 1)).filter(
+    (a) => !SPARSE_AGENTS.some((s) => s.id === a.id)
+  ),
+];
 
 export type Verb = 'REQUEST' | 'DELIVER' | 'CHALLENGE' | 'RESOLVE' | 'SETTLE' | 'EXPIRE' | 'SLASH';
 
@@ -140,16 +153,19 @@ export const EXECUTIONS_PER_DAY = Array.from({ length: 14 }, () => ({
 export interface ScorePoint { day: number; score: number; notional: bigint; fault: boolean }
 
 export function genScoreHistory(agent: Agent, days = 90): ScorePoint[] {
+  // Own stream, seeded from the agent — same reasoning as genExecutions. An agent's history is a
+  // fact about that agent, so it must not change because something else drew a number first.
+  const r = mulberry32(seedFrom(`score:${agent.id}`));
   const target = agent.score;
-  let s = target - 400 + (rnd() - 0.5) * 300;
+  let s = target - 400 + (r() - 0.5) * 300;
   const points: ScorePoint[] = [];
   for (let i = days; i >= 0; i--) {
-    const notionalWhole = rnd() < 0.82 ? 0 : Math.round(5000 + rnd() * 180000);
-    const fault = notionalWhole > 0 && rnd() < 0.04;
+    const notionalWhole = r() < 0.82 ? 0 : Math.round(5000 + r() * 180000);
+    const fault = notionalWhole > 0 && r() < 0.04;
     if (notionalWhole > 0) {
       // The EWMA itself stays in float: it is a simulation of the on-chain update, not a
       // capital amount, and nothing settles against it.
-      const q = fault ? rnd() * 1500 : target - 600 + rnd() * 1200;
+      const q = fault ? r() * 1500 : target - 600 + r() * 1200;
       const w = Math.min(notionalWhole, 200000);
       s = s * 0.998 + (q - s * 0.998) * (w / (w + 90000));
     } else {
@@ -164,11 +180,19 @@ export function genScoreHistory(agent: Agent, days = 90): ScorePoint[] {
 
 export interface Execution { requestId: string; status: string; notional: bigint; bps: number; time: number }
 export function genExecutions(agent: Agent, n = 24, now = MOCK_NOW): Execution[] {
+  // Its own stream, seeded from the agent, for the reason spelled out under ExecutionDetail
+  // below: this is called during render, so drawing from the module-scope `rnd` made the result
+  // depend on how many draws had already happened. On the server the module outlives the request,
+  // so the second visit to a route started from a different position than the first; in the
+  // browser it started from wherever module init left it. The two disagreed and React threw the
+  // server HTML away. It also meant re-rendering — changing the filter — silently re-rolled every
+  // row, so the same execution never kept the same id twice.
+  const r = mulberry32(seedFrom(`executions:${agent.id}`));
   const statuses = ['Settled', 'Settled', 'Settled', 'Finalized', 'Challenged', 'Faulted', 'Expired', 'Pending'];
   return Array.from({ length: n }, (_, i) => ({
-    requestId: reqId(), status: pick(statuses),
-    notional: toBaseUnits(Math.round(5000 + rnd() * 300000)),
-    bps: Math.round((rnd() - 0.3) * 60), time: now - i * (3 + rnd() * 20) * 3600000,
+    requestId: reqId(r), status: pick(statuses, r),
+    notional: toBaseUnits(Math.round(5000 + r() * 300000)),
+    bps: Math.round((r() - 0.3) * 60), time: now - i * (3 + r() * 20) * 3600000,
   }));
 }
 

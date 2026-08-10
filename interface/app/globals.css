@@ -318,13 +318,30 @@ img { display: block; max-width: 100%; }
    so the rule is not "the nav may not grow", it is "the nav and --nav-h must agree". 94px is what
    the two rows measure at this padding. Nothing is truncated or hidden: shortening "Connect
    wallet" or dropping links to a hamburger would both buy width by taking something away. */
+.select-name-short { display: none; }
+
 @media (max-width: 720px) {
-  :root { --nav-h: 94px; }
+  :root { --nav-h: 86px; }
   .nav { flex-wrap: wrap; align-content: center; row-gap: var(--space-2); padding: var(--space-2) var(--space-3); }
-  /* Order, not a separate row container: the controls stay beside the wordmark and the menu is
-     pushed past them, so the wrap point is structural rather than a width that happens to work. */
+  /* Order, not a second container: the controls stay on the wordmark's line and the menu is pushed
+     past them, so the wrap point is structural rather than a width that happens to work. */
   .nav-actions { order: 1; }
-  .nav-links { order: 2; flex-basis: 100%; justify-content: space-between; gap: var(--space-2); }
+  /* Centred rather than space-between: justifying to the edges reads as an even row at 375px and
+     as five links flung to the corners at 719px. Centred, the menu keeps the same cluster shape it
+     has on the desktop header at every width. */
+  .nav-links { order: 2; flex-basis: 100%; justify-content: center; }
+  .nav-brand-rest { display: none; }
+}
+
+/* Second step for the narrow end of the phone range. At 320px the top row is ~30px short even
+   with the short wordmark, and the cost of getting there is the network's long name and some
+   button padding — both of which have exact equivalents that say the same thing. Without this the
+   row wraps a third time and the pinned --nav-h clips it. */
+@media (max-width: 400px) {
+  .nav-actions, .nav-links { gap: var(--space-2); }
+  .nav-actions .btn { padding-left: var(--space-2); padding-right: var(--space-2); }
+  .select-name-long { display: none; }
+  .select-name-short { display: inline; }
 }
 
 .table { width: 100%; border-collapse: collapse; font-size: 14px; }

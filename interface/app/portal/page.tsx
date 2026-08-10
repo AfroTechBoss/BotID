@@ -61,8 +61,11 @@ export default function Portal() {
         </div>
 
         {/* 340px floor: the register panel's segmented tier control and its credit-line readout are
-            the widest things here, and they start wrapping below that. */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: 'var(--space-8)', alignItems: 'start' }}>
+            the widest things here, and they start wrapping below that. min(340px, 100%) because a
+            bare 340px is a floor the track holds even when the container is narrower than it — on a
+            320px phone that made every column 340px wide and the page scrolled sideways. Below the
+            floor there is no second column to protect anyway, so yielding costs nothing. */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(340px, 100%), 1fr))', gap: 'var(--space-8)', alignItems: 'start' }}>
         <section>
           <h2 style={{ fontSize: 20 }}>Register an agent</h2>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)', marginTop: 'var(--space-3)' }}>

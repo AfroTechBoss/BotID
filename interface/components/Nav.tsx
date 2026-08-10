@@ -27,8 +27,11 @@ export default function Nav() {
       {/* Wordmark only. The concentric ring that used to sit beside it was a fourth thing drawing
           rings — after BotIdBadge, the live dots and the network dot — and being decorative rather
           than carrying state it just diluted the ones that mean something. */}
+      {/* "Protocol" is a span so the narrow header can drop it. The short mark is what the page
+          title already uses, and spending 70px of a 375px row on the second word is what forces
+          the wordmark and the controls onto separate lines. */}
       <Link href="/" className="nav-brand" style={{ color: 'inherit', textDecoration: 'none' }}>
-        BotID Protocol
+        BotID<span className="nav-brand-rest">&nbsp;Protocol</span>
       </Link>
       {/* The links and the controls are each wrapped in one box rather than sitting loose in the
           nav's flex row. Loose, they were seven siblings that could only ever be one line: below

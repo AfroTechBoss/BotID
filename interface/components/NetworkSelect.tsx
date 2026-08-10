@@ -73,7 +73,11 @@ export default function NetworkSelect() {
         {/* The dot is the live indicator the status bars use, so the nav and the footer agree
             about which network is live without repeating the word. */}
         <span aria-hidden="true" className="select-dot" data-network={network.id} />
-        {network.name}
+        {/* Both names are rendered and one is hidden by width, because the narrowest phones cannot
+            fit "Bohr Testnet" in the header row. The short form is the same field the footer and
+            the status bars use, so nothing is invented for the small screen. */}
+        <span className="select-name-long">{network.name}</span>
+        <span className="select-name-short">{network.short}</span>
         <span aria-hidden="true" className="select-caret" data-open={open || undefined} />
       </button>
 

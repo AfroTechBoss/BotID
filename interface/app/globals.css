@@ -168,6 +168,14 @@
 }
 
 * , *::before, *::after { box-sizing: border-box; }
+/* Every rail link on docs, security and the four legal pages is an #anchor, and the browser scrolls
+   an anchor to the very top of the viewport — which, with a sticky header, is 62px underneath it.
+   The heading you asked for would be the one thing you could not see. scroll-padding-top is the
+   scroll container's own answer to that, so it applies to the rail links, the in-body cross
+   references, a pasted deep link and a Find-in-page jump alike, without a scroll-margin on every
+   heading in five files. */
+html { scroll-padding-top: calc(var(--nav-h) + var(--space-4)); }
+
 body {
   margin: 0; background: var(--color-canvas); color: var(--color-text); font-family: var(--font-body);
   font-weight: var(--font-body-weight); font-size: 15px; line-height: 1.55;
@@ -290,7 +298,20 @@ img { display: block; max-width: 100%; }
    --nav-h is arithmetic that .page-body depends on: it is the one number that decides where the
    fold falls. Left to content, it would drift by a pixel or two with the font metrics and take
    the footer's position with it. 62px is exactly what the padding and line box produced. */
-.nav { height: var(--nav-h); display: flex; align-items: center; gap: var(--space-4); padding: var(--space-3) var(--space-6); border-bottom: 2px solid var(--color-divider); }
+/* Sticky, and the reason is written four hundred lines up: scrollbars are hidden site-wide, and the
+   comment there lists what has to replace the affordance they took away — "a header that stays put"
+   is one of the three. On a page with no scrollbar and no header, a reader who has scrolled has
+   nothing on screen telling them where they are or that there is more above.
+
+   The background has to be set explicitly. .page-frame paints the same colour, but content now
+   passes *under* the nav rather than stopping at it, and a transparent header would let a table
+   scroll through the wordmark.
+
+   z-index 50 puts it over the page: the chart tooltip is the highest thing on any page at 30. It
+   also makes the nav a stacking context, which is what keeps the menu panel's 35 and the network
+   listbox's 40 as a private ordering between siblings inside the header instead of numbers competing
+   with the page. */
+.nav { position: sticky; top: 0; z-index: 50; background: var(--color-bg); height: var(--nav-h); display: flex; align-items: center; gap: var(--space-4); padding: var(--space-3) var(--space-6); border-bottom: 2px solid var(--color-divider); }
 .nav a { color: inherit; text-decoration: none; font-size: 14px; }
 /* Scoped to .nav so it outranks `.nav a` above. The brand became a link when the nav started
    deriving its own state, and a bare `.nav-brand` lost the cascade to it — the wordmark rendered
@@ -362,9 +383,11 @@ img { display: block; max-width: 100%; }
    grow the nav on open, and a header that changes height when you touch it drags the fold — and
    the whole page under it — down by 200px. Positioned, it overlays, and --nav-h stays true. */
 @media (max-width: 720px) {
-  /* The containing block for the panel. The nav is the right one rather than .page-frame because
-     the panel's edges are the header's edges, so left/right/top need no offsets to maintain. */
-  .nav { position: relative; padding: var(--space-2) var(--space-3); }
+  /* Note there is no `position: relative` here. The nav is the containing block the panel measures
+     from — the right one, because the panel's edges are the header's edges, so left/right/top need
+     no offsets to maintain — but `sticky` is already a positioned value and supplies that. Restating
+     relative would win the cascade over the base rule and quietly un-stick the header. */
+  .nav { padding: var(--space-2) var(--space-3); }
   .nav-toggle { display: inline-flex; }
 
   /* The wrapper stops being transparent and becomes the panel itself. */
@@ -527,7 +550,10 @@ img { display: block; max-width: 100%; }
    It also stops being sticky: sticky is worth a third of a phone screen only if the reader can see
    the article too. */
 .doc-shell { display: grid; grid-template-columns: var(--rail-w, 240px) minmax(0, 1fr); gap: var(--space-8); padding: var(--space-8) var(--space-6); flex: 1; }
-.doc-rail { position: sticky; top: var(--space-6); align-self: start; font-size: 13px; display: flex; flex-direction: column; gap: 8px; }
+/* The offset clears the header rather than the viewport. Two sticky elements do not know about each
+   other: at the old flat --space-6 the rail stopped 24px from the top of the *viewport*, which is
+   38px underneath a 62px header, so the first few links slid behind the wordmark. */
+.doc-rail { position: sticky; top: calc(var(--nav-h) + var(--space-4)); align-self: start; font-size: 13px; display: flex; flex-direction: column; gap: 8px; }
 @media (max-width: 900px) {
   .doc-shell { grid-template-columns: minmax(0, 1fr); gap: var(--space-6); padding: var(--space-6) var(--space-4); }
   .doc-rail { position: static; flex-direction: row; flex-wrap: wrap; gap: var(--space-2) var(--space-4); padding-bottom: var(--space-4); border-bottom: 2px solid var(--color-divider); }

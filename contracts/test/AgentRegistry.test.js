@@ -196,6 +196,112 @@ describe("AgentRegistry", function () {
     });
   });
 
+  /**
+   * The early exit is a toll on the unbonding period, not a lock-up fee — the period exists so an
+   * agent's own outstanding executions can still settle against its bond. These tests therefore
+   * split into two kinds: the arithmetic, which is simple, and the *characterisation* of what the
+   * toll does and does not deter, which is the part that will matter when someone reprices it.
+   */
+  describe("early exit", function () {
+    it("pays ninety percent to the owner and ten to the treasury", async function () {
+      const { agentId } = await registerAgent(env, { bond: E18(1000) });
+      await env.registry.connect(env.agentOwner).startUnbonding(agentId, E18(400));
+
+      const ownerBefore = await env.token.balanceOf(env.agentOwner.address);
+      const treasuryBefore = await env.token.balanceOf(env.treasury.address);
+
+      await expect(env.registry.connect(env.agentOwner).withdrawEarly(agentId))
+        .to.emit(env.registry, "WithdrawnEarly")
+        .withArgs(agentId, E18(360), E18(40));
+
+      expect(await env.token.balanceOf(env.agentOwner.address)).to.equal(ownerBefore + E18(360));
+      expect(await env.token.balanceOf(env.treasury.address)).to.equal(treasuryBefore + E18(40));
+      // The whole unbonding amount leaves the bond; the penalty is a split of it, not a surcharge.
+      expect((await env.registry.getAgent(agentId)).bond).to.equal(E18(600));
+      expect((await env.registry.getAgent(agentId)).unbondingAmount).to.equal(0);
+    });
+
+    it("is exact at six decimals", async function () {
+      const six = await deployProtocol({ decimals: 6 });
+      await (await six.registry.setLimits(six.units(100), six.units(5_000_000))).wait();
+      const { agentId } = await registerAgent(six, { bond: six.units(333.33) });
+      await six.registry.connect(six.agentOwner).startUnbonding(agentId, six.units(333.33));
+
+      const before = await six.token.balanceOf(six.treasury.address);
+      await six.registry.connect(six.agentOwner).withdrawEarly(agentId);
+      // 333.33 USDT is 333_330_000 base units; a tenth is 33_333_000 with nothing left over.
+      expect(await six.token.balanceOf(six.treasury.address)).to.equal(before + 33_333_000n);
+    });
+
+    it("refuses once the period has elapsed, rather than charging for nothing", async function () {
+      const { agentId } = await registerAgent(env, { bond: E18(1000) });
+      await env.registry.connect(env.agentOwner).startUnbonding(agentId, E18(400));
+      await increaseTime(21 * DAY + 1);
+
+      // There is no longer anything to buy out, and silently taking 10% here would make the free
+      // door the one a caller has to know to look for.
+      await expect(
+        env.registry.connect(env.agentOwner).withdrawEarly(agentId)
+      ).to.be.revertedWithCustomError(env.registry, "UnbondingElapsed");
+      await env.registry.connect(env.agentOwner).withdraw(agentId);
+    });
+
+    it("needs an unbonding to exit from", async function () {
+      const { agentId } = await registerAgent(env, { bond: E18(1000) });
+      await expect(
+        env.registry.connect(env.agentOwner).withdrawEarly(agentId)
+      ).to.be.revertedWithCustomError(env.registry, "NothingToWithdraw");
+    });
+
+    it("cannot strand open exposure, because credit already nets the unbonding amount", async function () {
+      const { agentId } = await registerAgent(env, { bond: E18(2000), tier: Tier.Bronze });
+      await env.registry.setRouter(env.owner.address);
+      await env.registry.reserve(agentId, E18(500));
+      // Bronze at NEUTRAL is 0.5x, so E18(1000) of remaining bond backs exactly E18(500) open.
+      await env.registry.connect(env.agentOwner).startUnbonding(agentId, E18(1000));
+
+      await env.registry.connect(env.agentOwner).withdrawEarly(agentId);
+
+      const a = await env.registry.getAgent(agentId);
+      expect(a.openNotional).to.equal(E18(500));
+      expect((await env.registry.getProfile(agentId)).maxOpenNotional).to.equal(E18(500));
+    });
+
+    it("costs less than a single fault, which is what it does not deter", async function () {
+      const { agentId } = await registerAgent(env, { bond: E18(1000) });
+      const faultBps = BigInt(await env.router.faultSlashBps());
+      const exitBps = BigInt(await env.registry.earlyExitPenaltyBps());
+
+      // Pinned as an assertion because it is the load-bearing fact about this mechanism: an agent
+      // that expects to lose one challenge is better off paying the toll and walking than staying
+      // to eat the slash. Raising earlyExitPenaltyBps above faultSlashBps is what would flip it,
+      // and even then the comparison is bond-against-bond while the payoff being weighed comes
+      // out of notional, which leverage and tier carry to nine times bond.
+      expect(exitBps).to.equal(1_000n);
+      expect(exitBps).to.be.lessThan(faultBps);
+
+      await env.registry.connect(env.agentOwner).startUnbonding(agentId, E18(1000));
+      const before = await env.token.balanceOf(env.agentOwner.address);
+      await env.registry.connect(env.agentOwner).withdrawEarly(agentId);
+      const kept = (await env.token.balanceOf(env.agentOwner.address)) - before;
+      expect(kept).to.equal(E18(900));
+      expect(kept).to.be.greaterThan(E18(800)); // what one 20% fault would have left
+    });
+
+    it("is retunable by the owner and bounded at a hundred percent", async function () {
+      await env.registry.setEarlyExitPenaltyBps(3_500);
+      expect(await env.registry.earlyExitPenaltyBps()).to.equal(3_500);
+
+      await expect(env.registry.setEarlyExitPenaltyBps(10_001)).to.be.revertedWithCustomError(
+        env.registry,
+        "InvalidParameter"
+      );
+      await expect(
+        env.registry.connect(env.agentOwner).setEarlyExitPenaltyBps(0)
+      ).to.be.revertedWithCustomError(env.registry, "NotOwner");
+    });
+  });
+
   describe("slashing", function () {
     beforeEach(async function () {
       await env.registry.setRouter(env.owner.address);

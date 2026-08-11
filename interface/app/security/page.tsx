@@ -220,10 +220,20 @@ export default function Security() {
           exists to avoid.
         </p>
         <p>
-          Two timing details matter. Bond remains slashable for the entire 21-day unbonding period —
-          exiting does not outrun a challenge. And credit is computed on bond{' '}
-          <em>net of</em> anything queued for unbonding, so an agent&apos;s capacity shrinks the
-          moment it starts to leave rather than when it finishes.
+          Two timing details matter. Bond remains slashable for the entire 21-day unbonding period, and
+          credit is computed on bond <em>net of</em> anything queued for unbonding, so an agent&apos;s
+          capacity shrinks the moment it starts to leave rather than when it finishes.
+        </p>
+        <p>
+          The exception is worth stating plainly rather than leaving in a parameter table. Since{' '}
+          <code>withdrawEarly</code>, an agent can take its queued bond out before the 21 days are up by
+          paying 10% of it to the treasury. Live exposure is not at risk from this — credit already nets
+          out the queued amount, so nothing an agent currently has open was ever backed by the bond it is
+          withdrawing. What the door does reach is an execution that has already been delivered and is
+          still inside its settlement window: the capital behind it can leave for a tenth of itself. A
+          lost challenge costs 20% of remaining bond, so the exit is the cheaper of the two, and an
+          operator who expects a fault is better off taking it. Treat the 21 days as a delay that has a
+          price, not as an assurance that the bond will be there at the end of a dispute.
         </p>
 
         <h3>Audit status</h3>

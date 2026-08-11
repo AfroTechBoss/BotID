@@ -40,6 +40,12 @@ contract AgentRegistry is IReputationOracle, Ownable {
 
     uint256 public minBond = 500e18;
     uint256 public globalNotionalCap = 5_000_000e18;
+
+    /// @notice Price of leaving before `UNBONDING_PERIOD` elapses, in bps of the unbonding amount.
+    /// @dev Read the caveat on `withdrawEarly` before changing this. It is a *toll*, not a
+    ///      deterrent: 10% of bond is smaller than a single fault slash, so it does not price
+    ///      escape from an outcome an agent already expects to lose.
+    uint32 public earlyExitPenaltyBps = 1_000;
     address public router;
     address public treasury;
 
@@ -56,6 +62,7 @@ contract AgentRegistry is IReputationOracle, Ownable {
     error CreditExceeded();
     error NothingToWithdraw();
     error UnbondingNotElapsed();
+    error UnbondingElapsed();
     error InvalidParameter();
 
     event AgentRegistered(
@@ -70,6 +77,7 @@ contract AgentRegistry is IReputationOracle, Ownable {
     event BondIncreased(uint256 indexed agentId, uint256 amount, uint256 total);
     event UnbondingStarted(uint256 indexed agentId, uint256 amount, uint64 availableAt);
     event Withdrawn(uint256 indexed agentId, uint256 amount);
+    event WithdrawnEarly(uint256 indexed agentId, uint256 paid, uint256 penalty);
     event Slashed(uint256 indexed agentId, uint256 amount, address indexed recipient);
     event ExposureChanged(uint256 indexed agentId, uint256 openNotional);
     event ActiveSet(uint256 indexed agentId, bool active);
@@ -108,6 +116,11 @@ contract AgentRegistry is IReputationOracle, Ownable {
         if (minBond_ == 0 || globalNotionalCap_ == 0) revert InvalidParameter();
         minBond = minBond_;
         globalNotionalCap = globalNotionalCap_;
+    }
+
+    function setEarlyExitPenaltyBps(uint32 bps) external onlyOwner {
+        if (bps > 10_000) revert InvalidParameter();
+        earlyExitPenaltyBps = bps;
     }
 
     // ---------------------------------------------------------------- lifecycle
@@ -197,6 +210,54 @@ contract AgentRegistry is IReputationOracle, Ownable {
 
         bondToken.safeTransfer(a.owner, amount);
         emit Withdrawn(agentId, amount);
+    }
+
+    /// @notice Withdraw before the unbonding period elapses, paying `earlyExitPenaltyBps` of the
+    ///         amount to the treasury.
+    /// @dev Understand what this door is and is not.
+    ///
+    ///      It is not a lock-up fee. `UNBONDING_PERIOD` exists so that outcomes an agent is
+    ///      already responsible for can still land against its bond — see the note on `withdraw`.
+    ///      A toll on leaving early is therefore a price on escaping liability, and it has to be
+    ///      read against what staying costs. A lost challenge takes `faultSlashBps` of the
+    ///      *remaining* bond, currently 20%. At 10% here, leaving costs half of what one fault
+    ///      costs, so any agent that expects even a single fault is better off paying the toll —
+    ///      and the payoff it is weighing that against comes out of notional, which leverage and
+    ///      tier can carry to nine times bond. The toll is one tenth of bond. The denominators
+    ///      are not the same size, and it is the smaller one that is being taxed.
+    ///
+    ///      The invariant that does hold: `_maxOpenNotional` already computes credit on bond net
+    ///      of `unbondingAmount`, and `reserve` checks every new execution against that. So the
+    ///      exposure an agent has open is always backed by bond it is *not* unbonding, and
+    ///      removing the unbonding amount early cannot leave a live execution uncollateralised.
+    ///      What it can do is remove capital from reach of a challenge on an execution that has
+    ///      already been delivered and is still inside its settlement window.
+    ///
+    ///      `penalty` rounds down, so a dust amount can exit free. At six decimals that is a
+    ///      millionth of a dollar and not worth a rounding branch.
+    function withdrawEarly(uint256 agentId)
+        external
+        onlyAgentOwner(agentId)
+        returns (uint256 paid, uint256 penalty)
+    {
+        Agent storage a = _agents[agentId];
+        uint256 amount = a.unbondingAmount;
+        if (amount == 0) revert NothingToWithdraw();
+        // Past the period there is nothing to buy out, and charging for it would make `withdraw`
+        // a strictly better call that a caller could miss. Fail loudly and point at the free door.
+        if (block.timestamp >= a.unbondingAt) revert UnbondingElapsed();
+        if (amount > a.bond) amount = a.bond; // clamped if slashed while unbonding
+
+        penalty = (amount * earlyExitPenaltyBps) / 10_000;
+        paid = amount - penalty;
+
+        a.unbondingAmount = 0;
+        a.unbondingAt = 0;
+        a.bond -= amount;
+
+        if (penalty != 0) bondToken.safeTransfer(treasury, penalty);
+        bondToken.safeTransfer(a.owner, paid);
+        emit WithdrawnEarly(agentId, paid, penalty);
     }
 
     // ---------------------------------------------------------------- router hooks

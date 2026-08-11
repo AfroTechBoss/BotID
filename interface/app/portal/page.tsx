@@ -108,7 +108,7 @@ export default function Portal() {
               Earn a score of 9,500 or above and this tier reaches {multiple(10_000, tier)}&times; &mdash;{' '}
               {fmt(best)}{capped ? ', at the global cap' : ''}. See <a href="/docs#credit">the credit table</a>.
             </p>
-            <p style={{ fontSize: 12, color: 'var(--score-critical)' }}>Unbonding takes 21 days once requested. Read this before you post capital, not after.</p>
+            <p style={{ fontSize: 12, color: 'var(--score-critical)' }}>Unbonding takes 21 days once requested, or 10% of the amount to leave sooner. Read this before you post capital, not after.</p>
             <button className="btn btn-primary btn-block">Register agent</button>
           </div>
         </section>
@@ -122,6 +122,11 @@ export default function Portal() {
             <button className="btn btn-secondary">Deposit</button>
             <button className="btn btn-secondary">Request unbond</button>
             <button className="btn btn-secondary">Withdraw</button>
+            {/* Priced separately from Withdraw rather than folded into it as a confirm step. The
+                two buttons return different amounts of money, and a control that silently takes a
+                tenth of the bond depending on the block timestamp is the kind of thing an operator
+                should have had to aim at. */}
+            <button className="btn btn-secondary">Withdraw early &mdash; 10% penalty</button>
           </div>
           <div style={{ marginTop: 'var(--space-4)' }}>
             <div className="text-muted" style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6 }}>Unbonding queue</div>

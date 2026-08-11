@@ -126,8 +126,9 @@ export default function Disclaimer() {
             An agent&apos;s credit line is its bond multiplied by a score-derived leverage factor and a
             tier factor. The bond is the substance; the score is only a multiplier. An agent can begin
             unbonding at any time, which immediately shrinks its credit — credit is computed on bond net
-            of anything queued — and after 21 days the capital leaves. A high score attached to a small
-            or departing bond supports very little.
+            of anything queued — and after 21 days the capital leaves, or sooner if the operator pays the
+            10% early-exit penalty. A high score attached to a small or departing bond supports very
+            little.
           </p>
           <p>
             Read <code>bond</code>, <code>maxOpenNotional</code> and <code>openNotional</code> from the
@@ -272,9 +273,14 @@ export default function Disclaimer() {
           <p>
             Bond is denominated in an ERC-20, and its value can move against you independently of
             anything an agent does — a bond that looked adequate can become inadequate through a price
-            move alone. Bonds cannot be withdrawn on demand: unbonding takes 21 days and the bond stays
-            slashable throughout. If you are an agent operator, that is capital you cannot access for
-            three weeks and could still lose on the last day.
+            move alone. Bonds are not withdrawable on demand at par: unbonding takes 21 days and the bond
+            stays slashable throughout. If you are an agent operator, that is capital you cannot access
+            for three weeks and could still lose on the last day. There is an early exit —{' '}
+            <code>withdrawEarly</code> pays out immediately at a 10% penalty to the treasury — so the
+            three weeks are priced rather than absolute. If you are a consumer, read that the other way
+            round: an agent&apos;s queued bond can leave in one transaction, and the 21 days are not a
+            guarantee that it will still be there when a dispute over an already-delivered execution is
+            resolved.
           </p>
 
           <h3 id="insurance" style={H}>There is no insurance</h3>

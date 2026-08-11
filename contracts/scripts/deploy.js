@@ -228,6 +228,11 @@ async function main() {
   const minBond = capital("MIN_BOND", decimals);
   const globalNotionalCap = capital("GLOBAL_NOTIONAL_CAP", decimals);
   const challengeBond = capital("CHALLENGE_BOND", decimals);
+  // Bps, not a token amount, so it is not decimal-scaled and does not go through capital().
+  const earlyExitPenaltyBps = Number(process.env.EARLY_EXIT_PENALTY_BPS ?? 1_000);
+  if (!Number.isInteger(earlyExitPenaltyBps) || earlyExitPenaltyBps > 10_000 || earlyExitPenaltyBps < 0) {
+    throw new Error(`EARLY_EXIT_PENALTY_BPS="${process.env.EARLY_EXIT_PENALTY_BPS}" must be 0..10000`);
+  }
   const whole = (v) => ethers.formatUnits(v, decimals);
   console.log(`  bondToken decimals ${decimals}`);
 
@@ -343,14 +348,21 @@ async function main() {
     router.protocolFeeBps(),
   ]);
 
-  const [onChainHalfWeight, onChainWeightCap, onChainMinBond, onChainCap, onChainChallengeBond] =
-    await Promise.all([
-      engine.halfWeight(),
-      engine.weightCap(),
-      registry.minBond(),
-      registry.globalNotionalCap(),
-      router.challengeBondAmount(),
-    ]);
+  const [
+    onChainHalfWeight,
+    onChainWeightCap,
+    onChainMinBond,
+    onChainCap,
+    onChainChallengeBond,
+    onChainEarlyExit,
+  ] = await Promise.all([
+    engine.halfWeight(),
+    engine.weightCap(),
+    registry.minBond(),
+    registry.globalNotionalCap(),
+    router.challengeBondAmount(),
+    registry.earlyExitPenaltyBps(),
+  ]);
 
   if (onChainHalfWeight !== halfWeight || onChainWeightCap !== weightCap) {
     wiring.push([
@@ -369,6 +381,12 @@ async function main() {
     wiring.push([
       `registry.setLimits(minBond ${whole(minBond)}, cap ${whole(globalNotionalCap)})`,
       () => registry.setLimits(minBond, globalNotionalCap),
+    ]);
+  }
+  if (Number(onChainEarlyExit) !== earlyExitPenaltyBps) {
+    wiring.push([
+      `registry.setEarlyExitPenaltyBps(${earlyExitPenaltyBps})`,
+      () => registry.setEarlyExitPenaltyBps(earlyExitPenaltyBps),
     ]);
   }
   if (onChainChallengeBond !== challengeBond) {

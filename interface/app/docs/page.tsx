@@ -45,8 +45,9 @@ const CONTRACTS: [string, string][] = [
 
 const PARAMS: [string, string, string, string][] = [
   ['Unbonding period', 'AgentRegistry.UNBONDING_PERIOD', '21 days', 'Constant, not a parameter. Bond stays slashable for the whole period.'],
-  ['Minimum bond', 'AgentRegistry.minBond', '500e18', 'Below this, maxOpenNotional is zero rather than small.'],
-  ['Global notional cap', 'AgentRegistry.globalNotionalCap', '5,000,000e18', 'Hard ceiling on any one agent regardless of bond or score.'],
+  ['Early exit penalty', 'AgentRegistry.earlyExitPenaltyBps', '1,000 bps', 'Of the unbonding amount, to treasury, to leave before the period elapses. Smaller than one fault slash — a toll, not a deterrent.'],
+  ['Minimum bond', 'AgentRegistry.minBond', '100 USDT', 'Below this, maxOpenNotional is zero rather than small.'],
+  ['Global notional cap', 'AgentRegistry.globalNotionalCap', '5,000,000 USDT', 'Hard ceiling on any one agent regardless of bond or score.'],
   ['Challenge window', 'ExecutionRouter.challengeWindow', '1 hour', 'Bronze/Silver only. Gold finalizes on delivery.'],
   ['Escalation window', 'ExecutionRouter.escalationWindow', '6 hours', 'Time the agent has to answer a challenge with a Gold proof.'],
   ['Settlement window', 'ExecutionRouter.settlementWindow', '7 days', 'Constrained: settlement + escalation must stay inside the unbonding period.'],
@@ -55,11 +56,11 @@ const PARAMS: [string, string, string, string][] = [
   ['Challenger bounty', 'ExecutionRouter.challengerBountyBps', '5,000 bps', 'Of the slashed amount; the remainder goes to treasury.'],
   ['Protocol fee', 'ExecutionRouter.protocolFeeBps', '500 bps', 'Of the execution fee, taken on settle.'],
   ['Minimum fee', 'ExecutionRouter.minFeeBps', '10 bps', 'Of notional. Zero-notional requests are exempt.'],
-  ['Half-weight', 'ReputationEngine.halfWeight', '100,000e18', 'Notional at which one observation moves the score halfway to its quality value.'],
-  ['Weight cap', 'ReputationEngine.weightCap', '1,000,000e18', 'Ceiling on the capital weight of a single execution.'],
+  ['Half-weight', 'ReputationEngine.halfWeight', '1,000 USDT', 'Notional at which one observation moves the score halfway to its quality value.'],
+  ['Weight cap', 'ReputationEngine.weightCap', '10,000 USDT', 'Ceiling on the capital weight of a single execution.'],
   ['Liveness haircut', 'ReputationEngine.livenessHaircutBps', '1,500 bps', 'Multiplicative, applied outside the EWMA.'],
   ['Verification haircut', 'ReputationEngine.verificationHaircutBps', '6,000 bps', 'Applied on a lost challenge — the severe case.'],
-  ['Challenge bond', 'deploy parameter', '100e18', 'What a challenger posts. Forfeited to the agent if the challenge fails.'],
+  ['Challenge bond', 'ExecutionRouter.challengeBondAmount', '50 USDT', 'What a challenger posts. Forfeited to the agent if the challenge fails.'],
 ];
 
 const LEVERAGE: [string, string][] = [
@@ -402,6 +403,13 @@ score' = decay(score, Δt) + (q − decay(score, Δt)) · w / (w + K)`}</div>
             <code>effectiveBond</code> is bond net of anything in the unbonding queue, so credit contracts the
             moment an exit begins rather than at withdrawal. Below <code>minBond</code> the result is zero, not a
             small number. The whole thing is then clamped to <code>globalNotionalCap</code>.
+          </p>
+          <p>
+            That netting is also why <code>withdrawEarly</code> — which returns the queued bond before the 21
+            days at a 10% penalty to the treasury — cannot leave a live execution uncollateralised. Nothing
+            open was ever counted against the queued amount. It does let capital leave ahead of a challenge on
+            an execution already delivered, which is a deliberate trade and is described on{' '}
+            <a href="/security">security</a>.
           </p>
           <div className="table-scroll">
             <table className="table">

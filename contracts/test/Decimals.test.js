@@ -39,8 +39,11 @@ describe("bond token decimals", () => {
   describe("with 18-decimal parameters still in storage", () => {
     it("prices registration out of reach — the failure that announces itself", async () => {
       const env = await deployProtocol({ decimals: 6 });
-      // minBond is 500e18. Against a 6-decimal token that reads as 500 trillion USDT, which is
-      // roughly five thousand times the token's entire supply.
+      // The storage initialiser is 500e18, and it is a different number from deploy.js's
+      // MIN_BOND default of 100 — deliberately, and not worth reconciling: the initialiser is
+      // 18-decimal legacy that a real deploy always overwrites, so making it 100e18 would only
+      // make a wrong value look intentional. Against a 6-decimal token it reads as 500 trillion
+      // USDT, roughly five thousand times the token's entire supply.
       expect(await env.registry.minBond()).to.equal(ethers.parseUnits("500", 18));
       await expect(
         registerAgent(env, { bond: env.units(1_000_000) })
@@ -95,13 +98,13 @@ describe("bond token decimals", () => {
           await env.engine.verificationHaircutBps()
         )
       ).wait();
-      await (await env.registry.setLimits(whole(500), whole(5_000_000))).wait();
+      await (await env.registry.setLimits(whole(100), whole(5_000_000))).wait();
       await (
         await env.router.setParameters(
           await env.router.challengeWindow(),
           await env.router.escalationWindow(),
           await env.router.settlementWindow(),
-          whole(100),
+          whole(50),
           await env.router.faultSlashBps(),
           await env.router.livenessSlashBps(),
           await env.router.challengerBountyBps(),
@@ -110,10 +113,10 @@ describe("bond token decimals", () => {
       ).wait();
     }
 
-    it("lets an agent register at five hundred USDT", async () => {
+    it("lets an agent register at one hundred USDT", async () => {
       const env = await deployProtocol({ decimals: 6 });
       await rescale(env);
-      expect(await env.registry.minBond()).to.equal(500_000_000n);
+      expect(await env.registry.minBond()).to.equal(100_000_000n);
 
       const { agentId } = await registerAgent(env, {
         tier: Tier.Bronze,
@@ -138,10 +141,10 @@ describe("bond token decimals", () => {
       expect(score).to.be.lessThan(NEUTRAL - 1_000n);
     });
 
-    it("brings the challenge bond back to a hundred USDT", async () => {
+    it("brings the challenge bond back to fifty USDT", async () => {
       const env = await deployProtocol({ decimals: 6 });
       await rescale(env);
-      expect(await env.router.challengeBondAmount()).to.equal(100_000_000n);
+      expect(await env.router.challengeBondAmount()).to.equal(50_000_000n);
       // Affordable against a normal balance, which is the whole point — a challenge bond is meant
       // to deter frivolous disputes, not to price out honest ones.
       expect(await env.token.balanceOf(env.challenger.address)).to.be.greaterThan(

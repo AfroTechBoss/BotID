@@ -30,9 +30,9 @@
  *
  *   HALF_WEIGHT          notional at which one execution moves the score halfway (100000)
  *   WEIGHT_CAP           cap on a single execution's weight (1000000)
- *   MIN_BOND             minimum bond to register (500)
+ *   MIN_BOND             minimum bond to register (100)
  *   GLOBAL_NOTIONAL_CAP  protocol-wide open exposure ceiling (5000000)
- *   CHALLENGE_BOND       bond required to challenge a delivery (100)
+ *   CHALLENGE_BOND       bond required to challenge a delivery (50)
  */
 
 const fs = require("fs");
@@ -78,12 +78,24 @@ async function hasBn254Precompiles() {
  * Neither reverts. So the decimals are read from the token and every such parameter is derived
  * from them here, rather than trusting the deployer to notice.
  */
+/**
+ * Whole tokens, and the token is USDT — so these read as dollars, which is what they were last
+ * set against. MIN_BOND is a $100 barrier to registering an agent and CHALLENGE_BOND is $50 to
+ * dispute a delivery, the challenge being forfeited to the agent owner if it fails.
+ *
+ * The two are a pair rather than independent knobs. A challenge costs the challenger half of what
+ * the smallest agent staked, so the cheapest possible griefing campaign burns real money against
+ * an agent that risked twice as much to exist — while staying low enough that a challenge is a
+ * thing an ordinary participant can actually afford, which is the only reason Bronze and Silver
+ * are honest. Raising CHALLENGE_BOND buys griefing resistance by making the optimistic tiers
+ * quietly unchallengeable; that failure is silent, so it is the direction to be careful in.
+ */
 const CAPITAL_DEFAULTS = {
   HALF_WEIGHT: "100000",
   WEIGHT_CAP: "1000000",
-  MIN_BOND: "500",
+  MIN_BOND: "100",
   GLOBAL_NOTIONAL_CAP: "5000000",
-  CHALLENGE_BOND: "100",
+  CHALLENGE_BOND: "50",
 };
 
 async function bondTokenDecimals(address) {

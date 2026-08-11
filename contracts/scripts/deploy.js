@@ -200,6 +200,17 @@ async function main() {
   const chainId = (await ethers.provider.getNetwork()).chainId;
   const local = LOCAL_CHAINS.has(chainId);
 
+  // hardhat.config.js passes an empty accounts list when PRIVATE_KEY is unset, deliberately, so
+  // that `test` and `compile` never require a production key. The cost is that the failure lands
+  // here as `Cannot read properties of undefined (reading 'address')`, which names neither the
+  // variable nor the file — and this is the first thing anyone deploying for the first time hits.
+  if (!deployer) {
+    throw new Error(
+      `no signer for network "${network.name}". Set PRIVATE_KEY in contracts/.env to a funded ` +
+        "deployer key (0x-prefixed, 64 hex chars). Fund it at https://faucet.botchain.ai on Bohr."
+    );
+  }
+
   const owner = process.env.OWNER ? ethers.getAddress(process.env.OWNER) : deployer.address;
   const treasury = process.env.TREASURY ? ethers.getAddress(process.env.TREASURY) : deployer.address;
 

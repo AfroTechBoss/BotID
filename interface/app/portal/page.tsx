@@ -13,7 +13,11 @@ type Tier = 'bronze' | 'silver' | 'gold';
 // here, with the contract's bps units intact, is deliberate: the next person to compare this
 // against AgentRegistry.sol should be able to do it line by line.
 const NEUTRAL_SCORE = 5_000;
-const MIN_BOND = 500;
+// Whole USDT, matching deploy.js CAPITAL_DEFAULTS rather than the 18-decimal storage initialiser
+// AgentRegistry ships with — the initialiser is always overwritten at deploy. This was 500 and
+// wrong in the direction that hides the floor: a $100 agent is admitted on chain but was shown
+// zero credit here.
+const MIN_BOND = 100;
 const GLOBAL_NOTIONAL_CAP = 5_000_000;
 
 function leverageBps(score: number): number {
@@ -147,6 +151,35 @@ export default function Portal() {
                 <div key={label} style={{ fontSize: 11, textAlign: 'center', paddingInline: 2 }}>{label}</div>
               ))}
             </div>
+          </div>
+
+          {/* The early exit is gated on openNotional being zero, and the one way an operator gets
+              stuck behind that gate is a request it accepted and never delivered: exposure is not
+              released until settlement, a lost challenge, or expiry, and nobody is paid to expire
+              anything. Without this panel the operator clicks "Withdraw early", gets
+              OutstandingLiability, and has no way to find out that the remedy is a function on a
+              different contract. The gate is correct; being unable to see the exit from it is not. */}
+          <div style={{ marginTop: 'var(--space-4)', border: '1px solid var(--color-divider)', padding: 'var(--space-3)' }}>
+            <div className="text-muted" style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6 }}>
+              Blocked from the early exit
+            </div>
+            <p style={{ fontSize: 12, margin: 0 }}>
+              Early withdrawal needs <code>openNotional</code> at zero. A request you accepted and never
+              delivered holds exposure open indefinitely, because exposure is only released when an
+              execution settles, loses a challenge, or expires &mdash; and expiry is not automatic. If
+              that is what is holding you, you can clear it yourself: <code>markExpired</code> is
+              permissionless, so the agent may call it on its own stale request.
+            </p>
+            <p style={{ fontSize: 12, marginTop: 'var(--space-2)', marginBottom: 0 }}>
+              It is not free, and it should not be. Expiring records a liveness fault and slashes 2% of
+              bond; half of that is paid to whoever made the call, so calling it on yourself costs about
+              1% of bond and leaves a permanent fault on the record. You are paying for the missed
+              delivery, not for the unblocking &mdash; the alternative is that someone else calls it,
+              takes the bounty, and you still have the fault.
+            </p>
+            <button className="btn btn-secondary" style={{ marginTop: 'var(--space-3)' }}>
+              Expire stale requests
+            </button>
           </div>
         </section>
 

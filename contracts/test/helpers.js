@@ -175,11 +175,19 @@ function teeAttestation(enclaveKey, signature) {
 
 // --------------------------------------------------------------- deployment
 
-async function deployProtocol() {
+/**
+ * `decimals` deploys the bond token at something other than 18 and mints in that token's own
+ * units. It does NOT retune the contracts' capital parameters — those keep their 18-decimal
+ * initialisers, which is precisely the state a deploy lands in before deploy.js rescales them,
+ * and the state Decimals.test.js exists to characterise.
+ */
+async function deployProtocol({ decimals = 18 } = {}) {
   const [owner, treasury, consumer, agentOwner, challenger, other] = await ethers.getSigners();
   const chainId = (await ethers.provider.getNetwork()).chainId;
 
   const token = await (await ethers.getContractFactory("MockERC20")).deploy();
+  if (decimals !== 18) await (await token.setDecimals(decimals)).wait();
+  const units = (n) => ethers.parseUnits(String(n), decimals);
   const engine = await (await ethers.getContractFactory("ReputationEngine")).deploy(owner.address);
   const registry = await (
     await ethers.getContractFactory("AgentRegistry")
@@ -215,13 +223,15 @@ async function deployProtocol() {
   await attestor.setPublisher(publisher.address, true);
 
   for (const who of [consumer, agentOwner, challenger, other]) {
-    await token.mint(who.address, E18(10_000_000));
+    await token.mint(who.address, units(10_000_000));
     await token.connect(who).approve(registry.target, ethers.MaxUint256);
     await token.connect(who).approve(router.target, ethers.MaxUint256);
   }
 
   return {
     chainId,
+    decimals,
+    units,
     owner,
     treasury,
     consumer,

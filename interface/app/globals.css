@@ -529,7 +529,7 @@ img { display: block; max-width: 100%; }
   .stat-strip { grid-template-columns: repeat(2, 1fr); gap: 1px; background: var(--color-divider); }
   .stat-strip > * { background: var(--color-bg); }
   .stat-strip > * + * { border-left: none; }
-  /* 34px was chosen against a quarter of 1490px. A quarter of 375 is 82px, and "285.5k WBOT" at
+  /* 34px was chosen against a quarter of 1490px. A quarter of 375 is 82px, and "285.5k USDT" at
      34px is 190. */
   .stat-num { font-size: 22px; }
 }

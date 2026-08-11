@@ -10,20 +10,26 @@
 // are applied.
 
 /**
- * The bond token is NOT decided yet — this is Q3 in the brief, and it is still open.
+ * The bond token is USDT. Q3 in the brief is answered.
  *
- * WBOT is the current recommendation because it is fully collateralised by native BOT with no
- * privileged issuance. BOT Chain's "USDT" was ruled out: it is not Tether but a mintable token
- * with a MINTER_ROLE, and permissioned issuance underneath slashable collateral would make the
- * protocol's Sybil bound a permission rather than a cost.
+ * Six decimals, not eighteen — and that is the whole reason this module exists. Every display
+ * figure in the app is a base-unit bigint that gets divided by 10^decimals exactly once, here.
+ * Any code that reached for a literal 1e18 instead is now off by a factor of a trillion, which is
+ * why there are none: `grep` for `1e18` across lib/, app/ and components/ returns nothing.
  *
- * Nothing outside this object may hardcode a symbol or a decimals value. When Q3 is answered,
- * this is the only place that changes — and on a real deployment it should be read from the
- * token's own decimals() rather than trusted from here.
+ * On the addresses: USDT is a different contract on each chain, and the pair is a trap rather
+ * than an inconvenience. Bohr testnet's USDT is 0x75edC933…20fe3. BOT Chain mainnet's is
+ * 0xaBabc7Dd…87a3C — and that mainnet address on Bohr resolves to a live, unrelated 18-decimal
+ * token called WES. So pointing a testnet deploy at the mainnet address does not fail; it reads
+ * decimals() as 18 and scales every capital parameter a trillion times too high. Addresses
+ * therefore live in contracts.ts keyed by network, never as a single default.
+ *
+ * Nothing outside this object may hardcode a symbol or a decimals value, and on a real deployment
+ * decimals should come from the token's own decimals() rather than be trusted from here.
  */
 export const BOND_TOKEN = {
-  symbol: 'WBOT',
-  decimals: 18,
+  symbol: 'USDT',
+  decimals: 6,
 } as const;
 
 /** Whole tokens to base units. For fixtures and for parsing user input, never for chain reads. */

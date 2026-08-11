@@ -10,7 +10,15 @@ import {IEzklVerifier} from "../adapters/ZkAdapter.sol";
 contract MockERC20 {
     string public name = "Mock BOT";
     string public symbol = "mBOT";
-    uint8 public constant decimals = 18;
+    // Settable rather than `constant 18`, because the bond token is USDT at six decimals and a
+    // suite that can only mint an 18-decimal token can only ever prove the protocol at 18. The
+    // two parameters that break under a decimals mismatch — halfWeight and challengeBondAmount —
+    // break silently, so the only thing that catches them is a test that actually runs at 6.
+    uint8 public decimals = 18;
+
+    function setDecimals(uint8 decimals_) external {
+        decimals = decimals_;
+    }
     uint256 public totalSupply;
 
     mapping(address => uint256) public balanceOf;

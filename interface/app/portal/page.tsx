@@ -1,5 +1,6 @@
 'use client';
 import { useState } from 'react';
+import { BOND_TOKEN } from '@/lib/token';
 
 type Tier = 'bronze' | 'silver' | 'gold';
 
@@ -44,7 +45,12 @@ export default function Portal() {
   const credit = maxOpenNotional(bond, NEUTRAL_SCORE, tier);
   const capped = credit === GLOBAL_NOTIONAL_CAP;
   const best = maxOpenNotional(bond, 10_000, tier);
-  const fmt = (n: number) => (n >= 1e6 ? `${(n / 1e6).toFixed(1)}M WBOT` : `${(n / 1e3).toFixed(0)}k WBOT`);
+  // The symbol comes from BOND_TOKEN rather than a literal. It was written out twice here, which
+  // is how a page keeps saying WBOT for a week after the bond token has become something else.
+  const fmt = (n: number) =>
+    n >= 1e6
+      ? `${(n / 1e6).toFixed(1)}M ${BOND_TOKEN.symbol}`
+      : `${(n / 1e3).toFixed(0)}k ${BOND_TOKEN.symbol}`;
 
   return (
     <>

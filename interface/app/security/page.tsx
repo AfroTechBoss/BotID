@@ -121,15 +121,22 @@ export default function Security() {
         <p>
           The table below is load-bearing: it is this site&apos;s answer to &ldquo;is this the real
           BotID.&rdquo; It follows the network selected in the nav, it never falls back to another
-          network&apos;s addresses, and it is populated only from a deployment artifact. Both
-          networks are empty because both networks are genuinely empty.
+          network&apos;s addresses, and no BotID contract goes into it until a deployment artifact
+          exists for that network.
+        </p>
+        <p>
+          The single entry is the bond token, and it is there because it is the one address that is
+          knowable in advance: USDT is not ours, it was already deployed, and agents will post their
+          bonds in it. It is listed per network because the two addresses differ — and using the
+          mainnet one on Bohr does not fail, it resolves to an unrelated token with different
+          decimals. Both were verified by calling the contracts directly.
         </p>
         <ContractsTable />
         <p>
-          <strong>Until that table has entries, no address anywhere claims to be BotID.</strong> Any
-          address presented to you as a BotID contract today — in a message, a post, a wallet prompt
-          or a fork of this site — is not one. There is nothing to be confused with yet, which makes
-          this the one moment when the answer is unambiguous.
+          <strong>No address in that table other than the bond token is a BotID contract yet.</strong>{' '}
+          Any address presented to you as <em>our</em> contract today — in a message, a post, a
+          wallet prompt or a fork of this site — is not one. There is nothing to be confused with
+          yet, which makes this the one moment when the answer is unambiguous.
         </p>
 
         <h6 style={HEAD}>The contracts that will appear there</h6>

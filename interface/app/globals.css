@@ -282,6 +282,31 @@ img { display: block; max-width: 100%; }
    and the row under the cursor is not necessarily the one in use. */
 .select-option[aria-selected='true'] .select-option-name::after { content: ' \2713'; color: var(--color-accent); }
 
+/* A network that is not deployed yet is still listed, because hiding it would answer "is BotID on
+   mainnet?" by saying nothing, and silence reads as "not planned". It is listed and marked. */
+.select-option[aria-disabled='true'] { cursor: default; }
+.select-option[aria-disabled='true'] .select-option-name { color: var(--text-muted); font-weight: 400; }
+.select-option-soon {
+  margin-left: auto; font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em;
+  color: var(--color-accent); border: 1px solid var(--color-accent); padding: 1px 6px;
+}
+/* The chain number gives way to the badge on a row that has both — the id of a chain we are not on
+   is the less useful of the two facts, and keeping both pushed the row wider than the trigger. */
+.select-option[aria-disabled='true'] .select-option-chain { display: none; }
+
+/* Modal. 60 clears the nav's 50, which is the whole point of the number: it is mounted at the top
+   of the layout rather than inside the nav, so it competes with the nav itself rather than with the
+   nav's children, and the sticky header dims along with the page. */
+.overlay {
+  position: fixed; inset: 0; z-index: 60;
+  background: color-mix(in srgb, #000 62%, transparent);
+  display: flex; align-items: center; justify-content: center; padding: var(--space-4);
+}
+.overlay-panel {
+  background: var(--color-surface); border: 1px solid var(--color-divider); box-shadow: var(--shadow-lg);
+  padding: var(--space-5); max-width: 460px; width: 100%;
+}
+
 .tag { display: inline-flex; align-items: center; font-size: 11px; letter-spacing: 0.02em; padding: 3px 10px; }
 .tag-outline { border: 1px solid var(--color-accent); color: var(--color-accent); }
 

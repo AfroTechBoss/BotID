@@ -31,8 +31,11 @@ export default function NetworkSelect() {
   }, [open, network.id]);
 
   const choose = (id: NetworkId) => {
-    setNetwork(id);
     setOpen(false);
+    // setNetwork refuses a network BotID is not on yet and raises the explanation itself, so there
+    // is nothing to branch on here. Focus goes back to the trigger either way: the dialog captures
+    // whatever was focused when it opened and hands it back on close, which is the same element.
+    setNetwork(id);
     trigger.current?.focus();
   };
 
@@ -107,6 +110,10 @@ export default function NetworkSelect() {
               key={n.id}
               role="option"
               aria-selected={n.id === network.id}
+              // aria-disabled, not disabled: the row is still reachable and still clickable,
+              // because clicking it is what produces the explanation. A row a screen reader skips
+              // entirely would answer "is there a mainnet?" with silence.
+              aria-disabled={!n.live || undefined}
               data-active={i === active || undefined}
               className="select-option"
               onPointerDown={(e) => e.preventDefault()}
@@ -115,7 +122,11 @@ export default function NetworkSelect() {
             >
               <span aria-hidden="true" className="select-dot" data-network={n.id} />
               <span className="select-option-name">{n.name}</span>
-              <span className="select-option-chain">chain {n.chainId}</span>
+              {n.live ? (
+                <span className="select-option-chain">chain {n.chainId}</span>
+              ) : (
+                <span className="select-option-soon">Soon</span>
+              )}
             </li>
           ))}
         </ul>

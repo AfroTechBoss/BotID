@@ -1,5 +1,5 @@
 'use client';
-import { createContext, useContext, useMemo, useState } from 'react';
+import { createContext, useCallback, useContext, useMemo, useState } from 'react';
 import { CHAINS } from './chain';
 
 // The selected network is app-wide state, not the nav's private business. It was local to
@@ -24,6 +24,18 @@ export interface Network {
    * explorer and reading as confirmation.
    */
   explorer: string;
+  /**
+   * Whether BotID is actually on this chain yet.
+   *
+   * Not a synonym for "the chain exists" — BOT Chain is live and producing blocks, it simply has
+   * none of our contracts on it. Selecting it would leave every read returning nothing and every
+   * write pointed at an address holding no code, which fails as an unhelpful revert rather than as
+   * an explanation. So the switcher offers it and then declines, saying why.
+   *
+   * The flag rather than a hardcoded `id !== 'mainnet'` check: on the day mainnet is deployed this
+   * is the one line that changes, and nothing else in the interface has to be found and edited.
+   */
+  live: boolean;
 }
 
 // Chain ids come from docs/architecture.md, which records them alongside the bn254 precompile
@@ -44,13 +56,24 @@ export interface Network {
 // exists but indexes a different chain would render a "not found" page under a real address, on
 // the one page whose job is to prove an address is ours.
 export const NETWORKS: Network[] = [
-  { id: 'testnet', name: CHAINS.testnet.name, short: 'testnet', chainId: CHAINS.testnet.id, explorer: CHAINS.testnet.blockExplorers.default.url },
-  { id: 'mainnet', name: CHAINS.mainnet.name, short: 'mainnet', chainId: CHAINS.mainnet.id, explorer: CHAINS.mainnet.blockExplorers.default.url },
+  { id: 'testnet', name: CHAINS.testnet.name, short: 'testnet', chainId: CHAINS.testnet.id, explorer: CHAINS.testnet.blockExplorers.default.url, live: true },
+  { id: 'mainnet', name: CHAINS.mainnet.name, short: 'mainnet', chainId: CHAINS.mainnet.id, explorer: CHAINS.mainnet.blockExplorers.default.url, live: false },
 ];
 
 interface NetworkContextValue {
   network: Network;
   setNetwork: (id: NetworkId) => void;
+  /**
+   * A network that was asked for and refused, held until it is dismissed.
+   *
+   * It lives here rather than in the switcher because the switcher does not survive the click that
+   * sets it. Below 720px the trigger is inside the nav's hamburger panel, and choosing an option
+   * closes the panel — which unmounted the explanation along with it, so on a phone the refusal was
+   * silent and the network simply appeared not to change. Held at the provider, the dialog outlives
+   * whatever control asked the question.
+   */
+  pending: Network | undefined;
+  dismissPending: () => void;
 }
 
 // Defaulting to testnet rather than throwing on a missing provider is deliberate: every route
@@ -59,13 +82,30 @@ interface NetworkContextValue {
 const NetworkContext = createContext<NetworkContextValue>({
   network: NETWORKS[0],
   setNetwork: () => {},
+  pending: undefined,
+  dismissPending: () => {},
 });
 
 export function NetworkProvider({ children }: { children: React.ReactNode }) {
   const [id, setId] = useState<NetworkId>('testnet');
+  const [pending, setPending] = useState<Network>();
+  // One place decides. Any caller — the switcher today, a deep link or a saved preference later —
+  // asks for a network and either gets it or gets an explanation; nobody has to remember to check
+  // `live` first. The refusal is recorded rather than swallowed, because a switch that quietly
+  // does nothing looks like a broken control.
+  const setNetwork = useCallback((next: NetworkId) => {
+    const target = NETWORKS.find((n) => n.id === next);
+    if (!target) return;
+    if (!target.live) {
+      setPending(target);
+      return;
+    }
+    setId(next);
+  }, []);
+  const dismissPending = useCallback(() => setPending(undefined), []);
   const value = useMemo(
-    () => ({ network: NETWORKS.find((n) => n.id === id) ?? NETWORKS[0], setNetwork: setId }),
-    [id]
+    () => ({ network: NETWORKS.find((n) => n.id === id) ?? NETWORKS[0], setNetwork, pending, dismissPending }),
+    [id, setNetwork, pending, dismissPending]
   );
   return <NetworkContext.Provider value={value}>{children}</NetworkContext.Provider>;
 }

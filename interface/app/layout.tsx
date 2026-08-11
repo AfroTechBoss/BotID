@@ -3,6 +3,7 @@ import './globals.css';
 import { cabinet, satoshi } from './fonts';
 import Nav from '@/components/Nav';
 import Footer from '@/components/Footer';
+import NetworkGate from '@/components/NetworkGate';
 import { NetworkProvider } from '@/lib/network';
 import { WalletProvider } from '@/lib/wallet';
 import { readTheme } from '@/lib/theme.server';
@@ -48,6 +49,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <div className="page-body">{children}</div>
             <Footer />
           </div>
+          {/* Outside .page-frame, so the overlay stacks against the page rather than against the
+              nav's children, and outlives whichever control asked for a network we are not on. */}
+          <NetworkGate />
           </WalletProvider>
         </NetworkProvider>
       </body>

@@ -210,8 +210,16 @@ export async function readAgentExecutions(network: NetworkId, agentId: bigint): 
   // attributed on its own.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const own = (logs as any[]).filter((l) => l.args?.agentId === agentId);
+  //
+  // Named explicitly rather than defined as "everything without an agentId". That negative
+  // definition was correct while this file asked the node for eight specific events; the switch to
+  // one unfiltered query quietly widened it to include the router's administrative events —
+  // AdapterSet, ParametersUpdated — which have no requestId to match on and threw on the way past.
+  // Describing the set you want is safe against the set growing; describing what it is not, is not.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const loose = (logs as any[]).filter((l) => l.args?.agentId === undefined);
+  const loose = (logs as any[]).filter(
+    (l) => l.args?.requestId !== undefined && l.args?.agentId === undefined
+  );
 
   const rows = new Map<string, AgentExecution>();
   const at = (id: `0x${string}`, block: bigint): AgentExecution => {

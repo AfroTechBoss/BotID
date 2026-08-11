@@ -47,7 +47,7 @@ export default function AgentProfile({ params }: { params: { id: string } }) {
   }
 
   const { data: a, loading, error, deployed } = useAgent(network.id, agentId);
-  const { data: execs } = useAgentExecutions(network.id, agentId);
+  const { data: execs, loading: execsLoading, error: execsError } = useAgentExecutions(network.id, agentId);
   const now = useNow(30_000);
   const registry = registryAddress(network.id);
 
@@ -169,8 +169,14 @@ export default function AgentProfile({ params }: { params: { id: string } }) {
           {/* Its own wait, separate from the agent's. The router read is a log scan and the registry
               read is two eth_calls, so they do not finish together — and the header can be filled in
               while the table below it is still arriving rather than holding the whole page back for
-              the slower of the two. */}
-          {execs === undefined ? (
+              the slower of the two.
+
+              Keyed on the hook's `loading` rather than on `execs === undefined`, which was a
+              skeleton that could never resolve. Undefined is three different facts wearing the same
+              coat: the read has not finished, the read failed, and there is no ExecutionRouter on
+              this network. Only the first of those is a reason to keep spinning; the other two are
+              answers, and a page that spins at an answer is lying about being busy. */}
+          {execsLoading ? (
             <div className="table-scroll" aria-busy="true">
               <span className="sr-only" role="status">Loading executions</span>
               <table className="table table-dense">
@@ -203,9 +209,16 @@ export default function AgentProfile({ params }: { params: { id: string } }) {
             </div>
           ) : (
             <p className="text-muted" style={{ fontSize: 13, padding: 'var(--space-4) 0' }}>
-              {execs.length > 0
-                ? `No ${filter} executions. This agent has ${execs.length} in total.`
-                : 'Nothing has been commissioned from this agent yet. Every row here would be an ExecutionRouter event, so the first request anyone sends appears here.'}
+              {/* Four sentences for four different situations, because "no executions" is the wrong
+                  thing to tell someone whose RPC just timed out — it reports a fact about the agent
+                  when the truth is that we never got to ask. */}
+              {execsError
+                ? `The router's logs could not be read: ${execsError}`
+                : execs === undefined
+                  ? `No ExecutionRouter is deployed on ${network.name}, so there is nothing to read execution history from.`
+                  : execs.length > 0
+                    ? `No ${filter} executions. This agent has ${execs.length} in total.`
+                    : 'Nothing has been commissioned from this agent yet. Every row here would be an ExecutionRouter event, so the first request anyone sends appears here.'}
             </p>
           )}
         </section>

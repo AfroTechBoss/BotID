@@ -24,7 +24,7 @@ import { formatToken } from '@/lib/token';
 
 export default function Overview() {
   const { network } = useNetwork();
-  const { data: agents, loading: agentsLoading } = useAgents(network.id);
+  const { data: agents, loading: agentsLoading, error: agentsError } = useAgents(network.id);
   const { data: activity, error: activityError, deployed } = useActivity(network.id);
   const now = useNow(1000);
 
@@ -65,7 +65,12 @@ export default function Overview() {
   // an em dash, which is the same idea but reads as a real value that happens to be blank — several
   // of these numbers are legitimately zero on a young network, and "—" next to "0" invites the
   // reader to work out which is which. A bar cannot be mistaken for a number.
-  const stat = (v: string | number) => (agents ? v : <Bar w="60%" h="0.8em" />);
+  //
+  // Keyed on `loading`, not on `!agents`. Keyed on the data these bars pulsed forever when the read
+  // failed, which is a placeholder that has stopped standing in for anything — the waiter left and
+  // the table is still laid. A failed read gets an em dash: not a number, not a promise of one, and
+  // the status bar in the footer already says the RPC is unreachable.
+  const stat = (v: string | number) => (agents ? v : agentsLoading ? <Bar w="60%" h="0.8em" /> : '—');
 
   return (
     // Exactly one screenful. The two columns and the status bar divide it up; nothing here grows
@@ -211,6 +216,14 @@ export default function Overview() {
               </div>
             )}
             {agentsLoading && <span className="sr-only" role="status">Loading agents on {network.name}</span>}
+            {/* Without this the table simply was not rendered when the read failed — no rows, no
+                skeleton, no heading body, no explanation. A blank space under a heading reads as
+                "there are none", which is a claim about the registry we had not earned. */}
+            {!agents && !agentsLoading && agentsError && (
+              <p className="text-muted" style={{ fontSize: 12 }}>
+                The registry could not be read: {agentsError}
+              </p>
+            )}
             {agents && agents.length === 0 && (
               <p className="text-muted" style={{ fontSize: 12 }}>
                 No agents registered on {network.name} yet. The contracts are deployed and nobody has
@@ -259,7 +272,15 @@ export default function Overview() {
                 detail line — rather than six identical bars. The feed is the part of this page a
                 reader watches, so it is the part where a placeholder that keeps the rhythm of the
                 real thing is worth the markup. */}
-            {!activity && deployed && (
+            {/* A read that failed is not a read still running. `!activity` alone kept the skeleton
+                on screen forever whenever the log scan threw, which is the worst of both: the page
+                claims to be working and the reader waits on something that already stopped. */}
+            {!activity && deployed && activityError && (
+              <div className="text-muted" style={{ padding: 'var(--space-4)', fontFamily: 'var(--font-body)', fontSize: 12 }}>
+                The feed could not be read: {activityError}
+              </div>
+            )}
+            {!activity && deployed && !activityError && (
               <div aria-busy="true">
                 <span className="sr-only" role="status">Loading the execution feed</span>
                 {Array.from({ length: 6 }, (_, i) => (

@@ -571,7 +571,7 @@ export default function Portal() {
             visible because the design question it answers (who watches a score you are not looking at?) is still open,
             and the honest answer today is nobody.
           </p>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)', marginTop: 'var(--space-3)', opacity: 0.55 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)', marginTop: 'var(--space-3)' }}>
             <div className="field">
               <label>Webhook URL</label>
               <input className="input" placeholder="https://…" disabled />

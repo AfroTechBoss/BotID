@@ -228,6 +228,18 @@ img { display: block; max-width: 100%; }
 .btn-ghost { color: var(--color-accent); padding-inline: var(--space-1); }
 .btn-block { width: 100%; margin-top: var(--space-2); justify-content: flex-start; text-align: left; }
 
+/* There was no disabled state in here at all, which was survivable while every button was a
+   fixture and none of them were ever disabled. The portal disables things for real — no wallet,
+   wrong chain, bond below the minimum, an early exit the contract refuses — and a full-strength
+   accent button that does nothing when clicked reads as a broken site rather than as a
+   precondition. `not-allowed` over `default` on purpose: the cursor is the only feedback a
+   disabled control can give on hover, and it should say "not yet", not "not a button". The
+   :hover overrides come after the base rules so they win without !important. */
+.btn:disabled, .btn[aria-disabled='true'] { opacity: 0.45; cursor: not-allowed; }
+.btn-primary:disabled:hover { background: var(--color-accent); }
+.btn-secondary:disabled:hover { background: transparent; }
+.input:disabled { opacity: 0.5; cursor: not-allowed; }
+
 .field > label { display: block; font-size: 12px; margin-bottom: 5px; color: color-mix(in srgb, var(--color-text) 70%, transparent); }
 .input {
   width: 100%; min-height: 36px; padding: 6px 10px; font: inherit; font-size: 14px; color: var(--color-text);

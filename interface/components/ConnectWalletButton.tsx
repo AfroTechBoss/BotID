@@ -18,14 +18,28 @@ export default function ConnectWalletButton() {
 
   if (!address) {
     return (
-      <span style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
+      // Positioned, not stacked. This was a two-item flex column, which made the whole control
+      // taller than the nav row — so the row centred it, the button rose above the nav's top edge
+      // and the message hung below its bottom border. Only the button is in flow now; the message
+      // floats under it like the account dropdown does, and the nav's height stops depending on
+      // whether a wallet happens to be installed.
+      <span style={{ position: 'relative', display: 'inline-block' }}>
         <button className="btn btn-secondary" onClick={connect} disabled={connecting}>
           {connecting ? 'Check your wallet…' : 'Connect wallet'}
         </button>
         {/* Only after a click. Rendering "no wallet found" on load would be the first thing a
             visitor reads, and it is not a problem until they try to do something. */}
         {error && !hasProvider && (
-          <span style={{ fontSize: 11, color: 'var(--score-critical)', maxWidth: 220, textAlign: 'right' }}>{error}</span>
+          <span
+            style={{
+              position: 'absolute', right: 0, top: 'calc(100% + 4px)', zIndex: 20,
+              background: 'var(--color-surface)', border: '1px solid var(--score-critical)',
+              padding: 'var(--space-2)', width: 220, textAlign: 'right',
+              fontSize: 11, color: 'var(--score-critical)',
+            }}
+          >
+            {error}
+          </span>
         )}
       </span>
     );

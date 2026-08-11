@@ -150,7 +150,9 @@ export default function About() {
           the reasoning is more useful than the conclusion.
         </p>
         {DECISIONS.map(([q, a]) => (
-          <div key={q} style={{ marginTop: 'var(--space-5)' }}>
+          {/* --space-6. There is no --space-5 in the scale, and an undefined custom property drops
+              the declaration rather than falling back, so these ran together with no gap at all. */}
+          <div key={q} style={{ marginTop: 'var(--space-6)' }}>
             <h4 style={{ marginBottom: 4 }}>{q}</h4>
             <p style={{ margin: 0 }}>{a}</p>
           </div>

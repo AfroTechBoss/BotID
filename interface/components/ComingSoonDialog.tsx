@@ -47,9 +47,17 @@ export default function ComingSoonDialog({ network, onClose }: { network: Networ
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
       <div className="overlay-panel" role="dialog" aria-modal="true" aria-labelledby="coming-soon-title">
-        <h2 id="coming-soon-title" style={{ fontSize: 20, margin: '0 0 var(--space-3)' }}>
-          {network.name} is coming soon
-        </h2>
+        <div className="overlay-head">
+          <h2 id="coming-soon-title" style={{ fontSize: 20, margin: 0 }}>
+            {network.name} is coming soon
+          </h2>
+          {/* A third way out, alongside Escape and the backdrop. The button below already dismisses,
+              but it is worded as a decision — "Stay on Bohr Testnet" — and someone who only wanted
+              to read the notice should not have to agree to something to close it. */}
+          <button type="button" className="overlay-close" onClick={onClose} aria-label="Close">
+            ×
+          </button>
+        </div>
         <p style={{ margin: '0 0 var(--space-3)' }}>
           BotID is not deployed on {network.name} yet. The chain is live, but none of our contracts
           are on it — no registry, no router, no bonds. Switching there would show you an interface

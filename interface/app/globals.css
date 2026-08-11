@@ -302,10 +302,21 @@ img { display: block; max-width: 100%; }
   background: color-mix(in srgb, #000 62%, transparent);
   display: flex; align-items: center; justify-content: center; padding: var(--space-4);
 }
+/* --space-6, not --space-5: the scale is 1, 2, 3, 4, 6, 8 and there is no 5. An undefined custom
+   property is not an error and does not fall back — the declaration is simply dropped, so the panel
+   rendered with no padding at all and the text sat against the border. */
 .overlay-panel {
   background: var(--color-surface); border: 1px solid var(--color-divider); box-shadow: var(--shadow-lg);
-  padding: var(--space-5); max-width: 460px; width: 100%;
+  padding: var(--space-6); max-width: 460px; width: 100%;
+  position: relative;
 }
+/* Room for the close control, so a long chain name does not run underneath it. */
+.overlay-head { display: flex; align-items: flex-start; gap: var(--space-4); margin-bottom: var(--space-3); }
+.overlay-close {
+  flex: none; margin-left: auto; background: none; border: 0; cursor: pointer; color: var(--text-muted);
+  font-family: var(--font-mono); font-size: 18px; line-height: 1; padding: 2px 6px;
+}
+.overlay-close:hover { color: var(--color-text); }
 
 .tag { display: inline-flex; align-items: center; font-size: 11px; letter-spacing: 0.02em; padding: 3px 10px; }
 .tag-outline { border: 1px solid var(--color-accent); color: var(--color-accent); }

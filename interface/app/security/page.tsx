@@ -101,8 +101,8 @@ export default function Security() {
 
         <div style={{ border: '2px solid var(--score-critical)', color: 'var(--score-critical)', padding: 'var(--space-3)', fontWeight: 600, margin: 'var(--space-4) 0', display: 'flex', flexDirection: 'column', gap: 8 }}>
           <span>Unaudited. No audit is scheduled and no bug bounty is open.</span>
-          <span>Not deployed to any public network. The only deployment artifact in this repository is a local devnet (chain 31337).</span>
-          <span>This interface runs on generated fixtures. Every agent, execution, score, address and chart in it is sample data, not chain state.</span>
+          <span>Deployed to Bohr testnet only (chain 968). Nothing is deployed to BOT Chain mainnet, and no address on mainnet is ours.</span>
+          <span>This interface still runs on generated fixtures. Every agent, execution, score and chart in it is sample data, not chain state. The contract addresses on this page are the exception — they are real and were read back from chain 968.</span>
         </div>
 
         <p>
@@ -114,9 +114,17 @@ export default function Security() {
 
         <h3>Deployment state</h3>
         <p>
-          BotID has no mainnet deployment and no public testnet deployment. Contracts have been
-          deployed and exercised end to end on a local Hardhat devnet only, most recently on
-          2026-08-09, with the bn254 precompiles confirmed present.
+          BotID is deployed on Bohr testnet, chain 968, as of 2026-08-11, with the bn254 precompiles
+          confirmed present. There is no mainnet deployment. Bohr is a testnet: its BOT has no
+          value, the chain carries no uptime commitment, and the deployment can be replaced without
+          notice. Nothing there is a place to put capital you expect to keep.
+        </p>
+        <p>
+          The owner of every parameter on that deployment is a single externally-owned key, which is
+          also the deployer and the only registered feed publisher. That is three roles on one key:
+          it can change the capital limits, it alone signs the input readings every execution is
+          judged against, and losing it loses all three at once. Acceptable on a testnet, stated
+          plainly because it is exactly the sort of thing that quietly survives into mainnet.
         </p>
         <p>
           The table below is load-bearing: it is this site&apos;s answer to &ldquo;is this the real
@@ -125,27 +133,33 @@ export default function Security() {
           exists for that network.
         </p>
         <p>
-          The single entry is the bond token, and it is there because it is the one address that is
-          knowable in advance: USDT is not ours, it was already deployed, and agents will post their
-          bonds in it. It is listed per network because the two addresses differ — and using the
-          mainnet one on Bohr does not fail, it resolves to an unrelated token with different
-          decimals. Both were verified by calling the contracts directly.
+          Switch the nav to BOT Chain and the table disappears, because there is nothing of ours to
+          list there. The bond token is the exception on both networks and is marked as such: USDT
+          is not ours, it was already deployed, and agents post their bonds in it. It is listed per
+          network because the two addresses differ — and using the mainnet one on Bohr does not
+          fail, it resolves to an unrelated token with different decimals. Every address in the
+          table, ours and USDT alike, was verified by calling the deployed contracts directly rather
+          than copied out of the deploy log.
         </p>
         <ContractsTable />
         <p>
-          <strong>No address in that table other than the bond token is a BotID contract yet.</strong>{' '}
-          Any address presented to you as <em>our</em> contract today — in a message, a post, a
-          wallet prompt or a fork of this site — is not one. There is nothing to be confused with
-          yet, which makes this the one moment when the answer is unambiguous.
+          <strong>That table is the whole list.</strong> An address presented to you as{' '}
+          <em>our</em> contract — in a message, a post, a wallet prompt or a fork of this site — and
+          not appearing above is not ours, whatever it is named after. Until today the honest answer
+          was &ldquo;none of them are real&rdquo;, which was easy to check and impossible to
+          impersonate. That is over: there are real addresses now, so check the one you are about to
+          sign against this table character by character, and check it against the explorer link
+          rather than against the string someone sent you.
         </p>
 
-        <h6 style={HEAD}>The contracts that will appear there</h6>
+        <h6 style={HEAD}>The contracts that appear there</h6>
         <p>
-          Named here so a future table can be checked against something written down. The protocol is{' '}
+          Named here so the table can be checked against something written down. The protocol is{' '}
           <code>AgentRegistry</code>, <code>ExecutionRouter</code>, <code>InputAttestor</code>,{' '}
           <code>ReputationEngine</code>, the three tier adapters —{' '}
-          <code>SignatureAdapter</code>, <code>TeeAdapter</code>, <code>ZkAdapter</code> — and the
-          ERC-20 <code>bondToken</code>. Nothing else. An earlier version of this page listed
+          <code>SignatureAdapter</code>, <code>TeeAdapter</code>, <code>ZkAdapter</code> — the
+          generated <code>Halo2Verifier</code> that <code>ZkAdapter</code> calls, and the ERC-20{' '}
+          <code>bondToken</code>. Nothing else. An earlier version of this page listed
           contracts called RequestManager, ScoreRegistry and BondVault; they have never existed, and
           the addresses beside them were placeholders. That was the exact error this table is
           supposed to prevent, so it is recorded here rather than quietly deleted.
@@ -153,13 +167,16 @@ export default function Security() {
 
         <h6 style={HEAD}>Verifier &amp; model registrations</h6>
         <p>
-          Intended to be read live from <code>ZkAdapter</code>. There is no adapter to read on a
-          public network, so there is nothing to show; the reference circuit is{' '}
-          <code>botid.reference-allocator.v1</code> at an input scale of 8 bits, whose commitment is{' '}
-          <code>keccak256</code> of that name.
-        </p>
-        <p className="text-muted" style={{ fontSize: 13 }}>
-          No registrations on the selected network.
+          Intended to be read live from <code>ZkAdapter</code>; still transcribed here rather than
+          fetched, so treat it as a claim to check and not as chain state. On Bohr one model is
+          registered: <code>botid.reference-allocator.v1</code> at an input scale of 8 bits, whose
+          commitment is <code>keccak256</code> of that name —{' '}
+          <code style={{ wordBreak: 'break-all' }}>
+            0x08a284ace0e1e53d8ecffe84217e9680646ac0264ab252948dabbfe7f54d8fa2
+          </code>{' '}
+          — bound to the <code>Halo2Verifier</code> in the table above. Read back from{' '}
+          <code>ZkAdapter.modelFor()</code> on 2026-08-11. Nothing is registered on mainnet, because
+          there is no mainnet adapter.
         </p>
 
         <h3>Threat model</h3>
@@ -284,10 +301,12 @@ export default function Security() {
           <section>
             <h6 style={{ color: 'var(--text-muted)', marginBottom: 'var(--space-2)' }}>Please do not test on us</h6>
             <p style={{ margin: 0 }}>
-              With no deployment and no bounty, there is no authorised target. Do not attempt live
-              testing against BOT Chain infrastructure or against this site. Run the contracts
-              locally instead — the devnet deploy script is in the repository, and findings from a
-              local run are just as welcome.
+              The Bohr deployment is a fair target and testnet BOT is free, so hammer it. What is
+              not a target is BOT Chain mainnet, this site&apos;s hosting, or anything belonging to
+              the chain operators — none of that is ours to authorise. Running the contracts locally
+              works too; the deploy script is in the repository, and findings from a local run are
+              just as welcome. There is still no bounty, so this is permission to test, not an offer
+              of payment or a safe-harbour commitment.
             </p>
           </section>
 

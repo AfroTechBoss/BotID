@@ -15,6 +15,14 @@ export interface Network {
   /** Lowercase short form, for the status bars that sit in mono type. */
   short: string;
   chainId: number;
+  /**
+   * Blockscout base, no trailing slash. Lives here rather than in contracts.ts because it is a
+   * property of the chain, not of any one address — and because a table that renders an address
+   * under a network heading must build its link from the same object that supplied the heading.
+   * Held apart, the two can disagree, which is how an address ends up linking to the wrong chain's
+   * explorer and reading as confirmation.
+   */
+  explorer: string;
 }
 
 // Chain ids come from docs/architecture.md, which records them alongside the bn254 precompile
@@ -22,9 +30,15 @@ export interface Network {
 // Bohr is 968 at https://rpc.bohr.life and BOT Chain is 677 at https://rpc.botchain.ai. A wrong
 // chain id on an interface whose security page exists to answer "is this the real BotID" is not a
 // cosmetic error, so it is worth stating where the right ones came from.
+// Bohr's explorer is recorded as "not published" in interface/README.md, which was true when that
+// table was written and is not any more: scan.bohr.life answers, runs Blockscout, and its
+// /api/v2/addresses endpoint returns our AgentRegistry with the right creator. Probed 2026-08-11
+// against the deployed address rather than assumed from the hostname pattern — an explorer that
+// exists but indexes a different chain would render a "not found" page under a real address, on
+// the one page whose job is to prove an address is ours.
 export const NETWORKS: Network[] = [
-  { id: 'testnet', name: 'Bohr Testnet', short: 'testnet', chainId: 968 },
-  { id: 'mainnet', name: 'BOT Chain', short: 'mainnet', chainId: 677 },
+  { id: 'testnet', name: 'Bohr Testnet', short: 'testnet', chainId: 968, explorer: 'https://scan.bohr.life' },
+  { id: 'mainnet', name: 'BOT Chain', short: 'mainnet', chainId: 677, explorer: 'https://scan.botchain.ai' },
 ];
 
 interface NetworkContextValue {

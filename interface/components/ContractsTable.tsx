@@ -14,8 +14,12 @@ import { CONTRACTS } from '@/lib/contracts';
 export default function ContractsTable() {
   const { network } = useNetwork();
   const rows = CONTRACTS[network.id];
+  // Counted over BotID's own deployments, not over rows. The bond token is present on every
+  // network whether or not we have deployed anything there, so `rows.length` answers a different
+  // question than the one this notice asks.
+  const deployed = rows.some((c) => !c.dependency);
 
-  if (rows.length === 0) {
+  if (!deployed) {
     return (
       <p
         style={{ border: '2px solid var(--color-divider)', padding: 'var(--space-3)', fontSize: 13 }}
@@ -44,8 +48,29 @@ export default function ContractsTable() {
         <tbody>
           {rows.map((c) => (
             <tr key={c.name}>
-              <td>{c.name}</td>
-              <td><a href="#" style={{ fontFamily: 'var(--font-mono)' }}>{c.address}</a></td>
+              <td>
+                {c.name}
+                {/* Said on the row rather than in a footnote. A reader scanning for "is this
+                    BotID" reads one line at a time, and USDT sitting unlabelled among eight of
+                    our addresses reads as the ninth. */}
+                {c.dependency && (
+                  <span className="text-muted" style={{ fontSize: 11 }}> &mdash; external, not deployed by BotID</span>
+                )}
+              </td>
+              <td>
+                {/* Was href="#", which on this page is worse than no link: an address that looks
+                    checkable and goes nowhere is the same gesture a fake would make. The base
+                    comes off `network`, the same object that captions the table, so the link
+                    cannot point at a chain other than the one named above it. */}
+                <a
+                  href={`${network.explorer}/address/${c.address}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{ fontFamily: 'var(--font-mono)' }}
+                >
+                  {c.address}
+                </a>
+              </td>
             </tr>
           ))}
         </tbody>

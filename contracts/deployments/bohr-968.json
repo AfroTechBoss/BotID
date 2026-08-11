@@ -1,0 +1,35 @@
+{
+  "network": "bohr",
+  "chainId": 968,
+  "deployedAt": "2026-08-11T12:10:00.010Z",
+  "deployer": "0x3Ae2AfdeF2391E2AC78e1eb901aF4092E5cb6731",
+  "owner": "0x3Ae2AfdeF2391E2AC78e1eb901aF4092E5cb6731",
+  "treasury": "0x27F2b72256bAAFF93dCfD50addBFd63F45e2e091",
+  "bn254Precompiles": true,
+  "bondTokenDecimals": 6,
+  "parameters": {
+    "halfWeight": "1000000000",
+    "weightCap": "10000000000",
+    "minBond": "100000000",
+    "globalNotionalCap": "5000000000000",
+    "challengeBondAmount": "50000000"
+  },
+  "contracts": {
+    "bondToken": "0x75edC9335175Fc0552D51D48439F229c10420fe3",
+    "ReputationEngine": "0x5BACDa942BD8523a41E1815cE97484be68252597",
+    "AgentRegistry": "0x7E1A468Fc20E1d3EE11953eE46EF0572d3B26914",
+    "InputAttestor": "0xA7c37d4E197A12A2de6753b3D53FE698C39fAc8B",
+    "ExecutionRouter": "0x0D56ca1b8D5FDE1F8b116f051cFaEa199E367416",
+    "SignatureAdapter": "0x91188177F461E63d668d74fa80b4be77ecea0FB0",
+    "TeeAdapter": "0x18493523A37831a9bFacBC99F3C3932368592fa5",
+    "ZkAdapter": "0x43bbB50D02567005B7dD6F147E0D96b80a8409B9",
+    "Halo2Verifier": "0x4A29F6F49Ef8c7ff6CbC8879659b5C79ADa154b7"
+  },
+  "goldModel": {
+    "name": "botid.reference-allocator.v1",
+    "commitment": "0x08a284ace0e1e53d8ecffe84217e9680646ac0264ab252948dabbfe7f54d8fa2",
+    "inputScaleBits": 8,
+    "verifier": "0x4A29F6F49Ef8c7ff6CbC8879659b5C79ADa154b7"
+  },
+  "pendingOwnerCalls": []
+}

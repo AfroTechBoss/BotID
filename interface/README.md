@@ -75,7 +75,7 @@ are hand-built. That is where the design budget goes.
 | Chain ID | 677 | 968 |
 | RPC | `https://rpc.botchain.ai` | `https://rpc.bohr.life` |
 | WSS | `wss://ws-rpc.botchain.ai` | not published |
-| Explorer | `https://scan.botchain.ai` (Blockscout) | not published |
+| Explorer | `https://scan.botchain.ai` (Blockscout) | `https://scan.bohr.life` (Blockscout) |
 | Native | BOT, 18 decimals, no contract | BOT (test) |
 | Block time | ~0.75s | ~0.75s |
 | Gas | flat 20 gwei, `baseFeePerGas` 0 | flat 20 gwei |

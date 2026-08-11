@@ -15,6 +15,11 @@ relayer/.bundles/
 # that actually gets deployed, and it should be reviewable in a diff.
 circuits/build/*
 !circuits/build/Verifier.sol
+
+# Hardhat will not import across the project boundary, so hardhat.config.js keeps a copy of the
+# verifier inside the sources tree and refreshes it on every command. Ignored so there is one
+# reviewable version — the one above, beside the circuit that generated it.
+contracts/src/verifiers/Halo2Verifier.sol
 circuits/.venv/
 __pycache__/
 

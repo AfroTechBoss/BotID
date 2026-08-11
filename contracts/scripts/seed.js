@@ -23,10 +23,16 @@ const E18 = (n) => ethers.parseEther(String(n));
 const OPERATOR_KEY = "0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d";
 const PUBLISHER_KEY = "0x8b3a350cf5c34c9194ca85829a2df0ec3153be0318b5e2d3348e872092edffba";
 
-// `input_scale` from circuits/spec.json. The adapter quantises a revealed feed value by this
-// before comparing it to the circuit's public input cell, so a wrong number here rejects every
-// honest Gold proof for the model.
-const INPUT_SCALE_BITS = 8;
+// The model identity and its `input_scale`, read from circuits/spec.json — the same source
+// deploy.js binds the real verifier from. These were a literal 8 and a literal `ethers.id(...)`
+// here, which meant a change to the circuit's scale left the local seed silently disagreeing
+// with every deployment: the tier that is meant to be the court of last resort would work in
+// development and reject every honest proof in production, which is the worst direction for that
+// particular disagreement to run.
+const SPEC = JSON.parse(
+  fs.readFileSync(path.join(__dirname, "..", "..", "circuits", "spec.json"), "utf8")
+);
+const INPUT_SCALE_BITS = SPEC.inputScaleBits;
 
 async function main() {
   const chainId = (await ethers.provider.getNetwork()).chainId;
@@ -55,7 +61,7 @@ async function main() {
 
   await (await attestor.setPublisher(publisher.address, true)).wait();
 
-  const modelCommitment = ethers.id("botid.reference-allocator.v1");
+  const modelCommitment = ethers.id(SPEC.name);
 
   for (const who of [consumer, agentOwner, challenger]) {
     await (await token.mint(who.address, E18(10_000_000))).wait();

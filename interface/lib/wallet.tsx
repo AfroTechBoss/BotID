@@ -5,18 +5,46 @@ import { CHAINS } from './chain';
 import { useNetwork, type NetworkId } from './network';
 
 /**
- * The injected provider, and only the injected provider.
+ * Injected wallets, discovered rather than assumed.
  *
- * No WalletConnect, no connector registry, no modal. One connector means the entire surface is
- * `window.ethereum`, three RPC methods and two events — which is a file this size. Adding a second
- * connector later is a change to this module and nothing else, because everything downstream reads
- * the context rather than the provider.
+ * This used to read `window.ethereum` and nothing else, which works right up until the browser has
+ * two wallets in it. `window.ethereum` is a single slot on a shared shelf: whichever extension
+ * loads last puts its own object there, and some of them wrap the slot in a chooser that throws
+ * from inside its own selection prompt. That is the `evmAsk.js … selectExtension` failure — not our
+ * code erroring, but two extensions arguing over one property while our code watched the property.
+ *
+ * EIP-6963 replaces the shelf with a roll call. The page shouts `eip6963:requestProvider`, every
+ * installed wallet answers with `eip6963:announceProvider` carrying its own handle, and each one is
+ * addressed directly from then on. Nothing is overwritten because nothing is shared.
+ *
+ * Still no WalletConnect and no connector registry — the surface is a provider, three RPC methods
+ * and two events. What changed is that there can now be more than one of them, and the user says
+ * which. Everything downstream reads the context rather than the provider, so it is unaffected.
  */
 declare global {
   interface Window {
     ethereum?: EIP1193Provider;
   }
 }
+
+/** EIP-6963's announcement payload, narrowed to the fields we use. */
+interface Eip6963Detail {
+  info: { uuid: string; name: string; icon: string; rdns: string };
+  provider: EIP1193Provider;
+}
+
+export interface DiscoveredWallet {
+  /** Reverse-DNS id, e.g. `io.metamask`. Stable across sessions, which is why it is what we store. */
+  rdns: string;
+  name: string;
+  /** A data URI from the wallet itself, or '' for the legacy fallback entry. */
+  icon: string;
+  provider: EIP1193Provider;
+}
+
+/** The synthetic entry for a wallet too old to announce itself. */
+const LEGACY_RDNS = 'legacy.injected';
+const STORAGE_KEY = 'botid.wallet.rdns';
 
 interface WalletState {
   address: Address | undefined;
@@ -28,7 +56,12 @@ interface WalletState {
   /** Set when a connect or switch attempt failed, for display. Cleared on the next attempt. */
   error: string | undefined;
   hasProvider: boolean;
-  connect: () => Promise<void>;
+  /** Every wallet that answered the roll call. Empty until the first client tick. */
+  wallets: DiscoveredWallet[];
+  /** The one being used, once there is one. Undefined while several are installed and none chosen. */
+  activeWallet: DiscoveredWallet | undefined;
+  /** Pass an rdns to pick a specific wallet; omit it when there is only one to pick. */
+  connect: (rdns?: string) => Promise<void>;
   disconnect: () => void;
   switchToSelected: () => Promise<void>;
   /** A client bound to the connected account, or undefined when not connected. */
@@ -42,6 +75,8 @@ const WalletContext = createContext<WalletState>({
   connecting: false,
   error: undefined,
   hasProvider: false,
+  wallets: [],
+  activeWallet: undefined,
   connect: async () => {},
   disconnect: () => {},
   switchToSelected: async () => {},
@@ -57,13 +92,56 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
   // Resolved in an effect rather than read during render: `window` does not exist on the server,
   // and a value that differs between the server render and the first client render is exactly what
   // makes React throw away the server HTML. So the first client render agrees with the server —
-  // no provider — and the truth arrives one tick later.
-  const [hasProvider, setHasProvider] = useState(false);
+  // no wallets — and the truth arrives one tick later.
+  const [wallets, setWallets] = useState<DiscoveredWallet[]>([]);
+  const [chosenRdns, setChosenRdns] = useState<string>();
 
+  // --- discovery ---------------------------------------------------------------------------
   useEffect(() => {
-    const eth = window.ethereum;
+    setChosenRdns(localStorage.getItem(STORAGE_KEY) ?? undefined);
+
+    const onAnnounce = (e: Event) => {
+      const detail = (e as CustomEvent<Eip6963Detail>).detail;
+      if (!detail?.info?.rdns || !detail.provider) return;
+      setWallets((prev) => {
+        // A wallet may announce more than once — on its own initiative and again in reply to our
+        // request. Keyed by rdns so the list stays one entry per wallet either way. And a real
+        // announcement retires the legacy guess: it is the same extension, better identified.
+        const kept = prev.filter((w) => w.rdns !== detail.info.rdns && w.rdns !== LEGACY_RDNS);
+        return [...kept, { rdns: detail.info.rdns, name: detail.info.name, icon: detail.info.icon, provider: detail.provider }];
+      });
+    };
+
+    window.addEventListener('eip6963:announceProvider', onAnnounce);
+    window.dispatchEvent(new Event('eip6963:requestProvider'));
+
+    // Wallets answer the roll call synchronously in practice, so anything still silent after a
+    // beat predates the standard. Falling back to `window.ethereum` then keeps older wallets
+    // working; doing it immediately instead would list the same wallet twice for a beat.
+    const timer = setTimeout(() => {
+      setWallets((prev) => {
+        if (prev.length > 0 || !window.ethereum) return prev;
+        return [{ rdns: LEGACY_RDNS, name: 'Browser wallet', icon: '', provider: window.ethereum }];
+      });
+    }, 300);
+
+    return () => {
+      window.removeEventListener('eip6963:announceProvider', onAnnounce);
+      clearTimeout(timer);
+    };
+  }, []);
+
+  // The stored choice wins. Failing that, one installed wallet needs no choosing — it is only when
+  // several are present and none has been picked that this stays undefined and the button asks.
+  const activeWallet = useMemo(() => {
+    const stored = chosenRdns ? wallets.find((w) => w.rdns === chosenRdns) : undefined;
+    return stored ?? (wallets.length === 1 ? wallets[0] : undefined);
+  }, [wallets, chosenRdns]);
+
+  // --- the active wallet's account and chain -----------------------------------------------
+  useEffect(() => {
+    const eth = activeWallet?.provider;
     if (!eth) return;
-    setHasProvider(true);
 
     // Reconnect silently if the wallet already has this site authorised. eth_accounts, not
     // eth_requestAccounts: the former reports existing permission, the latter *asks*, and a page
@@ -85,37 +163,52 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
       eth.removeListener('accountsChanged', onAccounts);
       eth.removeListener('chainChanged', onChain);
     };
-  }, []);
+  }, [activeWallet]);
 
-  const connect = useCallback(async () => {
-    const eth = window.ethereum;
-    if (!eth) {
-      setError('No wallet found. Install a browser wallet, then reload.');
-      return;
-    }
-    setConnecting(true);
-    setError(undefined);
-    try {
-      const accts = (await eth.request({ method: 'eth_requestAccounts' })) as Address[];
-      setAddress(accts[0]);
-      setWalletChainId(Number(await eth.request({ method: 'eth_chainId' })));
-    } catch (e) {
-      setError(walletMessage(e));
-    } finally {
-      setConnecting(false);
-    }
-  }, []);
+  const connect = useCallback(
+    async (rdns?: string) => {
+      const target = rdns ? wallets.find((w) => w.rdns === rdns) : activeWallet;
+      if (!target) {
+        setError(
+          wallets.length === 0
+            ? 'No wallet found. Install a browser wallet, then reload.'
+            : 'Choose which wallet to connect.'
+        );
+        return;
+      }
+      setConnecting(true);
+      setError(undefined);
+      try {
+        const accts = (await target.provider.request({ method: 'eth_requestAccounts' })) as Address[];
+        setAddress(accts[0]);
+        setWalletChainId(Number(await target.provider.request({ method: 'eth_chainId' })));
+        // Remembered only once a wallet has actually authorised us. Storing the choice on click
+        // would pin the tab to a wallet the user then cancelled out of.
+        setChosenRdns(target.rdns);
+        localStorage.setItem(STORAGE_KEY, target.rdns);
+      } catch (e) {
+        setError(walletMessage(e));
+      } finally {
+        setConnecting(false);
+      }
+    },
+    [wallets, activeWallet]
+  );
 
   // Local only, and labelled as such wherever it is offered. EIP-1193 has no "log out": the site
   // keeps its permission until revoked in the wallet, so this forgets the account for the tab and
   // nothing more. Calling it a disconnect without saying that would overstate what happened.
+  // The remembered wallet goes too, so the next connect can land on a different one.
   const disconnect = useCallback(() => {
     setAddress(undefined);
     setError(undefined);
+    setWalletChainId(undefined);
+    setChosenRdns(undefined);
+    localStorage.removeItem(STORAGE_KEY);
   }, []);
 
   const switchToSelected = useCallback(async () => {
-    const eth = window.ethereum;
+    const eth = activeWallet?.provider;
     if (!eth) return;
     const chain = CHAINS[network.id];
     setError(undefined);
@@ -148,16 +241,19 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         setError(walletMessage(e));
       }
     }
-  }, [network.id]);
+  }, [network.id, activeWallet]);
 
   const walletClient = useMemo(() => {
-    if (!address || typeof window === 'undefined' || !window.ethereum) return undefined;
+    if (!address || !activeWallet) return undefined;
     return createWalletClient({
       account: address,
       chain: CHAINS[network.id],
-      transport: custom(window.ethereum),
+      // The chosen wallet's own handle, not window.ethereum. With two wallets installed those are
+      // different objects, and signing through the wrong one is how a transaction gets sent from
+      // an account the page is not showing.
+      transport: custom(activeWallet.provider),
     });
-  }, [address, network.id]);
+  }, [address, network.id, activeWallet]);
 
   const value = useMemo<WalletState>(
     () => ({
@@ -166,13 +262,15 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
       onSelectedChain: walletChainId === network.chainId,
       connecting,
       error,
-      hasProvider,
+      hasProvider: wallets.length > 0,
+      wallets,
+      activeWallet,
       connect,
       disconnect,
       switchToSelected,
       walletClient,
     }),
-    [address, walletChainId, network.chainId, connecting, error, hasProvider, connect, disconnect, switchToSelected, walletClient]
+    [address, walletChainId, network.chainId, connecting, error, wallets, activeWallet, connect, disconnect, switchToSelected, walletClient]
   );
 
   return <WalletContext.Provider value={value}>{children}</WalletContext.Provider>;

@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32">
+  <!-- Colours are literal, not var(--color-accent): a favicon is fetched as its own document and
+       never sees the page's stylesheet. These are the dark theme's --color-bg and --color-accent,
+       which is the pair that survives both a light and a dark browser tab strip. -->
+  <rect width="32" height="32" rx="6" fill="#171615"/>
+  <rect x="6" y="6" width="20" height="20" rx="3" fill="none" stroke="#ff563c" stroke-width="2.5"/>
+  <rect x="13" y="13" width="6" height="6" rx="1" fill="#ff563c"/>
+</svg>

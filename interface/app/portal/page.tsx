@@ -71,7 +71,7 @@ const UNBONDING_STEPS = ['Requested', 'Day 7', 'Day 14', 'Day 21 — withdrawabl
 
 export default function Portal() {
   const { network } = useNetwork();
-  const { address, onSelectedChain, walletClient, connect, connecting, switchToSelected, hasProvider } = useWallet();
+  const { address, onSelectedChain, walletClient, connect, connecting, switchToSelected, hasProvider, wallets } = useWallet();
   const tx = useTx();
 
   const registry = registryAddress(network.id);
@@ -606,9 +606,16 @@ export default function Portal() {
       return (
         <div style={{ ...style, display: 'flex', gap: 'var(--space-3)', alignItems: 'center', flexWrap: 'wrap' }}>
           <span>Connect a wallet to register an agent or manage a bond.</span>
-          <button className="btn btn-secondary" onClick={connect} disabled={connecting}>
-            {connecting ? 'Connecting…' : 'Connect wallet'}
-          </button>
+          {/* With more than one wallet installed the choice has to be made somewhere, and the nav
+              control is where the picker lives. Offering a second button here that could only
+              answer "which one?" with an error is worse than pointing at the one that asks. */}
+          {wallets.length > 1 ? (
+            <span className="text-muted">Use the wallet button in the header to pick one of your {wallets.length} wallets.</span>
+          ) : (
+            <button className="btn btn-secondary" onClick={() => connect()} disabled={connecting}>
+              {connecting ? 'Connecting…' : 'Connect wallet'}
+            </button>
+          )}
         </div>
       );
     }

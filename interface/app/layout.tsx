@@ -27,7 +27,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     // The cost is that this opts every route into dynamic rendering — acceptable here, where
     // every page already renders per-request data.
     <html lang="en" data-theme={readTheme()} className={`${cabinet.variable} ${satoshi.variable}`}>
-      <body>
+      {/* Grammarly and its kind stamp their own attributes onto <body> the moment the HTML lands —
+          data-gr-ext-installed and friends — which is before React hydrates. React then compares
+          the DOM it finds against the HTML it sent, sees attributes it did not write, and reports
+          a hydration mismatch it can do nothing about: the markup is ours, the extra attributes
+          are not. Suppression here is one element deep, covering this tag's own attributes and
+          nothing inside it, so a real mismatch in the tree still shouts. */}
+      <body suppressHydrationWarning>
         {/* The provider wraps the whole frame, not just the nav, because the switcher in the nav
             and the labels in the footer and the status bars have to name the same chain. */}
         {/* WalletProvider inside NetworkProvider, not beside it: the wallet client is bound to the

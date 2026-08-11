@@ -62,6 +62,36 @@ export function publicClient(network: NetworkId): PublicClient {
   return client;
 }
 
+/**
+ * Seconds per block, both chains. Used only to turn a block number into an approximate wall clock
+ * for bucketing — never to date a single event, which is read off the block itself.
+ */
+export const BLOCK_TIME_MS = 750;
+
+/**
+ * The largest span a single `eth_getLogs` may cover.
+ *
+ * Public RPCs cap the range and answer a wider one with an error rather than a truncated result,
+ * so the cap has to be ours or theirs — and theirs arrives as a failed page. 50k blocks is under
+ * every limit we have seen and is about ten hours of Bohr.
+ *
+ * This matters more each day rather than less. The deployment is currently ~43k blocks behind the
+ * head, which fits in one window; at 115k blocks a day, a month from now it is thirty windows and
+ * thirty round trips for a page that renders one table. That is the point at which an indexer
+ * stops being a nicety.
+ */
+export const LOG_WINDOW = 50_000n;
+
+/** Splits [from, to] into windows the RPC will accept. Inclusive at both ends. */
+export function logWindows(from: bigint, to: bigint): { fromBlock: bigint; toBlock: bigint }[] {
+  const out: { fromBlock: bigint; toBlock: bigint }[] = [];
+  for (let start = from; start <= to; start += LOG_WINDOW) {
+    const end = start + LOG_WINDOW - 1n;
+    out.push({ fromBlock: start, toBlock: end > to ? to : end });
+  }
+  return out;
+}
+
 /** Explorer URL for an address or a transaction hash on `network`. */
 export function explorerLink(network: NetworkId, kind: 'address' | 'tx', value: string): string {
   return `${CHAINS[network].blockExplorers.default.url}/${kind}/${value}`;

@@ -11,8 +11,12 @@
 //  2. Base units. Capital amounts are bigint, never number — see lib/token.ts for why.
 
 import { applyBps, toBaseUnits } from './token';
+import { TIERS, TIER_META, formatNum, timeAgo as timeAgoAt, type Tier } from './format';
 
 export { formatToken, formatTokenParts, BOND_TOKEN, toBaseUnits, ratio, pct } from './token';
+// Re-exported rather than defined here since these moved to lib/format.ts — see the header there.
+// The fixture pages import them from this module and did not have to change.
+export { TIERS, TIER_META, shortHash, formatNum, scoreBand, scoreColorVar, type Tier } from './format';
 
 /**
  * Fixed reference instant. Fixtures are relative to this, not to `now`.
@@ -51,14 +55,6 @@ const hex = (n: number, r: () => number = rnd) =>
 const addr = (r: () => number = rnd) => '0x' + hex(40, r);
 const reqId = (r: () => number = rnd) => '0x' + hex(64, r);
 
-export type Tier = 'bronze' | 'silver' | 'gold';
-export const TIERS: Tier[] = ['bronze', 'silver', 'gold'];
-export const TIER_META: Record<Tier, { label: string; rings: number; dot: boolean; color: string }> = {
-  bronze: { label: 'Bronze', rings: 1, dot: false, color: 'var(--tier-bronze)' },
-  silver: { label: 'Silver', rings: 2, dot: false, color: 'var(--tier-silver)' },
-  gold: { label: 'Gold', rings: 2, dot: true, color: 'var(--tier-gold)' },
-};
-
 /** Credit multiplier by tier, in basis points. Mirrors tierFactor × leverage on chain. */
 const LEVERAGE_BPS: Record<Tier, number> = { bronze: 25_000, silver: 42_000, gold: 60_000 };
 
@@ -69,29 +65,17 @@ export interface Agent {
   lastActiveAt: number; modelCommitment: string;
 }
 
-export function shortHash(h: string, n = 4) {
-  if (!h) return '';
-  return h.slice(0, n + 2) + '…' + h.slice(-n);
-}
-
-export function formatNum(n: number) { return n.toLocaleString('en-US'); }
-
+/**
+ * The fixture pages' relative time, defaulted to the fixture instant.
+ *
+ * The default lives here rather than in lib/format.ts on purpose: MOCK_NOW is a build-time
+ * constant, and a chain-backed page that forgot the argument would have dated a real event against
+ * the moment the bundle was compiled. Fixtures are the only callers that should get that default,
+ * so it is defined in the fixture module.
+ */
 export function timeAgo(ts: number, now = MOCK_NOW) {
-  const s = Math.max(0, Math.floor((now - ts) / 1000));
-  if (s < 60) return s + 's ago';
-  const m = Math.floor(s / 60); if (m < 60) return m + 'm ago';
-  const h = Math.floor(m / 60); if (h < 24) return h + 'h ago';
-  return Math.floor(h / 24) + 'd ago';
+  return timeAgoAt(ts, now);
 }
-
-export function scoreBand(score: number) {
-  if (score < 2500) return 'critical';
-  if (score < 4500) return 'weak';
-  if (score < 5500) return 'neutral';
-  if (score < 8000) return 'good';
-  return 'strong';
-}
-export function scoreColorVar(score: number) { return `var(--score-${scoreBand(score)})`; }
 
 function makeAgent(id: number, opts: Partial<Omit<Agent, 'bond'>> & { bond?: number; stale?: boolean } = {}): Agent {
   const tier = opts.tier || pick(TIERS);

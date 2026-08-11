@@ -1,154 +1,130 @@
 'use client';
 import { useState } from 'react';
 import BotIdBadge from '@/components/BotIdBadge';
-import { SAMPLE_AGENT, TIER_META, MOCK_NOW, genScoreHistory, genExecutions, formatToken, formatNum, timeAgo, scoreColorVar, shortHash, toBaseUnits, ratio, pct } from '@/lib/mock-data';
-import SampleData from '@/components/SampleData';
+import { useNetwork } from '@/lib/network';
+import { useAgent, useAgentExecutions, useNow } from '@/lib/useChain';
+import { registryAddress, tierNameOf } from '@/lib/registry';
+import { explorerLink } from '@/lib/chain';
+import { TIER_META, formatNum, timeAgo, scoreColorVar, shortHash } from '@/lib/format';
+import { formatToken, ratio, pct } from '@/lib/token';
+import type { ExecStatus } from '@/lib/activity';
 
-const STATUS_COLOR: Record<string, string> = {
+// Read from the chain, like the leaderboard that links here. Until this page was converted, that
+// link was actively misleading: a real row for a real agent opened a profile rendering a fixture,
+// so agent #1 appeared to have ninety days of history and twenty executions on a registry that had
+// been live for under an hour. A wrong number is worse when it is reached from a right one.
+//
+// Two things that were on this page are gone rather than converted.
+//
+// The 90-day score chart needed a score *history*, and ReputationEngine overwrites the score in
+// place — the previous value is not stored anywhere on chain, and no event carries it. It could be
+// reconstructed by replaying every settlement through the scoring formula, which is exactly the job
+// an indexer exists to do. Drawing a line through one real point and eighty-nine invented ones is
+// not a lesser version of that; it is a different claim entirely.
+//
+// The model panel's name, verifier and scale were three fixture strings. The commitment is a hash
+// with no preimage on chain, so what it commits to is knowable only to whoever produced it. The
+// panel now shows the fields the registry actually holds.
+
+const STATUS_COLOR: Record<ExecStatus, string> = {
   Settled: 'var(--score-good)', Finalized: 'var(--tier-gold)', Challenged: 'var(--state-pending)',
-  Faulted: 'var(--state-slashed)', Expired: 'var(--score-critical)', Pending: 'var(--color-neutral-500)',
+  Faulted: 'var(--state-slashed)', Expired: 'var(--score-critical)',
+  Delivered: 'var(--color-neutral-700)', Pending: 'var(--color-neutral-500)',
 };
-
-// A history point's `day` is its index, counting up to the fixture instant. Formatted in UTC for
-// the same reason every other date here is: a value that depends on the reader's clock or timezone
-// renders differently on the server and in the browser.
-const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-function dayLabel(day: number, lastDay: number) {
-  const d = new Date(MOCK_NOW - (lastDay - day) * 86_400_000);
-  return `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
-}
 
 export default function AgentProfile({ params }: { params: { id: string } }) {
   const [filter, setFilter] = useState<'all' | 'settled' | 'challenged' | 'faulted'>('all');
-  const [hi, setHi] = useState<number | null>(null);   // index into `history` the readout is showing
-  const a = SAMPLE_AGENT; // swap for a real lookup by params.id against the data-access layer
-  const tm = TIER_META[a.tier];
-  const history = genScoreHistory(a, 90);
-  // Notional at which a history marker reaches full radius. A constant so the chart is comparable
-  // between agents — scaling to each agent's own maximum would make a quiet agent's largest
-  // execution look identical to a busy one's.
-  const MARKER_FULL_SCALE = toBaseUnits(250000);
-  // The viewBox aspect is now also the rendered aspect, since the svg takes its height from it —
-  // so h is a shape decision, not just a coordinate range. At the old 640x170 the chart came out
-  // 387px tall once the page went full width, which pushed the executions table off the fold.
-  // 640x120 lands it near 270px at a normal desktop width and keeps the 90-day line legible.
-  const w = 640, h = 120, pad = 10;
-  const yOf = (s: number) => pad + (1 - s / 10000) * (h - pad * 2);
-  const xOf = (i: number) => (i / (history.length - 1)) * w;
-  const pointsStr = history.map((p, i) => `${xOf(i).toFixed(1)},${yOf(p.score).toFixed(1)}`).join(' ');
-  const markers = history.filter((p) => p.notional > 0).map((p) => ({
-    x: xOf(history.indexOf(p)).toFixed(1), y: yOf(p.score).toFixed(1),
-    r: Math.max(1.5, Math.min(6, Math.sqrt(ratio(p.notional, MARKER_FULL_SCALE)) * 6)).toFixed(1),
-    color: p.fault ? 'var(--score-critical)' : 'var(--color-neutral-700)', opacity: p.fault ? 1 : 0.45,
-  }));
+  const { network } = useNetwork();
 
-  let execs = genExecutions(a, 20);
-  if (filter === 'settled') execs = execs.filter((e) => e.status === 'Settled');
-  if (filter === 'challenged') execs = execs.filter((e) => e.status === 'Challenged');
-  if (filter === 'faulted') execs = execs.filter((e) => e.status === 'Faulted' || e.status === 'Expired');
+  // A route param is a string from the URL bar and nothing stops it being "abc". BigInt() throws on
+  // one, which in a render is a blank page rather than a message, so it is parsed defensively.
+  let agentId: bigint | undefined;
+  try {
+    if (/^\d+$/.test(params.id)) agentId = BigInt(params.id);
+  } catch {
+    agentId = undefined;
+  }
 
-  const deltaLabel = a.delta > 0 ? `\u25b2${a.delta}` : a.delta < 0 ? `\u25bc${Math.abs(a.delta)}` : '\u2013';
+  const { data: a, loading, error, deployed } = useAgent(network.id, agentId);
+  const { data: execs } = useAgentExecutions(network.id, agentId);
+  const now = useNow(30_000);
+  const registry = registryAddress(network.id);
+
+  if (agentId === undefined) {
+    return <Empty title={`"${params.id}" is not an agent id.`} body="Agent ids are whole numbers, assigned in registration order." />;
+  }
+  if (!deployed) {
+    return <Empty title={`BotID is not deployed on ${network.name}.`} body="There is no registry here to look this agent up in." />;
+  }
+  if (loading) {
+    return <Empty title={`Reading agent #${params.id} on ${network.name}…`} body="" />;
+  }
+  // Two different absences, deliberately worded apart. With no error the registry answered and had
+  // no such agent; with one it never answered at all. Collapsing them into "not found" would tell a
+  // reader their agent had been deregistered when the truth was that the RPC was down.
+  if (!a) {
+    return (
+      <Empty
+        title={`No agent #${params.id} on ${network.name}.`}
+        body={error ? `The registry did not return one: ${error}` : 'The registry has no record under that id.'}
+      />
+    );
+  }
+
+  const tier = tierNameOf(a.tier);
+  const tm = TIER_META[tier];
+  const lastActive = Number(a.lastActiveAt) * 1000;
+
+  let rows = execs ?? [];
+  if (filter === 'settled') rows = rows.filter((e) => e.status === 'Settled');
+  if (filter === 'challenged') rows = rows.filter((e) => e.status === 'Challenged');
+  if (filter === 'faulted') rows = rows.filter((e) => e.status === 'Faulted' || e.status === 'Expired');
 
   return (
     <>
-      {/* No width cap. The shell stopped capping itself at 1600px for the reason given in
-          globals.css — a dashboard of dense tables should not float in a band with dead canvas
-          either side — and a per-page cap here just reinstated that at 1100px. The score chart is
-          width:100% and gets more resolution per day the wider it runs, and the executions table
-          has six columns that were wrapping for no reason. */}
       <main style={{ padding: 'var(--space-6)' }}>
-        <SampleData what="This profile, its score history and its execution list" />
         {/* Wraps: badge, id, score and the alert button are ~330px of content plus a 44px badge. */}
         <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 14, marginBottom: 4 }}>
-          <BotIdBadge tier={a.tier} hasFault={a.faults > 0} size={44} />
-          <h1 style={{ fontSize: 28, margin: 0 }}>agent #{a.id}</h1>
-          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 22, fontWeight: 700, color: scoreColorVar(a.score) }}>{formatNum(a.score)} {deltaLabel}</span>
-          <button className="btn btn-secondary" style={{ marginLeft: 'auto' }}>Set alert</button>
+          <BotIdBadge tier={tier} hasFault={a.faults > 0} size={44} />
+          <h1 style={{ fontSize: 28, margin: 0 }}>agent #{a.agentId.toString()}</h1>
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 22, fontWeight: 700, color: scoreColorVar(a.score) }}>{formatNum(a.score)}</span>
+          {a.faults > 0 && (
+            <span className="tag" style={{ background: 'color-mix(in srgb, var(--score-critical) 16%, transparent)', color: 'var(--score-critical)' }}>
+              {a.faults} {a.faults === 1 ? 'fault' : 'faults'}
+            </span>
+          )}
+          {!a.active && <span className="tag">inactive</span>}
         </div>
-        <div style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-muted)', marginBottom: 'var(--space-6)' }}>
-          {shortHash(a.address)} &middot; <span className="tag" style={{ background: `color-mix(in srgb, ${tm.color} 18%, transparent)`, color: tm.color }}>{tm.label}</span> &middot; operator {shortHash(a.operator, 3)} &middot; active {timeAgo(a.lastActiveAt)}
+        <div style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-muted)', marginBottom: 'var(--space-2)' }}>
+          <span className="tag" style={{ background: `color-mix(in srgb, ${tm.color} 18%, transparent)`, color: tm.color }}>{tm.label}</span>
+          {' '}&middot; operator {shortHash(a.operator, 3)} &middot; owner {shortHash(a.owner, 3)} &middot; active{' '}
+          {lastActive === 0 ? 'never' : now === 0 ? '—' : timeAgo(lastActive, now)}
         </div>
+        {registry && (
+          <p className="text-muted" style={{ fontSize: 12, marginBottom: 'var(--space-6)' }}>
+            Read live from AgentRegistry at{' '}
+            <a href={explorerLink(network.id, 'address', registry)} target="_blank" rel="noopener noreferrer" style={{ fontFamily: 'var(--font-mono)' }}>
+              {shortHash(registry, 6)}
+            </a>
+            .
+          </p>
+        )}
 
         <section style={{ marginBottom: 'var(--space-8)' }}>
-          <h6 style={{ marginBottom: 'var(--space-3)', color: 'var(--text-muted)' }}>Score history &middot; 90d</h6>
-          <div className="chart-wrap" onMouseLeave={() => setHi(null)}>
-            <svg
-              className="chart-svg"
-              viewBox={`0 0 ${w} ${h}`}
-              // height:auto, not a fixed 170. With a fixed height the default preserveAspectRatio
-              // scales the viewBox to *fit*, so the drawing stayed 640 units wide and sat
-              // letterboxed in the middle of the box — 409px of dead canvas either side once the
-              // page went full width. Two things silently depended on that not happening: the
-              // hover handler maps the cursor across getBoundingClientRect().width, and the
-              // tooltip is positioned as a percentage of the same box. Both were reading a box
-              // wider than the chart they describe, so every readout was pulled toward the centre.
-              // Letting the height follow the viewBox aspect makes box and drawing the same thing
-              // again, which is what those two calculations already assumed.
-              // preserveAspectRatio="none" would also fill the width, but it stretches the markers
-              // into ellipses, and marker area is how this chart encodes notional weight.
-              style={{ width: '100%', height: 'auto', display: 'block', borderTop: '2px solid var(--color-divider)', borderBottom: '2px solid var(--color-divider)' }}
-              role="img"
-              aria-label={`Score history, 90 days, ${formatNum(history[0].score)} to ${formatNum(a.score)}. Use the arrow keys to read individual days.`}
-              tabIndex={0}
-              onMouseMove={(e) => {
-                // Read the position off the rendered box in CSS pixels, not the 640-unit viewBox:
-                // the svg is width:100%, so the two are the same box at different scales. The
-                // fraction across is what matters and it survives the scaling — but only because
-                // the drawing fills the box, which is what height:auto above is protecting.
-                const r = e.currentTarget.getBoundingClientRect();
-                const t = (e.clientX - r.left) / r.width;
-                setHi(Math.max(0, Math.min(history.length - 1, Math.round(t * (history.length - 1)))));
-              }}
-              onFocus={() => setHi((i) => i ?? history.length - 1)}
-              onBlur={() => setHi(null)}
-              onKeyDown={(e) => {
-                if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight' && e.key !== 'Home' && e.key !== 'End') return;
-                e.preventDefault();
-                setHi((i) => {
-                  const cur = i ?? history.length - 1;
-                  if (e.key === 'Home') return 0;
-                  if (e.key === 'End') return history.length - 1;
-                  const next = cur + (e.key === 'ArrowRight' ? 1 : -1);
-                  return Math.max(0, Math.min(history.length - 1, next));
-                });
-              }}
-            >
-              {/* non-scaling-stroke throughout: the viewBox is now scaled up by whatever the
-                  window is wide divided by 640, and a 1px rule drawn at 2.3x reads as a 2px rule.
-                  The strokes here are hairlines by intent, so they opt out of the scaling that the
-                  geometry itself wants. */}
-              <line x1={0} y1={yOf(5000)} x2={w} y2={yOf(5000)} stroke="var(--color-neutral-400)" strokeWidth={1} strokeDasharray="4 4" vectorEffect="non-scaling-stroke" />
-              <polyline points={pointsStr} fill="none" stroke="var(--color-neutral-600)" strokeWidth={1.5} vectorEffect="non-scaling-stroke" />
-              {markers.map((m, i) => <circle key={i} cx={m.x} cy={m.y} r={m.r} fill={m.color} opacity={m.opacity} />)}
-              {hi !== null && (
-                <g pointerEvents="none">
-                  <line x1={xOf(hi)} y1={0} x2={xOf(hi)} y2={h} stroke="var(--color-accent)" strokeWidth={1} opacity={0.55} vectorEffect="non-scaling-stroke" />
-                  <circle cx={xOf(hi)} cy={yOf(history[hi].score)} r={3.5} fill="var(--color-bg)" stroke="var(--color-accent)" strokeWidth={2} vectorEffect="non-scaling-stroke" />
-                </g>
-              )}
-            </svg>
-            {hi !== null && (
-              <div
-                className="chart-tip"
-                style={{
-                  left: `${(hi / (history.length - 1)) * 100}%`,
-                  bottom: 8,
-                  transform: hi < 8 ? 'translateX(0)' : hi > history.length - 9 ? 'translateX(-100%)' : 'translateX(-50%)',
-                }}
-              >
-                <div className="chart-tip-head">{dayLabel(history[hi].day, history.length - 1)}</div>
-                <div className="chart-tip-row"><span>Score</span><span style={{ color: scoreColorVar(history[hi].score) }}>{formatNum(history[hi].score)}</span></div>
-                <div className="chart-tip-row"><span>Notional</span><span>{history[hi].notional > 0n ? formatToken(history[hi].notional) : '–'}</span></div>
-                <div className="chart-tip-row">
-                  <span>Outcome</span>
-                  <span style={{ color: history[hi].fault ? 'var(--score-critical)' : undefined }}>
-                    {history[hi].fault ? 'fault' : history[hi].notional > 0n ? 'in-spec' : 'no execution'}
-                  </span>
-                </div>
-              </div>
-            )}
+          <h6 style={{ marginBottom: 'var(--space-3)', color: 'var(--text-muted)' }}>Score</h6>
+          <div style={{ borderTop: '2px solid var(--color-divider)', borderBottom: '2px solid var(--color-divider)', padding: 'var(--space-4)', display: 'flex', flexWrap: 'wrap', alignItems: 'baseline', gap: 'var(--space-6)' }}>
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 34, fontWeight: 700, color: scoreColorVar(a.score) }}>{formatNum(a.score)}</span>
+            <span className="text-muted" style={{ fontSize: 13, flex: 1, minWidth: 260 }}>
+              Current score out of 10,000, neutral at 5,000. It moves only on settled executions,
+              weighted by the capital that was at risk. There is no history line here because the
+              engine overwrites this number rather than appending to it — reconstructing the last
+              ninety days means replaying every settlement, which is an indexer&apos;s job and one
+              this interface does not have yet.
+            </span>
           </div>
-          <div style={{ fontSize: 11, color: 'var(--text-subtle)', marginTop: 4 }}>dashed line = 5000 neutral &middot; point size = notional weight &middot; red = fault</div>
+          <div style={{ fontSize: 11, color: 'var(--text-subtle)', marginTop: 4 }}>
+            {a.settledExecutions} settled &middot; {a.faults} {a.faults === 1 ? 'fault' : 'faults'} &middot; loss tolerance {a.lossToleranceBps} bps
+          </div>
         </section>
 
         {/* .panel-split rather than an inline 1fr 1fr, so these two stack below 720px and the
@@ -158,7 +134,7 @@ export default function AgentProfile({ params }: { params: { id: string } }) {
             <h6 style={{ color: 'var(--text-muted)', marginBottom: 'var(--space-3)' }}>Credit</h6>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6, fontFamily: 'var(--font-mono)', fontSize: 13 }}>
               <Row label="bond" val={formatToken(a.bond)} />
-              <Row label="leverage" val={`${ratio(a.maxOpenNotional, a.bond).toFixed(1)}\u00d7`} />
+              <Row label="leverage" val={`${ratio(a.maxOpenNotional, a.bond).toFixed(1)}×`} />
               <Row label="max open" val={formatToken(a.maxOpenNotional)} />
               <Row label="open" val={formatToken(a.openNotional)} />
             </div>
@@ -168,13 +144,17 @@ export default function AgentProfile({ params }: { params: { id: string } }) {
             </div>
           </div>
           <div style={{ padding: 'var(--space-4)' }}>
-            <h6 style={{ color: 'var(--text-muted)', marginBottom: 'var(--space-3)' }}>Model</h6>
+            <h6 style={{ color: 'var(--text-muted)', marginBottom: 'var(--space-3)' }}>Registration</h6>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6, fontFamily: 'var(--font-mono)', fontSize: 13 }}>
               <Row label="commitment" val={shortHash(a.modelCommitment)} />
-              <Row label="name" val="botid.reference-allocator.v1" />
-              <Row label="verifier" val={shortHash('0x9c1e' + '0'.repeat(36))} />
-              <Row label="scale" val="8 bits" />
+              <Row label="tier" val={tm.label} />
+              <Row label="status" val={a.active ? 'active' : 'inactive'} />
+              <Row label="unbonding" val={a.unbondingAmount > 0n ? formatToken(a.unbondingAmount) : '–'} />
             </div>
+            <p className="text-muted" style={{ fontSize: 11, marginTop: 8 }}>
+              The commitment is a hash. What it commits to — weights, verifying key, declared limits —
+              is known to whoever produced it, and nothing on chain reveals it.
+            </p>
           </div>
         </div>
 
@@ -187,25 +167,53 @@ export default function AgentProfile({ params }: { params: { id: string } }) {
               ))}
             </span>
           </div>
-          <div className="table-scroll">
-          <table className="table table-dense">
-            <thead><tr><th>Request</th><th>Status</th><th>Notional</th><th>Outcome</th><th>Time</th></tr></thead>
-            <tbody>
-              {execs.map((e) => (
-                <tr key={e.requestId}>
-                  <td><a href={`/executions/${e.requestId}`} style={{ fontFamily: 'var(--font-mono)' }}>{shortHash(e.requestId)}</a></td>
-                  <td><span className="tag" style={{ background: `color-mix(in srgb, ${STATUS_COLOR[e.status]} 16%, transparent)`, color: STATUS_COLOR[e.status] }}>{e.status}</span></td>
-                  <td className="tabular">{formatToken(e.notional)}</td>
-                  <td className="tabular" style={{ color: e.status === 'Settled' ? (e.bps >= 0 ? 'var(--score-good)' : 'var(--score-critical)') : 'inherit' }}>{e.status === 'Settled' ? `${e.bps >= 0 ? '+' : ''}${e.bps} bps` : '\u2013'}</td>
-                  <td style={{ fontSize: 12, color: 'var(--text-subtle)' }}>{timeAgo(e.time)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          </div>
+          {rows.length > 0 ? (
+            <div className="table-scroll">
+              <table className="table table-dense">
+                <thead><tr><th>Request</th><th>Status</th><th>Notional</th><th>Outcome</th><th>Time</th></tr></thead>
+                <tbody>
+                  {rows.map((e) => (
+                    <tr key={e.requestId}>
+                      <td><a href={`/executions/${e.requestId}`} style={{ fontFamily: 'var(--font-mono)' }}>{shortHash(e.requestId)}</a></td>
+                      <td><span className="tag" style={{ background: `color-mix(in srgb, ${STATUS_COLOR[e.status]} 16%, transparent)`, color: STATUS_COLOR[e.status] }}>{e.status}</span></td>
+                      <td className="tabular">{e.notional === undefined ? '–' : formatToken(e.notional)}</td>
+                      <td className="tabular" style={{ color: e.bps === undefined ? 'inherit' : e.bps >= 0 ? 'var(--score-good)' : 'var(--score-critical)' }}>
+                        {e.bps === undefined ? '–' : `${e.bps >= 0 ? '+' : ''}${e.bps} bps`}
+                      </td>
+                      {/* Block number rather than a guessed age where the block was not dated —
+                          it is the less useful of the two facts, but it is a fact. */}
+                      <td style={{ fontSize: 12, color: 'var(--text-subtle)' }}>
+                        {e.time > 0 && now > 0 ? timeAgo(e.time, now) : `#${e.block.toString()}`}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <p className="text-muted" style={{ fontSize: 13, padding: 'var(--space-4) 0' }}>
+              {execs === undefined
+                ? 'Reading the router…'
+                : (execs.length > 0
+                  ? `No ${filter} executions. This agent has ${execs.length} in total.`
+                  : 'Nothing has been commissioned from this agent yet. Every row here would be an ExecutionRouter event, so the first request anyone sends appears here.')}
+            </p>
+          )}
         </section>
       </main>
     </>
+  );
+}
+
+function Empty({ title, body }: { title: string; body: string }) {
+  return (
+    <main style={{ padding: 'var(--space-6)' }}>
+      <div style={{ textAlign: 'center', padding: 'var(--space-8) 0', color: 'var(--text-subtle)' }}>
+        <p style={{ marginBottom: 'var(--space-2)' }}>{title}</p>
+        {body && <p style={{ fontSize: 13, marginBottom: 'var(--space-4)' }}>{body}</p>}
+        <a href="/agents" className="btn btn-secondary" style={{ display: 'inline-flex' }}>Back to the leaderboard</a>
+      </div>
+    </main>
   );
 }
 

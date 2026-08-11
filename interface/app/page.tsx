@@ -1,77 +1,67 @@
 'use client';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import BotIdBadge from '@/components/BotIdBadge';
 import { useNetwork } from '@/lib/network';
-import {
-  SPARSE_AGENTS, DENSE_AGENTS, TIER_META, EXECUTIONS_PER_DAY, genFeedRow,
-  formatToken, formatNum, timeAgo, scoreColorVar, shortHash, FeedRow, Agent, MOCK_NOW,
-} from '@/lib/mock-data';
-import SampleData from '@/components/SampleData';
+import { useAgents, useActivity, useNow } from '@/lib/useChain';
+import { tierNameOf } from '@/lib/registry';
+import type { ChainEvent } from '@/lib/activity';
+import { TIER_META, formatNum, timeAgo, scoreColorVar, shortHash, dayLabel } from '@/lib/format';
+import { formatToken } from '@/lib/token';
 
-// The bars are 14 consecutive days ending at the fixture instant. Derived from MOCK_NOW and
-// formatted in UTC for the same reason every other date here is: a value that depends on the
-// reader's clock or timezone renders differently on the server and in the browser.
-const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-function dayLabel(i: number) {
-  const d = new Date(MOCK_NOW - (EXECUTIONS_PER_DAY.length - 1 - i) * 86_400_000);
-  return `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]}`;
-}
+// The overview reads the chain. Nothing on this page is generated any more:
+//
+//  · the four network stats are summed from AgentRegistry's getProfile,
+//  · the bars are ExecutionDelivered logs bucketed by day,
+//  · the feed is the router's lifecycle events, newest first,
+//  · the block number is the head, polled.
+//
+// Two things left with the fixtures. The score delta beside each agent needed a score history and
+// there is nothing on chain that stores one — the engine writes the current score and overwrites
+// it, so a delta would have to come from an indexer diffing settlements. And "indexer lag 0.4s" in
+// the status bar was a reading of a component that does not exist; a fabricated health metric next
+// to three real ones is worse than no metric, because it makes the other three look invented too.
 
 export default function Overview() {
   const { network } = useNetwork();
-  const [density, setDensity] = useState<'sparse' | 'dense'>('sparse');
+  const { data: agents, loading: agentsLoading } = useAgents(network.id);
+  const { data: activity, error: activityError, deployed } = useActivity(network.id);
+  const now = useNow(1000);
+
+  // Pause freezes what is on screen rather than stopping the poll. The poll is what keeps the block
+  // counter and the stats moving, and someone pausing the feed to read a row is not asking for the
+  // rest of the page to stop.
+  const [frozen, setFrozen] = useState<ChainEvent[]>();
+  const paused = frozen !== undefined;
+  const feed = frozen ?? activity?.feed ?? [];
+
+  // Cleared on a network change, so a paused feed cannot survive onto a different chain.
+  useEffect(() => setFrozen(undefined), [network.id]);
+
+  const totalNotional = (agents ?? []).reduce((s, a) => s + a.openNotional, 0n);
+  const totalSettled = (agents ?? []).reduce((s, a) => s + a.settledExecutions, 0);
+  const totalFaults = (agents ?? []).reduce((s, a) => s + a.faults, 0);
+  const top = [...(agents ?? [])].sort((a, b) => b.score - a.score).slice(0, 6);
+
+  const perDay = activity?.perDay ?? [];
+  const maxDay = Math.max(1, ...perDay.map((d) => d.bronze + d.silver + d.gold));
+  const chartTotal = perDay.reduce((s, d) => s + d.bronze + d.silver + d.gold, 0);
+
   const [hoverDay, setHoverDay] = useState<number | null>(null);
-  const [feedRows, setFeedRows] = useState<FeedRow[]>([]);
-  const [paused, setPaused] = useState(false);
-  // Starts at MOCK_NOW so the server and the client render the same relative times, then the
-  // clock effect takes over on the client. Seeding this with Date.now() is a hydration mismatch.
-  const [now, setNow] = useState(MOCK_NOW);
-  const [blockHeight, setBlockHeight] = useState(8412900);
-  const agentsRef = useRef<Agent[]>(SPARSE_AGENTS);
 
-  const agents = density === 'sparse' ? SPARSE_AGENTS : DENSE_AGENTS;
-  useEffect(() => { agentsRef.current = agents; }, [agents]);
-
-  // Seed once. This used to live in the effect below, which depended on `paused` — so pausing
-  // the feed re-ran it and replaced every row with twelve fresh ones. You paused to read a row
-  // and the row disappeared.
-  useEffect(() => {
-    setFeedRows(
-      Array.from({ length: 12 }, (_, i) => genFeedRow(SPARSE_AGENTS, Date.now() - i * 15000)).reverse()
-    );
-  }, []);
-
-  // Pausing stops the timer instead of filtering inside it, so a paused feed costs nothing and
-  // resuming appends to the rows already on screen.
-  useEffect(() => {
-    if (paused) return;
-    const feedTimer = setInterval(() => {
-      setFeedRows((rows) => [genFeedRow(agentsRef.current, Date.now()), ...rows].slice(0, 40));
-      setBlockHeight((b) => b + 1);
-    }, 3200);
-    return () => clearInterval(feedTimer);
-  }, [paused]);
-
-  useEffect(() => {
-    const clock = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(clock);
-  }, []);
-
-  const totalNotional = agents.reduce((s, a) => s + a.openNotional, 0n);
-  const totalSettled = agents.reduce((s, a) => s + a.settled, 0);
-  const totalFaults = agents.reduce((s, a) => s + a.faults, 0);
-  const top = [...agents].sort((a, b) => b.score - a.score).slice(0, density === 'sparse' ? 3 : 6);
-  const maxDay = Math.max(1, ...EXECUTIONS_PER_DAY.map((d) => d.bronze + d.silver + d.gold));
-
-  const verbColor = (row: FeedRow) => {
-    if (row.verb === 'SETTLE') return (row.delta ?? 0) >= 0 ? 'var(--score-good)' : 'var(--score-critical)';
-    if (row.verb === 'DELIVER') return `var(--tier-${row.tier})`;
+  const verbColor = (row: ChainEvent) => {
+    if (row.verb === 'SETTLE') return (row.pnlBps ?? 0) >= 0 ? 'var(--score-good)' : 'var(--score-critical)';
+    if (row.verb === 'DELIVER') return `var(--tier-${row.tier ?? 'bronze'})`;
     if (row.verb === 'CHALLENGE') return 'var(--state-pending)';
     if (row.verb === 'EXPIRE') return 'var(--score-critical)';
     if (row.verb === 'SLASH') return 'var(--state-slashed)';
     if (row.verb === 'RESOLVE') return 'var(--tier-gold)';
+    if (row.verb === 'FINAL') return 'var(--text-muted)';
     return 'inherit';
   };
+
+  // A dash rather than a zero wherever the node has not answered yet. Zero is a claim about the
+  // chain; a dash is a claim about this page, and they are not the same statement.
+  const stat = (v: string | number) => (agents ? v : '—');
 
   return (
     // Exactly one screenful. The two columns and the status bar divide it up; nothing here grows
@@ -84,22 +74,14 @@ export default function Overview() {
     <div className="overview-shell">
       <div className="overview-grid">
         <main className="overview-main" style={{ padding: 'var(--space-6)', display: 'flex', flexDirection: 'column', gap: 'var(--space-8)' }}>
-          <SampleData what="Every agent, execution, score and chart" />
-          <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-            <span className="seg" style={{ fontSize: 12 }}>
-              <label className="seg-opt"><input type="radio" checked={density === 'sparse'} onChange={() => setDensity('sparse')} />Sparse</label>
-              <label className="seg-opt"><input type="radio" checked={density === 'dense'} onChange={() => setDensity('dense')} />Dense</label>
-            </span>
-          </div>
-
           <section>
             <h6 style={{ marginBottom: 'var(--space-3)', color: 'var(--text-muted)' }}>Network</h6>
             <div className="stat-strip">
               {[
-                ['Agents', agents.length, 'inherit'],
-                ['Open notional', formatToken(totalNotional), 'inherit'],
-                ['Settled', formatNum(totalSettled), 'inherit'],
-                ['Faults', totalFaults, totalFaults > 0 ? 'var(--score-critical)' : 'inherit'],
+                ['Agents', stat(agents?.length ?? 0), 'inherit'],
+                ['Open notional', stat(formatToken(totalNotional)), 'inherit'],
+                ['Settled', stat(formatNum(totalSettled)), 'inherit'],
+                ['Faults', stat(totalFaults), totalFaults > 0 ? 'var(--score-critical)' : 'inherit'],
               ].map(([label, val, color]) => (
                 <div key={label as string} style={{ padding: 'var(--space-4)' }}>
                   <div className="tabular stat-num" style={{ color: color as string }}>{val}</div>
@@ -133,21 +115,21 @@ export default function Overview() {
             </h6>
             <div
               className="chart-wrap"
-              style={{ display: 'flex', alignItems: 'flex-end', gap: 4, height: 120, borderBottom: '2px solid var(--color-divider)', paddingBottom: 2 }}
+              style={{ display: 'flex', alignItems: 'flex-end', gap: 4, height: 120, borderBottom: '2px solid var(--color-divider)', paddingBottom: 2, position: 'relative' }}
               onMouseLeave={() => setHoverDay(null)}
             >
-              {EXECUTIONS_PER_DAY.map((d, i) => {
+              {perDay.map((d, i) => {
                 const total = d.bronze + d.silver + d.gold;
                 return (
                   <div
-                    key={i}
+                    key={d.day}
                     className="chart-col"
                     data-active={hoverDay === i || undefined}
                     style={{ flex: 1, display: 'flex', flexDirection: 'column-reverse', height: '100%' }}
                     tabIndex={0}
                     // The readout is hover-only for a mouse, so the same numbers have to reach a
                     // keyboard and a screen reader some other way. This is that way.
-                    aria-label={`${dayLabel(i)}: ${total} executions — ${d.bronze} bronze, ${d.silver} silver, ${d.gold} gold`}
+                    aria-label={`${dayLabel(d.day)}: ${total} executions — ${d.bronze} bronze, ${d.silver} silver, ${d.gold} gold`}
                     onMouseEnter={() => setHoverDay(i)}
                     onFocus={() => setHoverDay(i)}
                     onBlur={() => setHoverDay(null)}
@@ -159,29 +141,38 @@ export default function Overview() {
                 );
               })}
 
-              {hoverDay !== null && (
+              {/* Sits inside the plot area rather than replacing it, so the axis and the fourteen
+                  day columns stay put. An empty chart that keeps its shape reads as "nothing
+                  happened"; one that collapses reads as "this did not load". */}
+              {activity && chartTotal === 0 && (
+                <div className="text-muted" style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, pointerEvents: 'none' }}>
+                  No executions in the last {perDay.length} days
+                </div>
+              )}
+
+              {hoverDay !== null && perDay[hoverDay] && (
                 <div
                   className="chart-tip"
                   style={{
-                    left: `${((hoverDay + 0.5) / EXECUTIONS_PER_DAY.length) * 100}%`,
+                    left: `${((hoverDay + 0.5) / perDay.length) * 100}%`,
                     bottom: 'calc(100% + 8px)',
                     // Clamped at the ends rather than always centred: a centred tip on the first
                     // or last column hangs off the panel and gets clipped by the column that
                     // scrolls beside it.
-                    transform: hoverDay <= 1 ? 'translateX(-20%)' : hoverDay >= EXECUTIONS_PER_DAY.length - 2 ? 'translateX(-80%)' : 'translateX(-50%)',
+                    transform: hoverDay <= 1 ? 'translateX(-20%)' : hoverDay >= perDay.length - 2 ? 'translateX(-80%)' : 'translateX(-50%)',
                   }}
                 >
-                  <div className="chart-tip-head">{dayLabel(hoverDay)}</div>
+                  <div className="chart-tip-head">{dayLabel(perDay[hoverDay].day)}</div>
                   {(['bronze', 'silver', 'gold'] as const).map((t) => (
                     <div key={t} className="chart-tip-row">
                       <span aria-hidden="true" className="chart-tip-swatch" style={{ background: `var(--tier-${t})` }} />
                       <span>{TIER_META[t].label}</span>
-                      <span>{EXECUTIONS_PER_DAY[hoverDay][t]}</span>
+                      <span>{perDay[hoverDay][t]}</span>
                     </div>
                   ))}
                   <div className="chart-tip-row chart-tip-total">
                     <span>Total</span>
-                    <span>{EXECUTIONS_PER_DAY[hoverDay].bronze + EXECUTIONS_PER_DAY[hoverDay].silver + EXECUTIONS_PER_DAY[hoverDay].gold}</span>
+                    <span>{perDay[hoverDay].bronze + perDay[hoverDay].silver + perDay[hoverDay].gold}</span>
                   </div>
                 </div>
               )}
@@ -190,62 +181,92 @@ export default function Overview() {
 
           <section>
             <h6 style={{ marginBottom: 'var(--space-3)', color: 'var(--text-muted)' }}>Top agents</h6>
-            <div className="table-scroll">
-            <table className="table table-dense">
-              <thead><tr><th></th><th>Agent</th><th>Score</th><th>Tier</th><th>Notional</th><th>Settled</th><th>Faults</th></tr></thead>
-              <tbody>
-                {top.map((a) => {
-                  const tm = TIER_META[a.tier];
-                  const deltaLabel = a.delta === 0 ? '\u2013' : a.delta > 0 ? `\u25b2${a.delta}` : `\u25bc${Math.abs(a.delta)}`;
-                  return (
-                    <tr key={a.id}>
-                      <td><BotIdBadge tier={a.tier} hasFault={a.faults > 0} size={20} /></td>
-                      <td><a href={`/agents/${a.id}`} style={{ fontFamily: 'var(--font-mono)', fontWeight: 600 }}>#{a.id}</a></td>
-                      <td className="tabular" style={{ color: scoreColorVar(a.score), fontWeight: 600 }}>{formatNum(a.score)} {deltaLabel}</td>
-                      <td><span className="tag" style={{ background: `color-mix(in srgb, ${tm.color} 18%, transparent)`, color: tm.color }}>{tm.label}</span></td>
-                      <td className="tabular">{formatToken(a.openNotional)}</td>
-                      <td className="tabular">{a.settled}</td>
-                      <td className="tabular" style={{ color: a.faults > 0 ? 'var(--score-critical)' : 'inherit', fontWeight: a.faults > 0 ? 800 : 400 }}>{a.faults}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-            </div>
-            {density === 'sparse' && <p className="text-muted" style={{ fontSize: 12, marginTop: 'var(--space-2)' }}>Three agents registered so far &mdash; this is a young network, not a broken table.</p>}
+            {top.length > 0 && (
+              <div className="table-scroll">
+                <table className="table table-dense">
+                  <thead><tr><th></th><th>Agent</th><th>Score</th><th>Tier</th><th>Notional</th><th>Settled</th><th>Faults</th></tr></thead>
+                  <tbody>
+                    {top.map((a) => {
+                      const tier = tierNameOf(a.tier);
+                      const tm = TIER_META[tier];
+                      return (
+                        <tr key={a.agentId.toString()}>
+                          <td><BotIdBadge tier={tier} hasFault={a.faults > 0} size={20} /></td>
+                          <td><a href={`/agents/${a.agentId}`} style={{ fontFamily: 'var(--font-mono)', fontWeight: 600 }}>#{a.agentId.toString()}</a></td>
+                          <td className="tabular" style={{ color: scoreColorVar(a.score), fontWeight: 600 }}>{formatNum(a.score)}</td>
+                          <td><span className="tag" style={{ background: `color-mix(in srgb, ${tm.color} 18%, transparent)`, color: tm.color }}>{tm.label}</span></td>
+                          <td className="tabular">{formatToken(a.openNotional)}</td>
+                          <td className="tabular">{a.settledExecutions}</td>
+                          <td className="tabular" style={{ color: a.faults > 0 ? 'var(--score-critical)' : 'inherit', fontWeight: a.faults > 0 ? 800 : 400 }}>{a.faults}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            {agentsLoading && <p className="text-muted" style={{ fontSize: 12 }}>Reading AgentRegistry on {network.name}…</p>}
+            {agents && agents.length === 0 && (
+              <p className="text-muted" style={{ fontSize: 12 }}>
+                No agents registered on {network.name} yet. The contracts are deployed and nobody has
+                bonded against them — an empty table here is the chain&apos;s answer, not a failed
+                request. <a href="/portal">Register one</a>.
+              </p>
+            )}
           </section>
         </main>
 
         <aside style={{ display: 'flex', flexDirection: 'column', minHeight: 0 }}>
           <div style={{ padding: 'var(--space-3) var(--space-4)', borderBottom: '2px solid var(--color-divider)', display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--live)' }} />
+            <span style={{ width: 8, height: 8, borderRadius: '50%', background: activityError ? 'var(--score-critical)' : 'var(--live)' }} />
             <h6 style={{ margin: 0 }}>Live feed</h6>
-            <button className="btn btn-ghost" style={{ marginLeft: 'auto', fontSize: 12 }} onClick={() => setPaused((p) => !p)}>{paused ? 'Resume' : 'Pause'}</button>
+            <button
+              className="btn btn-ghost"
+              style={{ marginLeft: 'auto', fontSize: 12 }}
+              onClick={() => setFrozen((f) => (f ? undefined : activity?.feed ?? []))}
+            >
+              {paused ? 'Resume' : 'Pause'}
+            </button>
           </div>
           <div className="feed-scroll" style={{ fontFamily: 'var(--font-mono)', fontSize: 11 }}>
-            {feedRows.map((row) => (
+            {feed.map((row) => (
               <a key={row.id} href={`/executions/${row.requestId}`} style={{ display: 'block', textDecoration: 'none', color: 'inherit', padding: '8px 12px', borderBottom: '1px solid var(--color-divider)' }}>
                 <div style={{ display: 'flex', gap: 8, alignItems: 'baseline' }}>
-                  <span style={{ color: 'var(--text-subtle)', flex: 'none', width: 56 }}>{timeAgo(row.time, now)}</span>
+                  <span style={{ color: 'var(--text-subtle)', flex: 'none', width: 56 }}>
+                    {row.time > 0 && now > 0 ? timeAgo(row.time, now) : `#${row.block}`}
+                  </span>
                   <span style={{ fontWeight: 700, flex: 'none', width: 70, color: verbColor(row) }}>{row.verb}</span>
                   <span style={{ color: 'color-mix(in srgb, var(--color-text) 70%, transparent)' }}>{shortHash(row.requestId)}</span>
                 </div>
                 <div style={{ display: 'flex', gap: 8, marginTop: 2, paddingLeft: 64 }}>
-                  <span style={{ color: 'var(--text-muted)' }}>agent #{row.agentId}</span>
+                  {row.agentId !== undefined && <span style={{ color: 'var(--text-muted)' }}>agent #{row.agentId.toString()}</span>}
                   <span>{row.detail}</span>
                 </div>
               </a>
             ))}
+            {activity && feed.length === 0 && (
+              <div className="text-muted" style={{ padding: 'var(--space-4)', fontFamily: 'var(--font-body)', fontSize: 12 }}>
+                No executions on {network.name} yet. This feed is ExecutionRouter&apos;s own event
+                log, so the first request anyone sends appears here.
+              </div>
+            )}
+            {!activity && deployed && (
+              <div className="text-muted" style={{ padding: 'var(--space-4)', fontFamily: 'var(--font-body)', fontSize: 12 }}>
+                Reading ExecutionRouter&apos;s logs…
+              </div>
+            )}
           </div>
         </aside>
       </div>
       {/* One line at every width — see .overview-status. The type and the gutters are sized in the
-          stylesheet because both have to shrink on a phone to keep the four readings on one row,
-          and a media query cannot reach an inline style. */}
+          stylesheet because both have to shrink on a phone to keep the readings on one row, and a
+          media query cannot reach an inline style. */}
       <footer className="overview-status">
-        <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><span style={{ width: 5, height: 5, borderRadius: '50%', background: 'var(--live)' }} />RPC live</span>
-        <span>block {formatNum(blockHeight)}</span>
-        <span>indexer lag 0.4s</span>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+          <span style={{ width: 5, height: 5, borderRadius: '50%', background: activityError ? 'var(--score-critical)' : 'var(--live)' }} />
+          {activityError ? 'RPC unreachable' : 'RPC live'}
+        </span>
+        <span>block {activity ? formatNum(Number(activity.head)) : '—'}</span>
         <span style={{ marginLeft: 'auto' }}>{network.short}</span>
       </footer>
     </div>

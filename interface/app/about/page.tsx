@@ -89,9 +89,10 @@ export default function About() {
         </p>
 
         <div style={{ border: '2px solid var(--score-critical)', color: 'var(--score-critical)', padding: 'var(--space-3)', fontWeight: 600, margin: 'var(--space-4) 0' }}>
-          Unaudited, not deployed to any public network, and this interface runs on generated
-          fixtures. <a href="/security" style={{ color: 'inherit' }}>Security</a> has the full
-          accounting.
+          Unaudited, and deployed only to BOT Chain testnet. The overview, the leaderboard and agent
+          profiles read that deployment live; the execution and verification pages still run on
+          generated fixtures and say so where they do.{' '}
+          <a href="/security" style={{ color: 'inherit' }}>Security</a> has the full accounting.
         </div>
 
         <h3>The problem</h3>
@@ -149,9 +150,12 @@ export default function About() {
           Most of these are corrections. The first version of this protocol got four things wrong, and
           the reasoning is more useful than the conclusion.
         </p>
+        {/* --space-6. There is no --space-5 in the scale, and an undefined custom property drops
+            the declaration rather than falling back, so these ran together with no gap at all.
+            The note sits above the map rather than inside the callback: a braced JSX comment in
+            expression position is not JSX at all, and putting one there stopped the file
+            compiling. */}
         {DECISIONS.map(([q, a]) => (
-          {/* --space-6. There is no --space-5 in the scale, and an undefined custom property drops
-              the declaration rather than falling back, so these ran together with no gap at all. */}
           <div key={q} style={{ marginTop: 'var(--space-6)' }}>
             <h4 style={{ marginBottom: 4 }}>{q}</h4>
             <p style={{ margin: 0 }}>{a}</p>
@@ -180,8 +184,11 @@ export default function About() {
         <p>
           The registry, router, reputation engine, input attestor and all three adapters are built and
           exercised end to end on a local devnet. The reference circuit compiles and its proofs verify
-          on chain. There is no public deployment, no audit, no subgraph, no indexer, no insurance
-          vault, and — the part that actually matters — no consumer protocol calling{' '}
+          on chain. They are now also deployed to BOT Chain testnet, where agents can register and
+          bond for real — though at the time of writing nothing has been executed through the router,
+          so the activity feed on the overview is empty and honestly so. There is no mainnet
+          deployment, no audit, no subgraph, no indexer, no insurance vault, and — the part that
+          actually matters — no consumer protocol calling{' '}
           <code>getProfile</code> in production. If nothing reads the score, nothing else here counts,
           and no amount of further building answers that question.
         </p>

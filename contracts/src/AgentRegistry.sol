@@ -63,6 +63,7 @@ contract AgentRegistry is IReputationOracle, Ownable {
     error NothingToWithdraw();
     error UnbondingNotElapsed();
     error UnbondingElapsed();
+    error OutstandingLiability();
     error InvalidParameter();
 
     event AgentRegistered(
@@ -212,26 +213,37 @@ contract AgentRegistry is IReputationOracle, Ownable {
         emit Withdrawn(agentId, amount);
     }
 
-    /// @notice Withdraw before the unbonding period elapses, paying `earlyExitPenaltyBps` of the
-    ///         amount to the treasury.
-    /// @dev Understand what this door is and is not.
+    /// @notice Withdraw before the unbonding period elapses, once nothing is outstanding, paying
+    ///         `earlyExitPenaltyBps` of the amount to the treasury.
+    /// @dev Two gates, and the second is the one doing the work.
     ///
-    ///      It is not a lock-up fee. `UNBONDING_PERIOD` exists so that outcomes an agent is
-    ///      already responsible for can still land against its bond — see the note on `withdraw`.
-    ///      A toll on leaving early is therefore a price on escaping liability, and it has to be
-    ///      read against what staying costs. A lost challenge takes `faultSlashBps` of the
-    ///      *remaining* bond, currently 20%. At 10% here, leaving costs half of what one fault
-    ///      costs, so any agent that expects even a single fault is better off paying the toll —
-    ///      and the payoff it is weighing that against comes out of notional, which leverage and
-    ///      tier can carry to nine times bond. The toll is one tenth of bond. The denominators
-    ///      are not the same size, and it is the smaller one that is being taxed.
+    ///      `UNBONDING_PERIOD` is not a lock-up. It exists so that outcomes an agent is already
+    ///      responsible for can still land against its bond — see the note on `withdraw`. So a
+    ///      toll alone would be a price on escaping liability, and the wrong price: a lost
+    ///      challenge takes `faultSlashBps` of remaining bond, 20%, while this takes 10% of the
+    ///      unbonding amount. An agent expecting a fault would simply pay the smaller number and
+    ///      leave, and the payoff it is weighing against comes out of notional, which leverage and
+    ///      tier carry to nine times bond. A toll cannot be sized to fix that, because the two
+    ///      sides are denominated in different things.
     ///
-    ///      The invariant that does hold: `_maxOpenNotional` already computes credit on bond net
-    ///      of `unbondingAmount`, and `reserve` checks every new execution against that. So the
-    ///      exposure an agent has open is always backed by bond it is *not* unbonding, and
-    ///      removing the unbonding amount early cannot leave a live execution uncollateralised.
-    ///      What it can do is remove capital from reach of a challenge on an execution that has
-    ///      already been delivered and is still inside its settlement window.
+    ///      So the toll is not asked to. `openNotional == 0` is required, and that condition is
+    ///      exactly "no outstanding liability" rather than an approximation of it. The router
+    ///      reserves notional in `requestExecution` and releases it in precisely three places —
+    ///      `_settle`, `slashUnresolvedChallenge` and `markExpired` — which are the three terminal
+    ///      states. Nothing is released at delivery, at `finalize`, or at `resolveChallenge`. So a
+    ///      non-zero `openNotional` means the agent still has a request that is Pending, Delivered
+    ///      and inside its challenge window, Challenged, or Finalized and awaiting settlement, and
+    ///      a zero one means every execution it ever took has already reached a state where the
+    ///      bond can no longer be reached for it. There is nothing left to outrun.
+    ///
+    ///      What remains is a toll on churn, which is what it should have been. Time was standing
+    ///      in for a liability check the contract can now make directly; the real chain is
+    ///      challengeWindow + escalationWindow + settlementWindow, about seven days, and
+    ///      `ExecutionRouter.setParameters` already enforces that it fits inside the 21.
+    ///
+    ///      The gate is the agent's to clear, not merely to wait out: a Pending request nobody
+    ///      expires holds `openNotional` open indefinitely, and `markExpired` is permissionless,
+    ///      so an agent blocked here can unblock itself.
     ///
     ///      `penalty` rounds down, so a dust amount can exit free. At six decimals that is a
     ///      millionth of a dollar and not worth a rounding branch.
@@ -243,6 +255,7 @@ contract AgentRegistry is IReputationOracle, Ownable {
         Agent storage a = _agents[agentId];
         uint256 amount = a.unbondingAmount;
         if (amount == 0) revert NothingToWithdraw();
+        if (a.openNotional != 0) revert OutstandingLiability();
         // Past the period there is nothing to buy out, and charging for it would make `withdraw`
         // a strictly better call that a caller could miss. Fail loudly and point at the free door.
         if (block.timestamp >= a.unbondingAt) revert UnbondingElapsed();
@@ -364,6 +377,23 @@ contract AgentRegistry is IReputationOracle, Ownable {
         Agent storage a = _agents[agentId];
         uint256 max = _maxOpenNotional(agentId, a);
         return max > a.openNotional ? max - a.openNotional : 0;
+    }
+
+    /// @notice Whether `withdrawEarly` would succeed right now, and what it would pay out.
+    /// @dev So a caller can render the choice rather than discover it by reverting. `penalty` is
+    ///      still reported when `allowed` is false, because "you may not leave yet" and "leaving
+    ///      costs this much" are different things an operator wants to see at the same time.
+    function previewWithdrawEarly(uint256 agentId)
+        external
+        view
+        returns (bool allowed, uint256 paid, uint256 penalty)
+    {
+        Agent storage a = _agents[agentId];
+        uint256 amount = a.unbondingAmount;
+        if (amount > a.bond) amount = a.bond;
+        penalty = (amount * earlyExitPenaltyBps) / 10_000;
+        paid = amount - penalty;
+        allowed = amount != 0 && a.openNotional == 0 && block.timestamp < a.unbondingAt;
     }
 
     function meetsPolicy(uint256 agentId, Policy calldata policy) external view returns (bool) {

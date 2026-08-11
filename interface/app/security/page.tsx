@@ -225,15 +225,23 @@ export default function Security() {
           capacity shrinks the moment it starts to leave rather than when it finishes.
         </p>
         <p>
-          The exception is worth stating plainly rather than leaving in a parameter table. Since{' '}
-          <code>withdrawEarly</code>, an agent can take its queued bond out before the 21 days are up by
-          paying 10% of it to the treasury. Live exposure is not at risk from this — credit already nets
-          out the queued amount, so nothing an agent currently has open was ever backed by the bond it is
-          withdrawing. What the door does reach is an execution that has already been delivered and is
-          still inside its settlement window: the capital behind it can leave for a tenth of itself. A
-          lost challenge costs 20% of remaining bond, so the exit is the cheaper of the two, and an
-          operator who expects a fault is better off taking it. Treat the 21 days as a delay that has a
-          price, not as an assurance that the bond will be there at the end of a dispute.
+          There is a fast door, and it is worth stating what gates it rather than leaving it in a
+          parameter table. <code>withdrawEarly</code> returns queued bond before the 21 days for a 10%
+          penalty to the treasury — but only while <code>openNotional</code> is zero. That condition is
+          not a proxy for &ldquo;nothing outstanding&rdquo;; it is the thing itself. The router reserves
+          exposure when a request is made and releases it in exactly three places — settlement, a lost
+          challenge, and expiry — which are its three terminal states. Nothing is released at delivery,
+          at <code>finalize</code>, or when a challenge is answered. So an agent with any execution still
+          live, delivered and challengeable, under challenge, or finalized and awaiting settlement,
+          cannot use the door at all, and one with none has nothing left that could reach its bond.
+        </p>
+        <p>
+          That ordering is what makes the penalty safe to be small. Ten percent is less than the 20% a
+          lost challenge costs, so if the exit were open during a dispute an operator expecting a fault
+          would simply buy their way out — no toll sized in bond can fix that, because the payoff being
+          weighed comes out of notional, which leverage and tier carry to nine times bond. Gated, the
+          comparison stops mattering: the fault is always paid first. What the 10% prices is churn, and
+          what the 21 days now cover is the case where an agent wants out with work still in flight.
         </p>
 
         <h3>Audit status</h3>

@@ -253,39 +253,60 @@ describe("AgentRegistry", function () {
       ).to.be.revertedWithCustomError(env.registry, "NothingToWithdraw");
     });
 
-    it("cannot strand open exposure, because credit already nets the unbonding amount", async function () {
+    it("refuses while the agent still has exposure open", async function () {
       const { agentId } = await registerAgent(env, { bond: E18(2000), tier: Tier.Bronze });
       await env.registry.setRouter(env.owner.address);
       await env.registry.reserve(agentId, E18(500));
-      // Bronze at NEUTRAL is 0.5x, so E18(1000) of remaining bond backs exactly E18(500) open.
+      // Bronze at NEUTRAL is 0.5x, so E18(1000) of remaining bond backs exactly E18(500) open —
+      // the unbonding is legitimate and the *slow* door stays available. Only the fast one closes.
       await env.registry.connect(env.agentOwner).startUnbonding(agentId, E18(1000));
 
-      await env.registry.connect(env.agentOwner).withdrawEarly(agentId);
+      await expect(
+        env.registry.connect(env.agentOwner).withdrawEarly(agentId)
+      ).to.be.revertedWithCustomError(env.registry, "OutstandingLiability");
 
-      const a = await env.registry.getAgent(agentId);
-      expect(a.openNotional).to.equal(E18(500));
-      expect((await env.registry.getProfile(agentId)).maxOpenNotional).to.equal(E18(500));
+      await increaseTime(21 * DAY + 1);
+      const before = await env.token.balanceOf(env.agentOwner.address);
+      await env.registry.connect(env.agentOwner).withdraw(agentId);
+      expect(await env.token.balanceOf(env.agentOwner.address)).to.equal(before + E18(1000));
     });
 
-    it("costs less than a single fault, which is what it does not deter", async function () {
+    it("opens as soon as the exposure reaches a terminal state", async function () {
+      const { agentId } = await registerAgent(env, { bond: E18(2000), tier: Tier.Bronze });
+      await env.registry.setRouter(env.owner.address);
+      await env.registry.reserve(agentId, E18(500));
+      await env.registry.connect(env.agentOwner).startUnbonding(agentId, E18(1000));
+      expect((await env.registry.previewWithdrawEarly(agentId)).allowed).to.equal(false);
+
+      // The router releases notional in exactly three places, all of them terminal: _settle,
+      // slashUnresolvedChallenge and markExpired. So this single call stands in for every way an
+      // execution can end, and there is no fourth way for openNotional to reach zero.
+      await env.registry.release(agentId, E18(500));
+
+      const preview = await env.registry.previewWithdrawEarly(agentId);
+      expect(preview.allowed).to.equal(true);
+      expect(preview.paid).to.equal(E18(900));
+      expect(preview.penalty).to.equal(E18(100));
+      await env.registry.connect(env.agentOwner).withdrawEarly(agentId);
+      expect((await env.registry.getAgent(agentId)).bond).to.equal(E18(1000));
+    });
+
+    it("is a toll on churn now, not a price on escaping a fault", async function () {
       const { agentId } = await registerAgent(env, { bond: E18(1000) });
       const faultBps = BigInt(await env.router.faultSlashBps());
       const exitBps = BigInt(await env.registry.earlyExitPenaltyBps());
 
-      // Pinned as an assertion because it is the load-bearing fact about this mechanism: an agent
-      // that expects to lose one challenge is better off paying the toll and walking than staying
-      // to eat the slash. Raising earlyExitPenaltyBps above faultSlashBps is what would flip it,
-      // and even then the comparison is bond-against-bond while the payoff being weighed comes
-      // out of notional, which leverage and tier carry to nine times bond.
+      // The toll is still smaller than one fault slash, and that is now fine rather than the
+      // hole it would otherwise be: an agent cannot reach this door while it has an outcome
+      // outstanding, so there is no fault left for the smaller number to buy its way out of.
+      // If the openNotional gate above is ever removed, this comparison becomes the bug.
       expect(exitBps).to.equal(1_000n);
       expect(exitBps).to.be.lessThan(faultBps);
 
       await env.registry.connect(env.agentOwner).startUnbonding(agentId, E18(1000));
       const before = await env.token.balanceOf(env.agentOwner.address);
       await env.registry.connect(env.agentOwner).withdrawEarly(agentId);
-      const kept = (await env.token.balanceOf(env.agentOwner.address)) - before;
-      expect(kept).to.equal(E18(900));
-      expect(kept).to.be.greaterThan(E18(800)); // what one 20% fault would have left
+      expect((await env.token.balanceOf(env.agentOwner.address)) - before).to.equal(E18(900));
     });
 
     it("is retunable by the owner and bounded at a hundred percent", async function () {

@@ -45,7 +45,7 @@ const CONTRACTS: [string, string][] = [
 
 const PARAMS: [string, string, string, string][] = [
   ['Unbonding period', 'AgentRegistry.UNBONDING_PERIOD', '21 days', 'Constant, not a parameter. Bond stays slashable for the whole period.'],
-  ['Early exit penalty', 'AgentRegistry.earlyExitPenaltyBps', '1,000 bps', 'Of the unbonding amount, to treasury, to leave before the period elapses. Smaller than one fault slash — a toll, not a deterrent.'],
+  ['Early exit penalty', 'AgentRegistry.earlyExitPenaltyBps', '1,000 bps', 'Of the unbonding amount, to treasury, to skip the wait. Only available with openNotional at zero, so it prices churn rather than escape.'],
   ['Minimum bond', 'AgentRegistry.minBond', '100 USDT', 'Below this, maxOpenNotional is zero rather than small.'],
   ['Global notional cap', 'AgentRegistry.globalNotionalCap', '5,000,000 USDT', 'Hard ceiling on any one agent regardless of bond or score.'],
   ['Challenge window', 'ExecutionRouter.challengeWindow', '1 hour', 'Bronze/Silver only. Gold finalizes on delivery.'],
@@ -405,11 +405,11 @@ score' = decay(score, Δt) + (q − decay(score, Δt)) · w / (w + K)`}</div>
             small number. The whole thing is then clamped to <code>globalNotionalCap</code>.
           </p>
           <p>
-            That netting is also why <code>withdrawEarly</code> — which returns the queued bond before the 21
-            days at a 10% penalty to the treasury — cannot leave a live execution uncollateralised. Nothing
-            open was ever counted against the queued amount. It does let capital leave ahead of a challenge on
-            an execution already delivered, which is a deliberate trade and is described on{' '}
-            <a href="/security">security</a>.
+            <code>openNotional</code> also gates the fast exit. <code>withdrawEarly</code> returns queued bond
+            before the 21 days for a 10% penalty to the treasury, and requires <code>openNotional</code> to be
+            zero — which, because the router releases exposure only at settlement, fault or expiry, means every
+            execution the agent ever took has already ended. Time was standing in for a liability check the
+            contract can make directly. See <a href="/security">security</a>.
           </p>
           <div className="table-scroll">
             <table className="table">

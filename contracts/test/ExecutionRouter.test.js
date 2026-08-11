@@ -318,6 +318,68 @@ describe("ExecutionRouter", function () {
     });
   });
 
+  /**
+   * The registry gates `withdrawEarly` on `openNotional == 0`, which is only a real liability
+   * check if exposure survives until an execution is genuinely over. That is a property of this
+   * contract, not of the registry, so it is asserted here: the registry cannot tell the
+   * difference between "released because settled" and "released too early".
+   */
+  describe("exposure as the liability gate", function () {
+    it("holds the fast exit shut from delivery until settlement", async function () {
+      const req = await commission(env, agent.agentId, { notional: E18(100_000) });
+      await env.registry.connect(env.agentOwner).startUnbonding(agent.agentId, E18(100_000));
+
+      // Delivered, inside the challenge window, nothing settled. This is the exact state the gate
+      // exists for — the agent has done the work and the outcome can still go against it.
+      await deliverBronze(env, agent, req);
+      expect((await env.router.getRequest(req.requestId)).status).to.equal(Status.Delivered);
+      expect((await env.registry.getAgent(agent.agentId)).openNotional).to.equal(E18(100_000));
+      await expect(
+        env.registry.connect(env.agentOwner).withdrawEarly(agent.agentId)
+      ).to.be.revertedWithCustomError(env.registry, "OutstandingLiability");
+
+      // Finalized is not over either: the challenge window has closed but the outcome has not
+      // been recorded, so the score has not moved and the fee has not been paid.
+      await increaseTime(2 * HOUR);
+      await env.router.finalize(req.requestId);
+      expect((await env.registry.getAgent(agent.agentId)).openNotional).to.equal(E18(100_000));
+      await expect(
+        env.registry.connect(env.agentOwner).withdrawEarly(agent.agentId)
+      ).to.be.revertedWithCustomError(env.registry, "OutstandingLiability");
+
+      await env.router.connect(env.consumer).settle(req.requestId, CLEAN);
+      expect((await env.registry.getAgent(agent.agentId)).openNotional).to.equal(0);
+      await env.registry.connect(env.agentOwner).withdrawEarly(agent.agentId);
+    });
+
+    it("holds it shut through a live challenge, and the slash lands first", async function () {
+      const req = await commission(env, agent.agentId, { notional: E18(100_000) });
+      await env.registry.connect(env.agentOwner).startUnbonding(agent.agentId, E18(100_000));
+      await deliverBronze(env, agent, req);
+      await env.router.connect(env.challenger).challenge(req.requestId);
+
+      await expect(
+        env.registry.connect(env.agentOwner).withdrawEarly(agent.agentId)
+      ).to.be.revertedWithCustomError(env.registry, "OutstandingLiability");
+
+      // The agent lets the escalation window lapse rather than answering with a proof. Exposure
+      // is released here too — but only after the bond has already been cut for it, which is the
+      // ordering the whole gate depends on.
+      const bondBefore = (await env.registry.getAgent(agent.agentId)).bond;
+      await increaseTime(7 * HOUR);
+      await env.router.slashUnresolvedChallenge(req.requestId);
+
+      const after = await env.registry.getAgent(agent.agentId);
+      expect(after.openNotional).to.equal(0);
+      expect(after.bond).to.equal(bondBefore - (bondBefore * 2_000n) / 10_000n);
+      // Now it may leave, having paid for the fault first — which is the whole point of the
+      // ordering. The slash came out of the bond before any of it could be withdrawn, so what
+      // walks out is 100,000 of the 800,000 that survived, not 100,000 of the original million.
+      await env.registry.connect(env.agentOwner).withdrawEarly(agent.agentId);
+      expect((await env.registry.getAgent(agent.agentId)).bond).to.equal(E18(700_000));
+    });
+  });
+
   describe("settlement", function () {
     it("pays the agent, cuts the protocol fee, releases exposure and lifts the score", async function () {
       const req = await commission(env, agent.agentId, { notional: E18(100_000), fee: E18(100) });

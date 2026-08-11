@@ -28,8 +28,8 @@
  *
  * Capital-denominated parameters, all in WHOLE TOKENS and scaled by the bond token's decimals:
  *
- *   HALF_WEIGHT          notional at which one execution moves the score halfway (100000)
- *   WEIGHT_CAP           cap on a single execution's weight (1000000)
+ *   HALF_WEIGHT          notional at which one execution moves the score halfway (1000)
+ *   WEIGHT_CAP           cap on a single execution's weight (10000)
  *   MIN_BOND             minimum bond to register (100)
  *   GLOBAL_NOTIONAL_CAP  protocol-wide open exposure ceiling (5000000)
  *   CHALLENGE_BOND       bond required to challenge a delivery (50)
@@ -79,20 +79,34 @@ async function hasBn254Precompiles() {
  * from them here, rather than trusting the deployer to notice.
  */
 /**
- * Whole tokens, and the token is USDT — so these read as dollars, which is what they were last
- * set against. MIN_BOND is a $100 barrier to registering an agent and CHALLENGE_BOND is $50 to
- * dispute a delivery, the challenge being forfeited to the agent owner if it fails.
+ * Whole tokens, and the token is USDT — so these read as dollars.
  *
- * The two are a pair rather than independent knobs. A challenge costs the challenger half of what
- * the smallest agent staked, so the cheapest possible griefing campaign burns real money against
- * an agent that risked twice as much to exist — while staying low enough that a challenge is a
- * thing an ordinary participant can actually afford, which is the only reason Bronze and Silver
- * are honest. Raising CHALLENGE_BOND buys griefing resistance by making the optimistic tiers
- * quietly unchallengeable; that failure is silent, so it is the direction to be careful in.
+ * MIN_BOND is a $100 barrier to registering and CHALLENGE_BOND is $50 to dispute a delivery. The
+ * two are a pair rather than independent knobs, because a failed challenge is forfeited to the
+ * agent owner: the cheapest griefing campaign burns $50 a time against an agent that staked twice
+ * that to exist, while staying affordable enough that disputing is something an ordinary
+ * participant can actually do — the only reason Bronze and Silver are honest. Raising
+ * CHALLENGE_BOND buys griefing resistance by making the optimistic tiers quietly unchallengeable,
+ * and that failure is silent, so it is the direction to be careful in.
+ *
+ * HALF_WEIGHT and WEIGHT_CAP are the scoring pair, and they are sized against the smallest agent
+ * the protocol now admits rather than the largest. A new Bronze agent bonding the $100 minimum
+ * sits at NEUTRAL, which unlocks 1.0x leverage, and Bronze multiplies that by 0.5x — so its
+ * entire credit line is $50 and no execution it makes can be larger. The EWMA weights an
+ * execution at w/(w + HALF_WEIGHT), so at the old 100,000 that agent's every delivery counted for
+ * 0.05% and it needed roughly fourteen hundred of them to move its score halfway. It could not
+ * earn the score that unlocks the capital that would let it earn the score. At 1,000 the same
+ * $50 execution carries 4.8%, and eleven clean deliveries reach the 2.0x band — which then
+ * doubles its credit, so the ramp accelerates on its own. Calibration.test.js pins that.
+ *
+ * WEIGHT_CAP stays at ten times HALF_WEIGHT, so the largest single execution that counts fully is
+ * $10,000 and can move a score at most 91% of the way. That ratio is unchanged and deliberately
+ * so: it is the existing design's answer to how much one delivery may overwrite history, and
+ * revisiting it is a separate decision from moving the scale.
  */
 const CAPITAL_DEFAULTS = {
-  HALF_WEIGHT: "100000",
-  WEIGHT_CAP: "1000000",
+  HALF_WEIGHT: "1000",
+  WEIGHT_CAP: "10000",
   MIN_BOND: "100",
   GLOBAL_NOTIONAL_CAP: "5000000",
   CHALLENGE_BOND: "50",

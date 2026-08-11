@@ -91,8 +91,8 @@ describe("bond token decimals", () => {
       // than editing a field. Anything not read back here would silently revert to its default.
       await (
         await env.engine.setParameters(
-          whole(100_000),
-          whole(1_000_000),
+          whole(1_000),
+          whole(10_000),
           await env.engine.decayHalfLife(),
           await env.engine.livenessHaircutBps(),
           await env.engine.verificationHaircutBps()
@@ -134,9 +134,10 @@ describe("bond token decimals", () => {
 
       await (await env.engine.recordOutcome(1, BAD, env.units(300_000), 500)).wait();
 
-      // Same outcome, same notional, same contract — only the parameters changed. 3e11 against a
-      // halfWeight of 1e11 is a weight of 0.75, so a bad delivery of this size should take a
-      // large bite out of a neutral score rather than a twelve-decimal-places bite.
+      // Same outcome, same notional, same contract — only the parameters changed. The notional is
+      // far above weightCap, so it weighs in at the cap: 10,000 against a halfWeight of 1,000, or
+      // 91% of the distance. A bad delivery of this size should take a large bite out of a
+      // neutral score rather than a twelve-decimal-places bite.
       const score = await env.engine.getScore(1);
       expect(score).to.be.lessThan(NEUTRAL - 1_000n);
     });

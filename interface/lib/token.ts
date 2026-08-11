@@ -51,7 +51,7 @@ export function applyBps(amount: bigint, bps: number): bigint {
  */
 export function formatToken(
   amount: bigint,
-  { decimals = BOND_TOKEN.decimals, symbol = BOND_TOKEN.symbol as string, compact = true } = {}
+  { decimals = BOND_TOKEN.decimals as number, symbol = BOND_TOKEN.symbol as string, compact = true } = {}
 ): string {
   const { value, suffix } = scale(amount, decimals, compact);
   return `${value}${suffix} ${symbol}`;
@@ -59,7 +59,7 @@ export function formatToken(
 
 export function formatTokenParts(
   amount: bigint,
-  { decimals = BOND_TOKEN.decimals, symbol = BOND_TOKEN.symbol as string, compact = true } = {}
+  { decimals = BOND_TOKEN.decimals as number, symbol = BOND_TOKEN.symbol as string, compact = true } = {}
 ): { value: string; symbol: string } {
   const { value, suffix } = scale(amount, decimals, compact);
   return { value: `${value}${suffix}`, symbol };

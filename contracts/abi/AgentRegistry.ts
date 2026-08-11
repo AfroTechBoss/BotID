@@ -75,7 +75,17 @@ export const agentRegistryAbi = [
   },
   {
     "inputs": [],
+    "name": "OutstandingLiability",
+    "type": "error"
+  },
+  {
+    "inputs": [],
     "name": "TransferFailed",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "UnbondingElapsed",
     "type": "error"
   },
   {
@@ -340,6 +350,31 @@ export const agentRegistryAbi = [
     "type": "event"
   },
   {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "agentId",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "paid",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "penalty",
+        "type": "uint256"
+      }
+    ],
+    "name": "WithdrawnEarly",
+    "type": "event"
+  },
+  {
     "inputs": [],
     "name": "UNBONDING_PERIOD",
     "outputs": [
@@ -405,6 +440,19 @@ export const agentRegistryAbi = [
         "internalType": "contract IERC20",
         "name": "",
         "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "earlyExitPenaltyBps",
+    "outputs": [
+      {
+        "internalType": "uint32",
+        "name": "",
+        "type": "uint32"
       }
     ],
     "stateMutability": "view",
@@ -746,6 +794,35 @@ export const agentRegistryAbi = [
   {
     "inputs": [
       {
+        "internalType": "uint256",
+        "name": "agentId",
+        "type": "uint256"
+      }
+    ],
+    "name": "previewWithdrawEarly",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "allowed",
+        "type": "bool"
+      },
+      {
+        "internalType": "uint256",
+        "name": "paid",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "penalty",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
         "internalType": "address",
         "name": "operator",
         "type": "address"
@@ -863,6 +940,19 @@ export const agentRegistryAbi = [
       }
     ],
     "name": "setActive",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint32",
+        "name": "bps",
+        "type": "uint32"
+      }
+    ],
+    "name": "setEarlyExitPenaltyBps",
     "outputs": [],
     "stateMutability": "nonpayable",
     "type": "function"
@@ -1018,6 +1108,30 @@ export const agentRegistryAbi = [
     ],
     "name": "withdraw",
     "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "agentId",
+        "type": "uint256"
+      }
+    ],
+    "name": "withdrawEarly",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "paid",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "penalty",
+        "type": "uint256"
+      }
+    ],
     "stateMutability": "nonpayable",
     "type": "function"
   }

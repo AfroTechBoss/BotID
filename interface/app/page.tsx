@@ -6,6 +6,7 @@ import {
   SPARSE_AGENTS, DENSE_AGENTS, TIER_META, EXECUTIONS_PER_DAY, genFeedRow,
   formatToken, formatNum, timeAgo, scoreColorVar, shortHash, FeedRow, Agent, MOCK_NOW,
 } from '@/lib/mock-data';
+import SampleData from '@/components/SampleData';
 
 // The bars are 14 consecutive days ending at the fixture instant. Derived from MOCK_NOW and
 // formatted in UTC for the same reason every other date here is: a value that depends on the
@@ -83,6 +84,7 @@ export default function Overview() {
     <div className="overview-shell">
       <div className="overview-grid">
         <main className="overview-main" style={{ padding: 'var(--space-6)', display: 'flex', flexDirection: 'column', gap: 'var(--space-8)' }}>
+          <SampleData what="Every agent, execution, score and chart" />
           <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
             <span className="seg" style={{ fontSize: 12 }}>
               <label className="seg-opt"><input type="radio" checked={density === 'sparse'} onChange={() => setDensity('sparse')} />Sparse</label>

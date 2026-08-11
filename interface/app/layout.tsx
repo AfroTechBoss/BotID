@@ -4,6 +4,7 @@ import { cabinet, satoshi } from './fonts';
 import Nav from '@/components/Nav';
 import Footer from '@/components/Footer';
 import { NetworkProvider } from '@/lib/network';
+import { WalletProvider } from '@/lib/wallet';
 import { readTheme } from '@/lib/theme.server';
 
 export const metadata: Metadata = {
@@ -29,7 +30,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body>
         {/* The provider wraps the whole frame, not just the nav, because the switcher in the nav
             and the labels in the footer and the status bars have to name the same chain. */}
+        {/* WalletProvider inside NetworkProvider, not beside it: the wallet client is bound to the
+            selected chain, and "switch to the network the page is showing" is a question only
+            answerable when the selected network is already in scope. */}
         <NetworkProvider>
+          <WalletProvider>
           <div className="page-frame">
             <Nav />
             {/* Wrapper, not a bare {children}: it is what carries the viewport-height rule, which
@@ -37,6 +42,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <div className="page-body">{children}</div>
             <Footer />
           </div>
+          </WalletProvider>
         </NetworkProvider>
       </body>
     </html>

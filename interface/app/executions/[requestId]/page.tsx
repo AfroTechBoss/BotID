@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { getExecution, genFeedCells, TIER_META, formatToken, formatNum, timeAgo, shortHash } from '@/lib/mock-data';
 import RecomputeCommitment from './RecomputeCommitment';
+import SampleData from '@/components/SampleData';
 
 // A server component, and the reason the interface is Next rather than a SPA. The receipt is the
 // artifact people paste into a Discord thread when an agent is accused of something; it has to
@@ -29,6 +30,7 @@ export default function ExecutionDetail({ params }: { params: { requestId: strin
     // Uncapped, like the agent profile: this is a record of hashes and a 4-column claim grid, and
     // mono type at 13px is the thing least helped by being squeezed into 860px.
     <main style={{ padding: 'var(--space-6)', display: 'flex', flexDirection: 'column', gap: 'var(--space-6)' }}>
+      <SampleData what="This execution, its inputs and its commitments" />
       <div style={{ border: `2px solid ${tm.color}`, padding: 'var(--space-4)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
           <span className="tag" style={{ background: `color-mix(in srgb, ${tm.color} 18%, transparent)`, color: tm.color }}>

@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { getExecution, shortHash } from '@/lib/mock-data';
 import VerifyActions from './VerifyActions';
+import SampleData from '@/components/SampleData';
 
 // Server component for the same reason as the execution receipt: this page is an argument about a
 // specific proof, and an argument that only exists after JavaScript runs is one a link preview,
@@ -35,6 +36,7 @@ export default function ProofInspector({ params }: { params: { requestId: string
     // wrapping mid-hash at 860px, which is the one place wrapping actively costs the reader
     // something: a hash you have to mentally rejoin is a hash you cannot check by eye.
     <main style={{ padding: 'var(--space-6)', display: 'flex', flexDirection: 'column', gap: 'var(--space-6)' }}>
+      <SampleData what="This proof and the record around it" />
       <div>
         <h1 style={{ fontSize: 26, marginBottom: 4 }}>Proof inspector</h1>
         <div className="text-muted" style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>

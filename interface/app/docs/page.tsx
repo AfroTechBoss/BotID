@@ -105,8 +105,10 @@ export default function Docs() {
           </p>
 
           <div style={{ border: '2px solid var(--score-critical)', color: 'var(--score-critical)', padding: 'var(--space-3)', fontWeight: 600, margin: 'var(--space-4) 0' }}>
-            This interface runs on fixtures. Every agent, execution, score and address you see in it is
-            generated sample data. The contracts are unaudited and are not deployed to any public network.
+            Most of this interface runs on fixtures: every agent, execution, score and chart is generated
+            sample data, and the pages that show it say so. The exceptions are the portal, which reads and
+            writes the real contracts, and the contract table. The contracts are unaudited and are deployed
+            to Bohr testnet only — nothing of ours is on mainnet.
             See <a href="/security" style={{ color: 'inherit' }}>security</a> for what exists and what does not.
           </div>
 
@@ -526,8 +528,9 @@ score' = decay(score, Δt) + (q − decay(score, Δt)) · w / (w + K)`}</div>
           </p>
           <ul>
             <li>
-              <strong>Nothing is deployed to a public network.</strong> The only deployment artifact in the
-              repository is a local devnet. Addresses shown anywhere in this interface are sample data.
+              <strong>Testnet only.</strong> The deployment is on Bohr, chain 968, and its addresses are listed
+              on <a href="/security">security</a>. Nothing is deployed to BOT Chain mainnet. Agent and execution
+              addresses shown on the fixture-backed pages are sample data.
             </li>
             <li><strong>The contracts are unaudited</strong>, with no audit scheduled and no bug bounty open.</li>
             <li>

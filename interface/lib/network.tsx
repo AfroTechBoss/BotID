@@ -1,5 +1,6 @@
 'use client';
 import { createContext, useContext, useMemo, useState } from 'react';
+import { CHAINS } from './chain';
 
 // The selected network is app-wide state, not the nav's private business. It was local to
 // NetworkSelect, so switching to mainnet changed the nav and nothing else — the footer and the
@@ -30,15 +31,21 @@ export interface Network {
 // Bohr is 968 at https://rpc.bohr.life and BOT Chain is 677 at https://rpc.botchain.ai. A wrong
 // chain id on an interface whose security page exists to answer "is this the real BotID" is not a
 // cosmetic error, so it is worth stating where the right ones came from.
-// Bohr's explorer is recorded as "not published" in interface/README.md, which was true when that
+// Chain id, name and explorer come from lib/chain.ts, which is where viem's chain objects are
+// defined, so the switcher and the RPC client cannot end up describing different chains. The
+// direction of the import matters and only works one way: chain.ts is a plain module that a server
+// component may import, and pulling values *out* of this 'use client' module into it would turn
+// them into client references. See the header of lib/contracts.ts for how that bites.
+//
+// Bohr's explorer was recorded as "not published" in interface/README.md, which was true when that
 // table was written and is not any more: scan.bohr.life answers, runs Blockscout, and its
 // /api/v2/addresses endpoint returns our AgentRegistry with the right creator. Probed 2026-08-11
 // against the deployed address rather than assumed from the hostname pattern — an explorer that
 // exists but indexes a different chain would render a "not found" page under a real address, on
 // the one page whose job is to prove an address is ours.
 export const NETWORKS: Network[] = [
-  { id: 'testnet', name: 'Bohr Testnet', short: 'testnet', chainId: 968, explorer: 'https://scan.bohr.life' },
-  { id: 'mainnet', name: 'BOT Chain', short: 'mainnet', chainId: 677, explorer: 'https://scan.botchain.ai' },
+  { id: 'testnet', name: CHAINS.testnet.name, short: 'testnet', chainId: CHAINS.testnet.id, explorer: CHAINS.testnet.blockExplorers.default.url },
+  { id: 'mainnet', name: CHAINS.mainnet.name, short: 'mainnet', chainId: CHAINS.mainnet.id, explorer: CHAINS.mainnet.blockExplorers.default.url },
 ];
 
 interface NetworkContextValue {

@@ -1,6 +1,7 @@
 'use client';
 import { useState } from 'react';
 import { DENSE_AGENTS, TIER_META, genExecutions, formatToken, timeAgo, shortHash } from '@/lib/mock-data';
+import SampleData from '@/components/SampleData';
 
 const STATUS_COLOR: Record<string, string> = {
   Settled: 'var(--score-good)', Finalized: 'var(--tier-gold)', Challenged: 'var(--state-pending)',
@@ -24,6 +25,7 @@ export default function Executions() {
   return (
     <>
       <main style={{ padding: 'var(--space-6)', }}>
+        <SampleData what="Every execution in this list" />
         {/* Wraps: five filter options and the title need more than 375px between them. */}
         <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'baseline', justifyContent: 'space-between', gap: 'var(--space-3)', marginBottom: 'var(--space-3)' }}>
           <h1 style={{ fontSize: 28 }}>Executions</h1>

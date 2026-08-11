@@ -19,6 +19,13 @@ module.exports = {
   // the browser, and anything read per-request could differ between the two renders.
   env: { NEXT_PUBLIC_MOCK_NOW: String(MOCK_NOW) },
 
+  // The ABIs live in ../contracts/abi, outside this project root, and Next refuses to compile
+  // imports from outside the root unless told to. They are deliberately not copied in: they are a
+  // build product of the contracts (scripts/export-abi.js), and a copy is a thing that goes stale
+  // silently — an interface calling a function signature the deployed contract no longer has fails
+  // at the RPC with a decode error, not at build. One source, imported across.
+  experimental: { externalDir: true },
+
   // `next dev` and `next build` both write to .next. Running a build while the dev server is up
   // replaces the chunks the running server has already resolved, and it dies on the next request
   // with "Cannot find module './875.js'" — an error that reads like a code fault and is not one.

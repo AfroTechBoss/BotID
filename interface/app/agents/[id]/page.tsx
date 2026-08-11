@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import BotIdBadge from '@/components/BotIdBadge';
 import { SAMPLE_AGENT, TIER_META, MOCK_NOW, genScoreHistory, genExecutions, formatToken, formatNum, timeAgo, scoreColorVar, shortHash, toBaseUnits, ratio, pct } from '@/lib/mock-data';
+import SampleData from '@/components/SampleData';
 
 const STATUS_COLOR: Record<string, string> = {
   Settled: 'var(--score-good)', Finalized: 'var(--tier-gold)', Challenged: 'var(--state-pending)',
@@ -56,6 +57,7 @@ export default function AgentProfile({ params }: { params: { id: string } }) {
           width:100% and gets more resolution per day the wider it runs, and the executions table
           has six columns that were wrapping for no reason. */}
       <main style={{ padding: 'var(--space-6)' }}>
+        <SampleData what="This profile, its score history and its execution list" />
         {/* Wraps: badge, id, score and the alert button are ~330px of content plus a 44px badge. */}
         <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 14, marginBottom: 4 }}>
           <BotIdBadge tier={a.tier} hasFault={a.faults > 0} size={44} />

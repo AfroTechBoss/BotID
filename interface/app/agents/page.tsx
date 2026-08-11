@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import BotIdBadge from '@/components/BotIdBadge';
 import { SPARSE_AGENTS, DENSE_AGENTS, TIER_META, formatToken, formatNum, timeAgo, scoreColorVar, shortHash, pct, MOCK_NOW } from '@/lib/mock-data';
+import SampleData from '@/components/SampleData';
 
 export default function Leaderboard() {
   const [density, setDensity] = useState<'sparse' | 'dense'>('sparse');
@@ -17,6 +18,7 @@ export default function Leaderboard() {
   return (
     <>
       <main style={{ padding: 'var(--space-6)' }}>
+        <SampleData what="Every agent, score and settlement count" />
         {/* Wraps: the title and a two-option segmented control plus a filter chip do not share a
             line at 375px, and space-between with no wrap does not shrink — it overflows. */}
         <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'baseline', justifyContent: 'space-between', gap: 'var(--space-3)', marginBottom: 'var(--space-3)' }}>

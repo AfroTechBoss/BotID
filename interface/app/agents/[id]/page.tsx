@@ -1,6 +1,7 @@
 'use client';
 import { useState } from 'react';
 import BotIdBadge from '@/components/BotIdBadge';
+import { Bar, LinesSkeleton, TableSkeleton } from '@/components/Skeleton';
 import { useNetwork } from '@/lib/network';
 import { useAgent, useAgentExecutions, useNow } from '@/lib/useChain';
 import { registryAddress, tierNameOf } from '@/lib/registry';
@@ -56,9 +57,7 @@ export default function AgentProfile({ params }: { params: { id: string } }) {
   if (!deployed) {
     return <Empty title={`BotID is not deployed on ${network.name}.`} body="There is no registry here to look this agent up in." />;
   }
-  if (loading) {
-    return <Empty title={`Reading agent #${params.id} on ${network.name}…`} body="" />;
-  }
+  if (loading) return <ProfileSkeleton id={params.id} />;
   // Two different absences, deliberately worded apart. With no error the registry answered and had
   // no such agent; with one it never answered at all. Collapsing them into "not found" would tell a
   // reader their agent had been deregistered when the truth was that the RPC was down.
@@ -167,7 +166,19 @@ export default function AgentProfile({ params }: { params: { id: string } }) {
               ))}
             </span>
           </div>
-          {rows.length > 0 ? (
+          {/* Its own wait, separate from the agent's. The router read is a log scan and the registry
+              read is two eth_calls, so they do not finish together — and the header can be filled in
+              while the table below it is still arriving rather than holding the whole page back for
+              the slower of the two. */}
+          {execs === undefined ? (
+            <div className="table-scroll" aria-busy="true">
+              <span className="sr-only" role="status">Loading executions</span>
+              <table className="table table-dense">
+                <thead><tr><th>Request</th><th>Status</th><th>Notional</th><th>Outcome</th><th>Time</th></tr></thead>
+                <TableSkeleton rows={3} widths={[110, 64, 76, 62, 52]} />
+              </table>
+            </div>
+          ) : rows.length > 0 ? (
             <div className="table-scroll">
               <table className="table table-dense">
                 <thead><tr><th>Request</th><th>Status</th><th>Notional</th><th>Outcome</th><th>Time</th></tr></thead>
@@ -192,16 +203,65 @@ export default function AgentProfile({ params }: { params: { id: string } }) {
             </div>
           ) : (
             <p className="text-muted" style={{ fontSize: 13, padding: 'var(--space-4) 0' }}>
-              {execs === undefined
-                ? 'Reading the router…'
-                : (execs.length > 0
-                  ? `No ${filter} executions. This agent has ${execs.length} in total.`
-                  : 'Nothing has been commissioned from this agent yet. Every row here would be an ExecutionRouter event, so the first request anyone sends appears here.')}
+              {execs.length > 0
+                ? `No ${filter} executions. This agent has ${execs.length} in total.`
+                : 'Nothing has been commissioned from this agent yet. Every row here would be an ExecutionRouter event, so the first request anyone sends appears here.'}
             </p>
           )}
         </section>
       </main>
     </>
+  );
+}
+
+/**
+ * The page with its numbers not yet filled in.
+ *
+ * The id is the one thing known before the node answers — it came from the URL — so it is rendered
+ * for real rather than as a bar. That makes this recognisably the profile you clicked through to
+ * while it is still loading, which is the difference between waiting and wondering whether the link
+ * worked.
+ */
+function ProfileSkeleton({ id }: { id: string }) {
+  return (
+    <main style={{ padding: 'var(--space-6)' }} aria-busy="true">
+      {/* One label for the whole region. The bars below are aria-hidden, so this is the only thing
+          announced, and it is announced once. */}
+      <span className="sr-only" role="status">Loading agent #{id}</span>
+      <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 14, marginBottom: 4 }}>
+        <Bar w={44} h={44} />
+        <h1 style={{ fontSize: 28, margin: 0 }}>agent #{id}</h1>
+        <Bar w={72} h={22} />
+      </div>
+      <div style={{ marginBottom: 'var(--space-6)' }}><Bar w={320} h={12} /></div>
+
+      <section style={{ marginBottom: 'var(--space-8)' }}>
+        <h6 style={{ marginBottom: 'var(--space-3)', color: 'var(--text-muted)' }}>Score</h6>
+        <div style={{ borderTop: '2px solid var(--color-divider)', borderBottom: '2px solid var(--color-divider)', padding: 'var(--space-4)', display: 'flex', flexWrap: 'wrap', alignItems: 'baseline', gap: 'var(--space-6)' }}>
+          <Bar w={130} h={34} />
+          <div style={{ flex: 1, minWidth: 260 }}><LinesSkeleton lines={3} /></div>
+        </div>
+      </section>
+
+      <div className="panel-split" style={{ marginBottom: 'var(--space-8)' }}>
+        {['Credit', 'Registration'].map((h) => (
+          <div key={h} style={{ padding: 'var(--space-4)' }}>
+            <h6 style={{ color: 'var(--text-muted)', marginBottom: 'var(--space-3)' }}>{h}</h6>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {[0, 1, 2, 3].map((i) => <Bar key={i} w="100%" h={13} />)}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <h6 style={{ color: 'var(--text-muted)', marginBottom: 'var(--space-3)' }}>Executions</h6>
+      <div className="table-scroll">
+        <table className="table table-dense">
+          <thead><tr><th>Request</th><th>Status</th><th>Notional</th><th>Outcome</th><th>Time</th></tr></thead>
+          <TableSkeleton rows={3} widths={[110, 64, 76, 62, 52]} />
+        </table>
+      </div>
+    </main>
   );
 }
 

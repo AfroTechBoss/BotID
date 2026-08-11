@@ -53,6 +53,25 @@ export function publicClient(network: NetworkId): PublicClient {
         // is the difference between a transient blip and a component that renders an error.
         retryCount: 2,
         retryDelay: 300,
+        /**
+         * Concurrent requests are collected for a tick and sent as one JSON-RPC batch.
+         *
+         * This is not a micro-optimisation, it is the single largest thing wrong with these pages.
+         * Measured against rpc.bohr.life on 2026-08-11, with the connection already warm:
+         *
+         *   one eth_call                       516ms
+         *   three eth_calls, in parallel      2431ms   ← slower than doing them one at a time
+         *   three eth_calls, batched           471ms
+         *
+         * Three at once costing five times one is the giveaway: the endpoint is not serving them
+         * in parallel at all. It is a single queue, and opening more connections just means waiting
+         * in more of them — like sending three people to the same one-teller bank instead of
+         * sending one person with three forms. Batching hands over the three forms.
+         *
+         * Everything above this line was already written to fire requests concurrently, so the
+         * whole interface gets the improvement without changing a call site.
+         */
+        batch: true,
       }),
       // Below the ~0.75s block time, so a confirmation is noticed in the block it lands in.
       pollingInterval: 500,

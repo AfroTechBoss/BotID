@@ -412,6 +412,55 @@ img { display: block; max-width: 100%; }
   .nav-toggle-bars, .nav-toggle-bars::before, .nav-toggle-bars::after { transition: top 120ms ease, transform 120ms ease, background-color 120ms ease; }
 }
 
+/* Visible to a screen reader, to nothing else. Not display:none, which removes it from the
+   accessibility tree along with everything else — the point is that it is read and not seen. */
+.sr-only {
+  position: absolute;
+  width: 1px; height: 1px;
+  padding: 0; margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Skeletons.
+
+   These replace three pages' worth of "Reading the registry…", which was honest and still the wrong
+   thing to show: a line of centred text is a different shape from the table that replaces it, so the
+   page jumped when the answer arrived, and for the two seconds before it the reader had no idea
+   whether they were waiting for four numbers or four hundred. A skeleton is the same shape as the
+   answer — it is the table with the ink not yet dry, so nothing moves when the ink lands.
+
+   The width is set per instance because a column of identical bars reads as a progress bar rather
+   than as content; varied widths read as text. */
+.skel {
+  display: inline-block;
+  background: var(--color-neutral-200);
+  border-radius: 2px;
+  /* The bar stands in for a line of text, so it needs a height even with no content in it. */
+  min-height: 1em;
+  vertical-align: middle;
+}
+
+/* The shimmer is the only thing here that moves, and it is behind prefers-reduced-motion. Without
+   it the skeleton still reads as a skeleton — it is grey where content will be — so nothing is lost
+   for a reader who has asked the OS for stillness. A pulse is used rather than a sweeping gradient
+   because a sweep needs a background twice the element's width, and these elements are as narrow as
+   14px. */
+@media (prefers-reduced-motion: no-preference) {
+  .skel { animation: skel-pulse 1.4s ease-in-out infinite; }
+  /* Staggered so a column of bars does not flash in unison, which reads as one blinking block
+     rather than as several pieces of content loading. */
+  .skel:nth-child(2n) { animation-delay: 0.18s; }
+  .skel:nth-child(3n) { animation-delay: 0.36s; }
+}
+@keyframes skel-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}
+
 /* The first media query in this file, and it exists because the header was the one part of the
    layout with a hard minimum width: five links, a two-word wordmark, a network selector and a
    button, in a row with no wrap and nothing allowed to shrink. That row wants ~700px. Below it the

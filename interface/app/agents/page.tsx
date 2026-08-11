@@ -1,5 +1,6 @@
 'use client';
 import BotIdBadge from '@/components/BotIdBadge';
+import { TableSkeleton } from '@/components/Skeleton';
 import { useNetwork } from '@/lib/network';
 import { useAgents, useNow } from '@/lib/useChain';
 import { registryAddress, tierNameOf } from '@/lib/registry';
@@ -71,10 +72,15 @@ export default function Leaderboard() {
         {/* Nine columns. On a phone this scrolls sideways inside .table-scroll rather than
             collapsing into cards: the whole point of a leaderboard is comparing a column down the
             page, and stacked cards destroy exactly that. */}
-        {list.length > 0 && (
+        {/* The header renders during the load as well as after it. It is the one part of the table
+            that is known before the node answers — these nine columns are what a leaderboard is,
+            whoever turns out to be on it — so showing it early costs nothing and means the skeleton
+            below has something to be the body of. */}
+        {(list.length > 0 || (deployed && loading)) && (
           <div className="table-scroll">
             <table className="table table-dense">
               <thead><tr><th>#</th><th>Agent</th><th>Score</th><th>Tier</th><th>Faults</th><th>Settled</th><th>Bond</th><th>Credit used</th><th>Last active</th></tr></thead>
+              {deployed && loading && <TableSkeleton rows={3} widths={[14, 120, 44, 52, 18, 18, 76, 96, 52]} />}
               <tbody>
                 {list.map((a, i) => {
                   const tier = tierNameOf(a.tier);
@@ -127,12 +133,6 @@ export default function Leaderboard() {
         {!deployed && (
           <div style={{ textAlign: 'center', padding: 'var(--space-8) 0', color: 'var(--text-subtle)' }}>
             <p>BotID is not deployed on {network.name}, so there is no registry to read.</p>
-          </div>
-        )}
-
-        {deployed && loading && (
-          <div style={{ textAlign: 'center', padding: 'var(--space-8) 0', color: 'var(--text-subtle)' }}>
-            <p>Reading the registry on {network.name}…</p>
           </div>
         )}
 

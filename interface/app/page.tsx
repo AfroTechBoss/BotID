@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import BotIdBadge from '@/components/BotIdBadge';
+import { Bar, TableSkeleton } from '@/components/Skeleton';
 import { useNetwork } from '@/lib/network';
 import { useAgents, useActivity, useNow } from '@/lib/useChain';
 import { tierNameOf } from '@/lib/registry';
@@ -59,9 +60,12 @@ export default function Overview() {
     return 'inherit';
   };
 
-  // A dash rather than a zero wherever the node has not answered yet. Zero is a claim about the
-  // chain; a dash is a claim about this page, and they are not the same statement.
-  const stat = (v: string | number) => (agents ? v : '—');
+  // A bar rather than a zero wherever the node has not answered yet. Zero is a claim about the
+  // chain; a placeholder is a claim about this page, and they are not the same statement. This was
+  // an em dash, which is the same idea but reads as a real value that happens to be blank — several
+  // of these numbers are legitimately zero on a young network, and "—" next to "0" invites the
+  // reader to work out which is which. A bar cannot be mistaken for a number.
+  const stat = (v: string | number) => (agents ? v : <Bar w="60%" h="0.8em" />);
 
   return (
     // Exactly one screenful. The two columns and the status bar divide it up; nothing here grows
@@ -181,10 +185,11 @@ export default function Overview() {
 
           <section>
             <h6 style={{ marginBottom: 'var(--space-3)', color: 'var(--text-muted)' }}>Top agents</h6>
-            {top.length > 0 && (
+            {(top.length > 0 || agentsLoading) && (
               <div className="table-scroll">
                 <table className="table table-dense">
                   <thead><tr><th></th><th>Agent</th><th>Score</th><th>Tier</th><th>Notional</th><th>Settled</th><th>Faults</th></tr></thead>
+                  {agentsLoading && <TableSkeleton rows={4} widths={[20, 36, 44, 52, 76, 18, 18]} />}
                   <tbody>
                     {top.map((a) => {
                       const tier = tierNameOf(a.tier);
@@ -205,7 +210,7 @@ export default function Overview() {
                 </table>
               </div>
             )}
-            {agentsLoading && <p className="text-muted" style={{ fontSize: 12 }}>Reading AgentRegistry on {network.name}…</p>}
+            {agentsLoading && <span className="sr-only" role="status">Loading agents on {network.name}</span>}
             {agents && agents.length === 0 && (
               <p className="text-muted" style={{ fontSize: 12 }}>
                 No agents registered on {network.name} yet. The contracts are deployed and nobody has
@@ -250,9 +255,25 @@ export default function Overview() {
                 log, so the first request anyone sends appears here.
               </div>
             )}
+            {/* Six rows in the feed's own two-line shape — a timestamp, a verb and a hash over a
+                detail line — rather than six identical bars. The feed is the part of this page a
+                reader watches, so it is the part where a placeholder that keeps the rhythm of the
+                real thing is worth the markup. */}
             {!activity && deployed && (
-              <div className="text-muted" style={{ padding: 'var(--space-4)', fontFamily: 'var(--font-body)', fontSize: 12 }}>
-                Reading ExecutionRouter&apos;s logs…
+              <div aria-busy="true">
+                <span className="sr-only" role="status">Loading the execution feed</span>
+                {Array.from({ length: 6 }, (_, i) => (
+                  <div key={i} style={{ padding: '8px 12px', borderBottom: '1px solid var(--color-divider)' }}>
+                    <div style={{ display: 'flex', gap: 8, alignItems: 'baseline' }}>
+                      <Bar w={40} h={11} />
+                      <Bar w={56} h={11} />
+                      <Bar w={84} h={11} />
+                    </div>
+                    <div style={{ marginTop: 4, paddingLeft: 64 }}>
+                      <Bar w={i % 2 ? '52%' : '68%'} h={11} />
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
           </div>

@@ -13,6 +13,7 @@
 // No 'use client': the hook that calls it is a client module, but nothing in here touches the
 // browser and a server component should be able to read the same numbers.
 
+import { parseEventLogs } from 'viem';
 import { executionRouterAbi } from '@abi/ExecutionRouter';
 import { addressOf, DEPLOY_BLOCK } from './contracts';
 import { publicClient, logWindows, BLOCK_TIME_MS } from './chain';
@@ -102,29 +103,7 @@ export async function readActivity(network: NetworkId, days = 14): Promise<Activ
   const client = publicClient(network);
   const head = await client.getBlockNumber();
 
-  // One query per window per event, rather than one query for all eight events per window: viem
-  // types `getLogs` against a single event, and the union of eight differently-shaped `args` is
-  // what makes the decoding below unreadable. The requests go out together.
-  const windows = logWindows(fromBlock, head);
-  const abiEvents = executionRouterAbi.filter(
-    (item): item is Extract<typeof item, { type: 'event' }> => item.type === 'event'
-  );
-
-  const pages = await Promise.all(
-    LIFECYCLE.flatMap((name) => {
-      const event = abiEvents.find((e) => e.name === name);
-      if (!event) return [];
-      return windows.map((range) =>
-        client
-          .getLogs({ address: router, event, ...range })
-          // A single failed window should cost that window, not the page. The count is then
-          // understated rather than absent, which is the better failure for a feed.
-          .catch(() => [])
-      );
-    })
-  );
-
-  const logs = pages.flat();
+  const logs = await routerLogs(network, head);
 
   // Deduped by log identity, because a reorg can hand back the same log twice and two identical
   // React keys is a rendering bug on top of a counting one.
@@ -147,6 +126,44 @@ export async function readActivity(network: NetworkId, days = 14): Promise<Activ
   for (const e of feed) e.time = times.get(e.block) ?? 0;
 
   return { feed, perDay: bucket(events, head, days), head, total: events.length };
+}
+
+/**
+ * Every log the router has emitted in range, decoded.
+ *
+ * One request per window, with no topic filter, and the decoding done here rather than by the node.
+ * The obvious shape is the opposite — ask for each event separately and let the node do the
+ * filtering — and it is what this did until it was measured. Against rpc.bohr.life, over the same
+ * ~46k block span:
+ *
+ *   eight filtered queries, in parallel     2559ms
+ *   one unfiltered query                     409ms
+ *
+ * A topic filter saves the node nothing here; it scans the same blocks either way, and asking eight
+ * times means paying for that scan eight times. The unfiltered version is also flat in the number
+ * of events we care about — adding a ninth costs one more `case` and no more network — where the
+ * filtered version added a whole round trip per event per window.
+ *
+ * The cost is bandwidth: this pulls administrative events (AdapterSet, ParametersUpdated) that get
+ * thrown away. On a router emitting a handful of logs a day that is nothing. It stops being nothing
+ * at the same point everything else here does, which is when this file becomes an indexer.
+ */
+async function routerLogs(network: NetworkId, head: bigint) {
+  const router = addressOf(network, 'ExecutionRouter');
+  const fromBlock = DEPLOY_BLOCK[network];
+  if (!router || fromBlock === undefined) return [];
+  const client = publicClient(network);
+
+  const pages = await Promise.all(
+    // A single failed window should cost that window, not the page. The result is then understated
+    // rather than absent, which is the better failure for a feed.
+    logWindows(fromBlock, head).map((range) => client.getLogs({ address: router, ...range }).catch(() => []))
+  );
+
+  // strict: false keeps a log whose event is not in the ABI out of the result rather than throwing.
+  // The router's ABI is generated from the contract it is reading, so that should not happen — but
+  // "should not" and a page that renders nothing at all are a bad pairing.
+  return parseEventLogs({ abi: executionRouterAbi, logs: pages.flat(), strict: false });
 }
 
 /** Where one request has got to. Ordered by finality: later in this list wins a collision. */
@@ -174,10 +191,10 @@ export interface AgentExecution {
  * than an event — so this is a reduction, not a listing: every log carrying a requestId collapses
  * into the row for that request, and the row's status is whichever stage got furthest.
  *
- * Five of the eight events index agentId, so those are filtered by the node. The other three —
- * challenged, finalized, resolved — carry only requestId, so they are fetched unfiltered and
- * matched locally against the request ids the first pass found. That is the same volume the
- * overview already reads, and the alternative is one query per request id, which is worse.
+ * Filtered in this process rather than by the node, for the reason given on `routerLogs`. It would
+ * be tidier to hand agentId to the RPC — five of the eight events index it — but only five, so the
+ * other three would need a second unfiltered pass anyway, and the two passes together cost more
+ * than the one pass this does.
  */
 export async function readAgentExecutions(network: NetworkId, agentId: bigint): Promise<AgentExecution[] | undefined> {
   const router = addressOf(network, 'ExecutionRouter');
@@ -186,22 +203,15 @@ export async function readAgentExecutions(network: NetworkId, agentId: bigint): 
 
   const client = publicClient(network);
   const head = await client.getBlockNumber();
-  const windows = logWindows(fromBlock, head);
-  const abiEvents = executionRouterAbi.filter(
-    (item): item is Extract<typeof item, { type: 'event' }> => item.type === 'event'
-  );
-  const query = (name: string, byAgent: boolean) => {
-    const event = abiEvents.find((e) => e.name === name);
-    if (!event) return [];
-    return windows.map((range) =>
-      client.getLogs({ address: router, event, args: byAgent ? { agentId } : {}, ...range }).catch(() => [])
-    );
-  };
+  const logs = await routerLogs(network, head);
 
-  const [own, loose] = await Promise.all([
-    Promise.all(BY_AGENT.flatMap((n) => query(n, true))),
-    Promise.all(BY_REQUEST.flatMap((n) => query(n, false))),
-  ]);
+  // Split by whether the event names this agent. The rest are matched by request id below, once we
+  // know which requests are this agent's — an event that carries only a requestId cannot be
+  // attributed on its own.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const own = (logs as any[]).filter((l) => l.args?.agentId === agentId);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const loose = (logs as any[]).filter((l) => l.args?.agentId === undefined);
 
   const rows = new Map<string, AgentExecution>();
   const at = (id: `0x${string}`, block: bigint): AgentExecution => {
@@ -215,8 +225,7 @@ export async function readAgentExecutions(network: NetworkId, agentId: bigint): 
     if (STATUS_ORDER.indexOf(to) > STATUS_ORDER.indexOf(row.status)) row.status = to;
   };
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  for (const log of own.flat() as any[]) {
+  for (const log of own) {
     const row = at(log.args.requestId, log.blockNumber);
     switch (log.eventName) {
       case 'ExecutionRequested': row.notional = log.args.notional; break;
@@ -229,8 +238,7 @@ export async function readAgentExecutions(network: NetworkId, agentId: bigint): 
 
   // Only the ones belonging to a request this agent owns. Everything else on the router is another
   // agent's business and matching it in would be a straightforward lie about who did what.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  for (const log of loose.flat() as any[]) {
+  for (const log of loose) {
     if (!rows.has(log.args.requestId)) continue;
     const row = at(log.args.requestId, log.blockNumber);
     if (log.eventName === 'ExecutionChallenged') advance(row, 'Challenged');
@@ -242,11 +250,6 @@ export async function readAgentExecutions(network: NetworkId, agentId: bigint): 
   for (const e of out) e.time = times.get(e.block) ?? 0;
   return out;
 }
-
-/** Lifecycle events that index agentId, so the node can filter them for us. */
-const BY_AGENT = ['ExecutionRequested', 'ExecutionDelivered', 'ExecutionSettled', 'ExecutionExpired', 'ExecutionFaulted'] as const;
-/** The rest. They identify only the request, so they are matched by id after the fact. */
-const BY_REQUEST = ['ExecutionChallenged', 'ExecutionFinalized'] as const;
 
 /**
  * Exact timestamps for a handful of blocks.

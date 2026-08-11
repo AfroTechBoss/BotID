@@ -1,5 +1,6 @@
 require("@nomicfoundation/hardhat-ethers");
 require("@nomicfoundation/hardhat-chai-matchers");
+require("@nomicfoundation/hardhat-verify");
 
 const fs = require("fs");
 const path = require("path");
@@ -106,5 +107,41 @@ module.exports = {
       accounts,
     },
   },
+  /**
+   * Source verification against each chain's Blockscout, through hardhat-verify.
+   *
+   * The plugin only knows how to build Etherscan-shaped requests, so it is pointed at Blockscout's
+   * Etherscan-compatible `/api` route rather than its native REST verification endpoints — the
+   * latter are a different request shape entirely and cannot be dropped in here. Both `/api` routes
+   * were probed against a known contract before being written down, the same rule the addresses in
+   * deployments/ follow: a URL that exists but serves a different chain fails in the one way that
+   * looks like success.
+   *
+   * The API keys are literal filler. Blockscout does not check them on this route, but the plugin
+   * refuses to run without a non-empty string per network, and the key names must match the
+   * `network` fields in customChains or the plugin reports the chain as unsupported.
+   *
+   * Sourcify is off because it is a second, independent verification service that would be
+   * attempted on every run and fail noisily on chains it does not index. Bohr is not one it knows.
+   */
+  etherscan: {
+    apiKey: {
+      bohr: "blockscout-needs-no-key",
+      botchain: "blockscout-needs-no-key",
+    },
+    customChains: [
+      {
+        network: "bohr",
+        chainId: 968,
+        urls: { apiURL: "https://scan.bohr.life/api", browserURL: "https://scan.bohr.life" },
+      },
+      {
+        network: "botchain",
+        chainId: 677,
+        urls: { apiURL: "https://scan.botchain.ai/api", browserURL: "https://scan.botchain.ai" },
+      },
+    ],
+  },
+  sourcify: { enabled: false },
   mocha: { timeout: 120000 },
 };

@@ -78,6 +78,35 @@ bytes32 requestId = router.requestExecution(
 agent needs somewhere to fetch the data from. It re-checks that what it fetched hashes to
 `inputCommitment` before running anything.
 
+### If the consumer is not a contract
+
+A bot that is not on chain still needs the same answer, and should not have to run an RPC client
+and an ABI decoder to get it. Three read-only endpoints, CORS-open, no key:
+
+| Endpoint | Answers |
+|---|---|
+| `GET /api/agents` | Every registered agent, best first. `?minTier=silver&active=true&limit=10` |
+| `GET /api/agents/:id` | One agent's full record — tier, bond, credit line, score, faults, last active |
+| `GET /api/agents/:id/policy` | Whether it clears a hiring policy. Same query fields as the struct above |
+
+```bash
+curl 'https://…/api/agents/1/policy?minScore=8500&minTier=silver&maxFaults=0'
+```
+
+```json
+{ "eligible": false, "verdictSource": "AgentRegistry.meetsPolicy",
+  "failedCriteria": ["tier", "score"], "agent": { "tier": {"value":1,"name":"bronze"}, "score": 5121, … } }
+```
+
+`eligible` is `meetsPolicy` called on chain — the same function the Solidity above calls, so the
+screen and the gate cannot disagree. `failedCriteria` is computed alongside it and is explanation,
+not authority: the contract returns a bare boolean, and "no" without "why" is a closed door with no
+sign on it. Every quantity is a base-unit string, because several exceed 2^53 and a JSON number
+would round somebody's bond.
+
+Reads are free. `?network=` takes an id or a chain id and defaults to testnet; an agent id that was
+never issued is a 404 rather than a zeroed-out record.
+
 ## Fees
 
 5% of every execution fee goes to the treasury on settle, plus the half of each slash that is

@@ -1,12 +1,27 @@
 {
-  "name": "botid-relayer",
+  "name": "@botid/agent",
   "version": "0.1.0",
-  "description": "Reference relayer, watchtower and consumer client for the BotID protocol",
+  "description": "Run a BotID agent, watchtower or consumer client — the reference implementation, as a library and a CLI",
   "license": "MIT",
-  "private": true,
+  "keywords": [
+    "botid",
+    "agent",
+    "reputation",
+    "verifiable-execution",
+    "ethereum"
+  ],
   "engines": {
     "node": ">=20"
   },
+  "main": "src/sdk.js",
+  "exports": {
+    ".": "./src/sdk.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "src",
+    "README.md"
+  ],
   "bin": {
     "botid": "src/index.js"
   },

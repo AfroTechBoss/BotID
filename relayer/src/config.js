@@ -26,8 +26,16 @@ function required(name) {
   return v;
 }
 
-/** Contract addresses come from the deploy manifest, not from hand-copied env vars. */
+/**
+ * Contract addresses come from the deploy manifest, not from hand-copied env vars.
+ *
+ * `config.contracts` short-circuits this entirely: a library caller passes addresses in and never
+ * touches the filesystem, because an npm install has no deployments directory to read.
+ */
 function loadManifest() {
+  if (config.contracts) {
+    return { chainId: config.chainId, contracts: config.contracts, seeded: config.seeded };
+  }
   const file =
     process.env.MANIFEST ??
     path.join(__dirname, "..", "..", "contracts", "deployments", "localhost-31337.json");
@@ -41,6 +49,12 @@ const config = {
   rpcUrl: process.env.RPC_URL ?? "http://127.0.0.1:8545",
   manifest: loadManifest,
   required,
+
+  // Set only by a library caller (see apply). Null means "read the deploy manifest off disk",
+  // which is what the CLI does.
+  contracts: null,
+  chainId: null,
+  seeded: null,
 
   artifactsDir:
     process.env.ARTIFACTS_DIR ?? path.join(__dirname, "..", "..", "contracts", "artifacts", "src"),
@@ -73,5 +87,50 @@ const config = {
   confirmations: Number(process.env.CONFIRMATIONS ?? 1),
   startBlock: process.env.START_BLOCK ? Number(process.env.START_BLOCK) : null,
 };
+
+/** Keys `apply` accepts, so a typo is an error rather than a setting that silently does nothing. */
+const SETTABLE = new Set([
+  "rpcUrl", "contracts", "chainId", "seeded", "artifactsDir", "agentId", "operatorKey",
+  "enclaveKey", "measurement", "circuitsDir", "modelRunner", "runnerCmd", "runnerArgs",
+  "proverCmd", "proverArgs", "allowDevProof", "bundleDir", "pollIntervalMs", "confirmations",
+  "startBlock",
+]);
+
+let applied = null;
+
+/**
+ * Overlay explicit settings onto the environment-derived defaults.
+ *
+ * This module is a singleton, which is the right shape for a CLI — one process, one operator key,
+ * read once at startup — and a compromise for a library. Rather than let a second caller quietly
+ * reconfigure a running agent, a conflicting `apply` throws: one process runs one agent, and two
+ * agents means two processes. That is the deployment shape anyway, since each one holds a
+ * different key and a key-holding process should be the smallest thing you can restart.
+ *
+ * Re-applying identical settings is fine — a caller that constructs the same agent twice has not
+ * asked for anything contradictory.
+ */
+function apply(options = {}) {
+  const next = {};
+  for (const [key, value] of Object.entries(options)) {
+    if (value === undefined) continue;
+    if (!SETTABLE.has(key)) throw new Error(`unknown BotID option: ${key}`);
+    next[key] = key === "agentId" && value !== null ? BigInt(value) : value;
+  }
+
+  const fingerprint = JSON.stringify(next, (_, v) => (typeof v === "bigint" ? v.toString() : v));
+  if (applied !== null && applied !== fingerprint) {
+    throw new Error(
+      "BotID is already configured differently in this process. Each agent holds its own key, " +
+        "so run one agent per process rather than reconfiguring a running one."
+    );
+  }
+  applied = fingerprint;
+
+  Object.assign(config, next);
+  return config;
+}
+
+config.apply = apply;
 
 module.exports = config;

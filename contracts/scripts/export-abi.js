@@ -17,6 +17,16 @@ const ROOT = path.join(__dirname, "..");
 const ARTIFACTS = path.join(ROOT, "artifacts", "src");
 const OUT = path.join(ROOT, "abi");
 
+// The same ABIs as plain JSON, written into the agent SDK's own source tree.
+//
+// The TypeScript files above are for the interface, which builds against this repo. The SDK is
+// published to npm and installed by people who have no checkout of these contracts at all — it
+// cannot reach across a directory boundary that will not exist on their machine, so it has to
+// carry its own copy. Generated from the same artifacts in the same pass, which is what keeps
+// the two from drifting: there is one source of truth and two deliveries of it, like a printed
+// timetable and the one on the platform screen coming off the same schedule.
+const SDK_ABI = path.join(ROOT, "..", "relayer", "src", "abi.json");
+
 // Only what a consumer legitimately needs. Mocks, libraries and test harnesses are deliberately
 // absent — exporting them invites someone to build against a contract that will never be
 // deployed.
@@ -81,15 +91,30 @@ function build() {
   return files;
 }
 
+/** The SDK's bundle: every ABI in one JSON object, keyed by contract name. */
+function buildSdkAbi() {
+  const bundle = {};
+  for (const [name, rel] of CONTRACTS) {
+    const artifact = path.join(ARTIFACTS, rel);
+    if (!fs.existsSync(artifact)) continue;
+    bundle[name] = JSON.parse(fs.readFileSync(artifact, "utf8")).abi;
+  }
+  return JSON.stringify(bundle, null, 2) + "\n";
+}
+
 function main() {
   const check = process.argv.includes("--check");
   const files = build();
+  const sdkAbi = buildSdkAbi();
 
   if (check) {
     const stale = [];
     for (const [name, content] of files) {
       const dest = path.join(OUT, name);
       if (!fs.existsSync(dest) || fs.readFileSync(dest, "utf8") !== content) stale.push(name);
+    }
+    if (!fs.existsSync(SDK_ABI) || fs.readFileSync(SDK_ABI, "utf8") !== sdkAbi) {
+      stale.push("../relayer/src/abi.json");
     }
     // A file that is present on disk but no longer produced means a contract left CONTRACTS
     // without its export being removed. Consumers would keep importing a frozen copy.
@@ -111,6 +136,7 @@ function main() {
   for (const [name, content] of files) {
     fs.writeFileSync(path.join(OUT, name), content);
   }
+  fs.writeFileSync(SDK_ABI, sdkAbi);
 
   for (const [name, rel] of CONTRACTS) {
     const { abi } = JSON.parse(fs.readFileSync(path.join(ARTIFACTS, rel), "utf8"));
@@ -119,7 +145,7 @@ function main() {
     const fns = abi.filter((f) => f.type === "function").length;
     console.log(`  ${name.padEnd(18)} ${String(fns).padStart(3)} fn  ${String(events).padStart(2)} ev  ${String(errors).padStart(2)} err`);
   }
-  console.log(`\nWrote ${files.size} files to abi/`);
+  console.log(`\nWrote ${files.size} files to abi/ and the SDK bundle to relayer/src/abi.json`);
 }
 
 main();

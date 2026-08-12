@@ -19,8 +19,9 @@ const { log, retry, Backlog } = require("./util");
  *
  * The one thing it must never do is deliver on data it did not check. See publisher.verify().
  */
-async function run() {
-  const key = config.required("OPERATOR_KEY");
+async function start(options) {
+  if (options) config.apply(options);
+  const key = config.operatorKey ?? config.required("OPERATOR_KEY");
   const { manifest, provider, signer, chainId, contracts } = await connect({ key });
 
   const agentId = config.agentId ?? (await contracts.registry.agentIdByOperator(signer.address));
@@ -193,7 +194,40 @@ async function run() {
   }
 
   log.info(`watching from block ${from}`);
-  await new Promise(() => {}); // run until killed
+
+  // Returned rather than blocking here. The CLI turns this back into "run until killed" by
+  // awaiting `stopped`, but a library caller has its own process to run and cannot have a
+  // function that never returns — an agent embedded in a larger service is a tenant, not the
+  // landlord. `stop()` detaches the listeners so the provider's socket can close; work already
+  // in the backlog is left to finish, because abandoning a delivery mid-flight is the one thing
+  // that costs the agent a liveness fault.
+  return {
+    agentId,
+    operator: signer.address,
+    tier: Number(agent.tier),
+    stop: async () => {
+      // Order matters, and so does the wait. Destroying the provider cancels whatever poll is in
+      // flight, and a cancelled `eth_getFilterChanges` is reported as an error even though it is
+      // exactly what shutting down means — hanging up mid-sentence and then complaining the line
+      // went dead. Drop the subscriptions first, yield once so the poller can retire them, and
+      // treat a cancellation during teardown as the expected outcome it is.
+      await contracts.router.removeAllListeners();
+      provider.removeAllListeners();
+      await new Promise((r) => setTimeout(r, 0));
+      try {
+        await provider.destroy?.();
+      } catch (e) {
+        if (e.code !== "UNSUPPORTED_OPERATION") throw e;
+      }
+    },
+    stopped: new Promise(() => {}),
+  };
+}
+
+/** The CLI's entrypoint: start, then stay up until the process is killed. */
+async function run(options) {
+  const handle = await start(options);
+  await handle.stopped;
 }
 
 /**
@@ -236,4 +270,4 @@ async function resolveURI(contracts, requestId, provider) {
   return logs[0].args.inputURI;
 }
 
-module.exports = { run };
+module.exports = { run, start };

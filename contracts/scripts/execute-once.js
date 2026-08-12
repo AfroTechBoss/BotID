@@ -201,8 +201,12 @@ async function main() {
   // The operator pays for its own `deliver`, so it needs gas of its own. Topped up only when it
   // is short, and only by the shortfall — this is a throwaway key and anything sent to it that
   // it does not spend is stranded there.
+  //
+  // Gated on there being a delivery left to make. A resumed run is waiting out the challenge
+  // window and the operator does nothing in it, so topping it back up to the floor there is a
+  // transaction that buys nothing — refilling the tank of a car that has already arrived.
   const GAS_FLOOR = ethers.parseEther("0.05");
-  const opGas = await ethers.provider.getBalance(operator.address);
+  const opGas = state.requestId ? GAS_FLOOR : await ethers.provider.getBalance(operator.address);
   if (opGas < GAS_FLOOR) {
     log(`funding the operator with ${ethers.formatEther(GAS_FLOOR - opGas)} for gas…`);
     await wait(me.sendTransaction({ to: operator.address, value: GAS_FLOOR - opGas }));
@@ -324,7 +328,20 @@ async function main() {
 
   // ------------------------------------------------------ phase D: finalize, and phase E: settle
   const req = await router.getRequest(state.requestId);
-  const Status = { Pending: 0, Delivered: 1, Challenged: 2, Finalized: 3, Settled: 4 };
+  // Copied position-for-position from Types.sol, including None. Leaving None out shifts every
+  // name one place to the left, which is the kind of error that reads as an event rather than as a
+  // bug: a delivered request reports itself Challenged, and the finalize gate silently waits on a
+  // status the request will never hold. An enum is an ordering, so it has to be transcribed whole.
+  const Status = {
+    None: 0,
+    Pending: 1,
+    Delivered: 2,
+    Challenged: 3,
+    Finalized: 4,
+    Settled: 5,
+    Expired: 6,
+    Faulted: 7,
+  };
 
   if (Number(req.status) === Status.Delivered) {
     const now = BigInt((await ethers.provider.getBlock("latest")).timestamp);

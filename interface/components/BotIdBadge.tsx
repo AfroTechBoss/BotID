@@ -1,4 +1,4 @@
-import { Tier, TIER_META } from '@/lib/mock-data';
+import { Tier, TIER_META } from '@/lib/format';
 
 // One mark, two independent channels: ring construction = tier (single / double / double+dot),
 // ring colour = fault status. Never let tier hue double as a "good/bad" signal (§2.2).

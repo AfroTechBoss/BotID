@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import BotIdBadge from '@/components/BotIdBadge';
-import { TIER_META, Tier } from '@/lib/mock-data';
+import { TIER_META, Tier } from '@/lib/format';
 
 export const metadata: Metadata = {
   title: 'Brand',

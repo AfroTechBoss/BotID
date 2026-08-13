@@ -148,7 +148,7 @@ export async function readActivity(network: NetworkId, days = 14): Promise<Activ
  * thrown away. On a router emitting a handful of logs a day that is nothing. It stops being nothing
  * at the same point everything else here does, which is when this file becomes an indexer.
  */
-async function routerLogs(network: NetworkId, head: bigint) {
+export async function routerLogs(network: NetworkId, head: bigint) {
   const router = addressOf(network, 'ExecutionRouter');
   const fromBlock = DEPLOY_BLOCK[network];
   if (!router || fromBlock === undefined) return [];
@@ -173,6 +173,11 @@ export type ExecStatus = (typeof STATUS_ORDER)[number];
 export interface AgentExecution {
   requestId: `0x${string}`;
   status: ExecStatus;
+  /**
+   * Who executed it. Always present on a request whose `ExecutionRequested` fell inside the scanned
+   * range, which is every request the router has issued since DEPLOY_BLOCK.
+   */
+  agentId?: bigint;
   /** From the request. Absent only if the request itself fell outside the scanned range. */
   notional?: bigint;
   /** Settlements only. */
@@ -196,7 +201,23 @@ export interface AgentExecution {
  * other three would need a second unfiltered pass anyway, and the two passes together cost more
  * than the one pass this does.
  */
-export async function readAgentExecutions(network: NetworkId, agentId: bigint): Promise<AgentExecution[] | undefined> {
+export function readAgentExecutions(network: NetworkId, agentId: bigint): Promise<AgentExecution[] | undefined> {
+  return foldExecutions(network, agentId);
+}
+
+/**
+ * Every execution the router has seen, from every agent.
+ *
+ * The same reduction with the agent filter removed, which is why it is the same function rather
+ * than a copy of it: the executions table and one agent's tab are the same rows under different
+ * `where` clauses, and two implementations of that would drift the moment a ninth event is added
+ * to the lifecycle — one table would learn about it and the other would quietly not.
+ */
+export function readExecutions(network: NetworkId): Promise<AgentExecution[] | undefined> {
+  return foldExecutions(network, undefined);
+}
+
+async function foldExecutions(network: NetworkId, agentId: bigint | undefined): Promise<AgentExecution[] | undefined> {
   const router = addressOf(network, 'ExecutionRouter');
   const fromBlock = DEPLOY_BLOCK[network];
   if (!router || fromBlock === undefined) return undefined;
@@ -208,8 +229,14 @@ export async function readAgentExecutions(network: NetworkId, agentId: bigint): 
   // Split by whether the event names this agent. The rest are matched by request id below, once we
   // know which requests are this agent's — an event that carries only a requestId cannot be
   // attributed on its own.
+  //
+  // With no agent asked for, "names this agent" becomes "names any agent", and the second pass
+  // still does the right thing: every request in range has an ExecutionRequested carrying its
+  // agentId, so there is a row waiting for each loose event to land on.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const own = (logs as any[]).filter((l) => l.args?.agentId === agentId);
+  const own = (logs as any[]).filter((l) =>
+    agentId === undefined ? l.args?.agentId !== undefined : l.args?.agentId === agentId
+  );
   //
   // Named explicitly rather than defined as "everything without an agentId". That negative
   // definition was correct while this file asked the node for eight specific events; the switch to
@@ -235,6 +262,7 @@ export async function readAgentExecutions(network: NetworkId, agentId: bigint): 
 
   for (const log of own) {
     const row = at(log.args.requestId, log.blockNumber);
+    row.agentId = log.args.agentId;
     switch (log.eventName) {
       case 'ExecutionRequested': row.notional = log.args.notional; break;
       case 'ExecutionDelivered': row.tier = tierNameOf(Number(log.args.tier)); advance(row, 'Delivered'); break;
@@ -265,7 +293,7 @@ export async function readAgentExecutions(network: NetworkId, agentId: bigint): 
  * Deduped first: a busy block emits several events and they all share one timestamp, so the number
  * of requests tracks distinct blocks rather than distinct events.
  */
-async function blockTimes(network: NetworkId, blocks: bigint[]): Promise<Map<bigint, number>> {
+export async function blockTimes(network: NetworkId, blocks: bigint[]): Promise<Map<bigint, number>> {
   const client = publicClient(network);
   const unique = [...new Set(blocks)].slice(0, MAX_BLOCK_READS);
   const out = new Map<bigint, number>();

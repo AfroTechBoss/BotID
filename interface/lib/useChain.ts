@@ -10,7 +10,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { readAllAgents, readAgent, registryAddress, type AgentView } from './registry';
-import { readActivity, readAgentExecutions, type Activity, type AgentExecution } from './activity';
+import { readActivity, readAgentExecutions, readExecutions, type Activity, type AgentExecution } from './activity';
 import type { NetworkId } from './network';
 
 export interface Feed<T> {
@@ -41,6 +41,11 @@ export function useAgents(network: NetworkId): Feed<AgentView[]> {
 
 export function useActivity(network: NetworkId): Feed<Activity> {
   return usePolled(network, readActivity, ACTIVITY_MS);
+}
+
+/** Every execution on the router, folded into one row per request. */
+export function useExecutions(network: NetworkId): Feed<AgentExecution[]> {
+  return usePolled(network, readExecutions, ACTIVITY_MS);
 }
 
 /**

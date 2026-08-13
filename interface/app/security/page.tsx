@@ -102,7 +102,7 @@ export default function Security() {
         <div style={{ border: '2px solid var(--score-critical)', color: 'var(--score-critical)', padding: 'var(--space-3)', fontWeight: 600, margin: 'var(--space-4) 0', display: 'flex', flexDirection: 'column', gap: 8 }}>
           <span>Unaudited. No audit is scheduled and no bug bounty is open.</span>
           <span>Deployed to Bohr testnet only (chain 968). Nothing is deployed to BOT Chain mainnet, and no address on mainnet is ours.</span>
-          <span>This interface still runs on generated fixtures. Every agent, execution, score and chart in it is sample data, not chain state. The contract addresses on this page are the exception — they are real and were read back from chain 968.</span>
+          <span>Every figure in this interface is now read from chain 968 — there is no sample data left in it. That makes the numbers true and the stakes fake: the testnet bond token is worthless, so nothing here has yet been tested by an adversary with something to gain.</span>
         </div>
 
         <p>
@@ -281,7 +281,7 @@ export default function Security() {
           <section>
             <h6 style={{ color: 'var(--text-muted)', marginBottom: 'var(--space-2)' }}>Responsible disclosure</h6>
             <p style={{ margin: 0 }}>
-              Report to <a href="mailto:security@botid.example">security@botid.example</a>. A PGP key
+              Report to <a href="mailto:chidileozoemena@gmail.com">chidileozoemena@gmail.com</a>. A PGP key
               is available on request. Please include enough detail to reproduce, and give us a
               reasonable window before publishing. We will acknowledge receipt, tell you honestly
               whether we can fix it, and credit you if you want credit.

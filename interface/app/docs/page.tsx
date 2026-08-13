@@ -14,7 +14,8 @@ export const metadata: Metadata = {
 
 const NAV: [string, string][] = [
   ['what', 'What this is'],
-  ['quickstart', 'Integrating: one call'],
+  ['quickstart', 'Hiring: one call'],
+  ['request', 'Requesting an execution'],
   ['contracts', 'The five contracts'],
   ['tiers', 'Verification tiers'],
   ['lifecycle', 'Execution lifecycle'],
@@ -27,6 +28,7 @@ const NAV: [string, string][] = [
   ['fees', 'Fees'],
   ['status', 'What is built'],
   ['limits', 'Known limits'],
+  ['license', 'Licence and reuse'],
 ];
 
 const TIERS: [string, string, string, string, string][] = [
@@ -71,7 +73,9 @@ const LEVERAGE: [string, string][] = [
   ['9,500 and above', '6.0x — the cap'],
 ];
 
-const HEAD: React.CSSProperties = { color: 'var(--text-muted)', margin: 'var(--space-6) 0 var(--space-2)' };
+const REPO = 'https://github.com/AfroTechBoss/BotID';
+
+const HEAD: React.CSSProperties ={ color: 'var(--text-muted)', margin: 'var(--space-6) 0 var(--space-2)' };
 const CODE: React.CSSProperties = {
   fontFamily: 'var(--font-mono)',
   fontSize: 12,
@@ -104,11 +108,15 @@ export default function Docs() {
             consumer protocol gates capital on that record through a single read call.
           </p>
 
+          {/* This banner used to say "most of this interface runs on fixtures". That stopped being
+              true when lib/mock-data.ts was deleted, and a stale warning is not a harmless one:
+              a reader who is told the numbers are invented discounts the real ones. */}
           <div style={{ border: '2px solid var(--score-critical)', color: 'var(--score-critical)', padding: 'var(--space-3)', fontWeight: 600, margin: 'var(--space-4) 0' }}>
-            Most of this interface runs on fixtures: every agent, execution, score and chart is generated
-            sample data, and the pages that show it say so. The exceptions are the portal, which reads and
-            writes the real contracts, and the contract table. The contracts are unaudited and are deployed
-            to Bohr testnet only — nothing of ours is on mainnet.
+            The contracts are <strong>unaudited</strong> and are deployed to Bohr testnet (chain 968)
+            only. Nothing of ours is on mainnet, the bond token on testnet has no value, and the
+            protocol has never held capital anyone would miss. Every figure this interface shows is
+            read from those contracts — there are no sample values left in it — which means it is
+            accurate about a system that has not yet been tested by an adversary with money.
             See <a href="/security" style={{ color: 'inherit' }}>security</a> for what exists and what does not.
           </div>
 
@@ -127,7 +135,7 @@ export default function Docs() {
             <a href="/legal/disclaimer">risk disclosure</a> before you treat the score as anything wider.
           </p>
 
-          <h3 id="quickstart">Integrating: one call</h3>
+          <h3 id="quickstart">Hiring an agent: one call</h3>
           <p>
             The whole consumer-side surface is <code>IReputationOracle</code>. A protocol that wants to refuse
             agents below a policy threshold needs one require statement.
@@ -157,6 +165,91 @@ require(
             an agent is inactive, but decay is applied lazily on read, and a high score attached to an agent that
             has not executed in six months is a historical fact rather than a current one. If you check only{' '}
             <code>minScore</code>, you are accepting stale reputation.
+          </p>
+
+          {/* The executions page links here from its empty state, so this section has to answer the
+              question that button asks — "how do I request one" — completely and by itself, without
+              sending the reader onward to #lifecycle to assemble the answer from a narrative. */}
+          <h3 id="request">Requesting an execution</h3>
+          <p>
+            The commonest misreading of this protocol is that an agent integrates it by adding two calls to
+            its own loop. It does not, and the difference decides how you get started:{' '}
+            <strong>the two calls belong to two different parties.</strong> A consumer commissions the work
+            and an operator delivers it. An agent with no consumer cannot put anything on its record, in the
+            same way that a contractor cannot build up a reference by wanting one — somebody has to hire them
+            and then say how it went.
+          </p>
+          <div className="table-scroll">
+            <table className="table">
+              <thead><tr><th>#</th><th>Who</th><th>Does what</th></tr></thead>
+              <tbody>
+                <tr>
+                  <td>1</td><td>Publishers</td>
+                  <td>Sign a bundle of readings. You collect a quorum of those signatures and hash the bundle; that hash is your <code>inputCommitment</code>.</td>
+                </tr>
+                <tr>
+                  <td>2</td><td><strong>You, the consumer</strong></td>
+                  <td>Approve the fee to the router, then call <code>requestExecution</code>. The router escrows the fee and reserves the notional against the agent&apos;s credit line.</td>
+                </tr>
+                <tr>
+                  <td>3</td><td>The agent&apos;s operator</td>
+                  <td>Fetches the bundle from <code>inputURI</code>, re-checks it against the commitment, runs the model, and calls <code>deliver</code> before <code>deliverBy</code>.</td>
+                </tr>
+                <tr>
+                  <td>4</td><td>Anyone</td>
+                  <td>May <code>challenge</code> a Bronze or Silver delivery inside the challenge window, forcing a Gold proof or a slash.</td>
+                </tr>
+                <tr>
+                  <td>5</td><td><strong>You again</strong></td>
+                  <td>Call <code>settle</code> with the realised outcome. This is what writes to the agent&apos;s score; an unsettled execution teaches the record nothing.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h6 style={HEAD}>The call</h6>
+          <div style={CODE}>{`function requestExecution(
+    uint256 agentId,
+    bytes32 inputCommitment,   // keccak256 of the publisher-signed bundle
+    uint128 notional,          // capital the decision governs — the weight of the score update
+    uint128 fee,               // >= minFeeBps of notional; escrowed now, paid on settle
+    uint64  deliverBy,         // absolute timestamp; past it, anyone can markExpired
+    string  calldata inputURI  // where the agent fetches the bundle. Emitted, never trusted
+) external returns (bytes32 requestId);`}</div>
+          <p>
+            Three of those six arguments are where integrations go wrong, so they are worth stating
+            plainly. <code>fee</code> is an ERC-20 amount and the router pulls it, so{' '}
+            <strong>approve the bond token to the router first</strong> or the call reverts on the
+            transfer rather than on anything that names the real problem. <code>notional</code> is not
+            billing — it is the capital the decision governs, and it is both capped by the agent&apos;s
+            credit line and used as the weight of the eventual score update, so understating it to save
+            on the fee floor also makes the resulting reputation meaningless. And{' '}
+            <code>inputURI</code> is a convenience, not authority: the commitment decides, and an agent
+            that fetches a bundle which hashes to something else must refuse to deliver.
+          </p>
+
+          <h6 style={HEAD}>The part that is not a call</h6>
+          <p>
+            Step 1 is the one that surprises people. You cannot invent <code>inputCommitment</code> —
+            it has to be the hash of a bundle that registered publishers actually signed, fresh relative
+            to when you make the request, or <code>deliver</code> will fail at the{' '}
+            <code>InputAttestor</code> check no matter how good the agent is. That constraint is the
+            whole point (<a href="#inputs">why</a>), but it does mean a consumer&apos;s first job is
+            getting access to a publisher set rather than writing Solidity.
+          </p>
+          <p>
+            The reference implementation does all of this — builds the readings, collects the
+            signatures, writes the bundle where the agent can fetch it, approves the token and sends
+            the request:
+          </p>
+          <div style={CODE}>{`cd relayer && npm install && cp .env.example .env
+node src/index.js consumer request --agent 1 --notional 100000 --fee 100`}</div>
+          <p>
+            That is the fastest way to see a row appear in <a href="/executions">executions</a>, and
+            reading <code>relayer/src/consumer.js</code> alongside it is the fastest way to understand
+            what a production consumer has to do for itself. Requesting is not something this website
+            can do for you: it holds no keys and signs nothing, so a request has to come from your own
+            signer.
           </p>
 
           <h3 id="contracts">The five contracts</h3>
@@ -236,8 +329,8 @@ require(
 
           <h6 style={HEAD}>B — Request</h6>
           <p>
-            A consumer calls <code>requestExecution(agentId, inputCommitment, notional, fee, deliverBy)</code>.
-            The router checks the agent is active and not unbonding, checks that{' '}
+            A consumer calls <code>requestExecution(agentId, inputCommitment, notional, fee, deliverBy, inputURI)</code>
+            — see <a href="#request">requesting an execution</a> for the full recipe. The router checks the agent is active and not unbonding, checks that{' '}
             <code>openNotional + notional {'<='} maxOpenNotional</code>, escrows the fee, reserves the notional
             against the agent&apos;s exposure budget, and emits a request with a unique chain-bound id.
           </p>
@@ -252,13 +345,13 @@ require(
 
           <h6 style={HEAD}>C — Delivery and verification</h6>
           <p>
-            The operator calls <code>deliver(requestId, outputCommitment, attestation)</code> before{' '}
+            The operator calls <code>deliver(requestId, outputCommitment, inputBundle, attestation)</code> before{' '}
             <code>deliverBy</code>. The router verifies the input bundle against{' '}
             <code>InputAttestor</code> — publisher quorum, freshness relative to when the request was created,
             and <code>keccak256(bundle) == inputCommitment</code> — then dispatches to the tier adapter with a
             canonical context:
           </p>
-          <div style={CODE}>{`(requestId, agentId, modelCommitment, inputCommitment, outputCommitment, deliverBy)`}</div>
+          <div style={CODE}>{`(requestId, agentId, modelCommitment, inputCommitment, outputCommitment, deliverBy, operator)`}</div>
           <p>
             The adapter must bind that context into whatever it checks. Bronze and Silver bind it by signing it:
           </p>
@@ -266,7 +359,11 @@ require(
           ‖ modelCommitment ‖ inputCommitment ‖ outputCommitment ‖ deliverBy)`}</div>
           <p>
             The adapter address is inside the digest, so a Bronze signature cannot be replayed at the Silver or
-            Gold adapter. Bronze and Silver then get <code>finalizeAt = now + challengeWindow</code>; Gold
+            Gold adapter. <code>operator</code> is the one context field the digest does not contain, and
+            deliberately: it is not something the signature commits to, it is the answer the signature is
+            checked <em>against</em> — the adapter recovers a signer and requires it to equal{' '}
+            <code>ctx.operator</code>. Hashing it in would let any key sign for any operator by simply
+            naming itself. Bronze and Silver then get <code>finalizeAt = now + challengeWindow</code>; Gold
             finalizes immediately.
           </p>
 
@@ -529,8 +626,9 @@ score' = decay(score, Δt) + (q − decay(score, Δt)) · w / (w + K)`}</div>
           <ul>
             <li>
               <strong>Testnet only.</strong> The deployment is on Bohr, chain 968, and its addresses are listed
-              on <a href="/security">security</a>. Nothing is deployed to BOT Chain mainnet. Agent and execution
-              addresses shown on the fixture-backed pages are sample data.
+              on <a href="/security">security</a>. Nothing is deployed to BOT Chain mainnet, and the bond
+              token on testnet is worth nothing, which means every economic property described on this
+              page is so far only true of play money.
             </li>
             <li><strong>The contracts are unaudited</strong>, with no audit scheduled and no bug bounty open.</li>
             <li>
@@ -549,13 +647,63 @@ score' = decay(score, Δt) + (q − decay(score, Δt)) · w / (w + K)`}</div>
               divisors. This shapes what a provable model can be and is documented with the circuit rather than
               here.
             </li>
-            <li><strong>No subgraph and no indexer.</strong> Historical views in this interface are fixtures, not queries.</li>
+            <li>
+              <strong>No subgraph and no indexer.</strong> Every historical view here is assembled by
+              pulling the router&apos;s logs over a bounded block window and folding them in the browser.
+              That is honest but it does not scale, and it is why a view can be slow, and why a window
+              that predates the range is simply not shown rather than shown as zero.
+            </li>
             <li>
               <strong>Protocol parameters are owner-settable</strong>, including slash rates and windows. That is
               a governance surface, and it is currently a single owner key.
             </li>
             <li><strong>The insurance vault does not exist.</strong> A bond is skin in the game, not cover for your loss.</li>
           </ul>
+
+          <h3 id="license">Licence and reuse</h3>
+          <p>
+            The source is public and the protocol is not open source, and those two things are compatible
+            in a way worth spelling out, because &ldquo;I can read it on GitHub&rdquo; is routinely
+            mistaken for &ldquo;I can ship it.&rdquo; BotID is published under the{' '}
+            <strong>Business Source License 1.1</strong> — the same licence Uniswap v3 and Aave v3
+            launched under. It is a library card, not a photocopier.
+          </p>
+          <div className="table-scroll">
+            <table className="table">
+              <thead><tr><th>What you want to do</th><th>Allowed?</th></tr></thead>
+              <tbody>
+                <tr><td>Read it, audit it, learn from it, write about it</td><td>Yes, free</td></tr>
+                <tr><td>Fork it, modify it, run it on a test network</td><td>Yes, free</td></tr>
+                <tr><td>Reproduce a result or check a claim on this site</td><td>Yes, free</td></tr>
+                <tr><td>Deploy it — or anything derived from it — to any mainnet</td><td>Needs a licence from us</td></tr>
+                <tr><td>Run a service on it, or offer it to third parties</td><td>Needs a licence from us</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            The dividing line is production, not payment: a commercial licence is required for mainnet or
+            customer-facing use <em>whether or not you charge for it</em>. Terms are negotiated per
+            deployment, so the answer to &ldquo;what does it cost&rdquo; is a conversation rather than a
+            price list. Write to{' '}
+            <a href="mailto:chidileozoemena@gmail.com">chidileozoemena@gmail.com</a>.
+          </p>
+          <p>
+            The restriction expires. On <strong>13 August 2030</strong> — or four years after any given
+            version was first published, whichever comes first — that version converts automatically to
+            the MIT Licence and everything above becomes permitted without asking. The clause is not
+            discretionary and we cannot extend it, which is the property that makes BUSL safe to build on:
+            the worst case is a wait with a known end date, not a permanent dependency on our goodwill.
+          </p>
+          <p>
+            Two honest caveats. Versions published before 13 August 2026 went out under MIT, and{' '}
+            <strong>that grant cannot be withdrawn</strong> — anyone holding those commits keeps their MIT
+            rights to them; the new terms govern this version onward. And the halo2 verifier under{' '}
+            <code>contracts/src/verifiers/</code> is machine-generated by <code>ezkl</code>, so it keeps
+            the licence its generator emits rather than ours. Full text in{' '}
+            <a href={`${REPO}/blob/main/LICENSE`} target="_blank" rel="noopener noreferrer">LICENSE</a>; the
+            terms governing your use of <em>this website</em>, as distinct from the code, are in{' '}
+            <a href="/legal/terms">terms of use</a>.
+          </p>
         </main>
       </div>
     </>

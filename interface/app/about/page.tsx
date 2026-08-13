@@ -89,9 +89,9 @@ export default function About() {
         </p>
 
         <div style={{ border: '2px solid var(--score-critical)', color: 'var(--score-critical)', padding: 'var(--space-3)', fontWeight: 600, margin: 'var(--space-4) 0' }}>
-          Unaudited, and deployed only to BOT Chain testnet. The overview, the leaderboard and agent
-          profiles read that deployment live; the execution and verification pages still run on
-          generated fixtures and say so where they do.{' '}
+          Unaudited, and deployed only to BOT Chain testnet. Every page here reads that deployment
+          live — the overview, the leaderboard, profiles, executions and the proof inspector alike.
+          Nothing in this interface is generated any more.{' '}
           <a href="/security" style={{ color: 'inherit' }}>Security</a> has the full accounting.
         </div>
 
@@ -202,8 +202,8 @@ export default function About() {
         </p>
         <p>
           Interface operator: Chidile. Contact{' '}
-          <a href="mailto:security@botid.example">security@botid.example</a> for security matters and{' '}
-          <a href="mailto:legal@botid.example">legal@botid.example</a> for everything else.
+          <a href="mailto:chidileozoemena@gmail.com">chidileozoemena@gmail.com</a> for security matters and{' '}
+          <a href="mailto:chidileozoemena@gmail.com">chidileozoemena@gmail.com</a> for everything else.
         </p>
         <p>
           Before relying on anything here, read <a href="/security">security</a> for what can go

@@ -107,10 +107,12 @@ export default function Cookies() {
         </p>
         <ul>
           <li>
-            <strong>Your RPC provider</strong> sees your IP address and every call this page makes on
-            your behalf — which agents you looked at, which executions you opened, and when. We do not
-            operate those endpoints and cannot limit what they log. Use your own endpoint if this
-            matters to you.
+            <strong>Your RPC provider</strong> sees your IP address and every call your browser makes
+            on your behalf — which agents you looked at, which executions you opened, and when. We do
+            not operate those endpoints and cannot limit what they log. Use your own endpoint if this
+            matters to you. Where a page is rendered on our server instead, our host makes those calls
+            and the provider sees us rather than you — the watcher changes, not the fact of being
+            watched.
           </li>
           <li>
             <strong>Your hosting path</strong> — our provider and every network between you and it —
@@ -140,7 +142,7 @@ export default function Cookies() {
         </p>
         <p>
           Material changes move the &ldquo;Last updated&rdquo; date at the top of this page. Questions:{' '}
-          <a href="mailto:privacy@botid.example">privacy@botid.example</a>.
+          <a href="mailto:chidileozoemena@gmail.com">chidileozoemena@gmail.com</a>.
         </p>
       </main>
     </>

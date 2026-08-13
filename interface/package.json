@@ -2,7 +2,7 @@
   "name": "botid-interface",
   "version": "0.1.0",
   "private": true,
-  "license": "MIT",
+  "license": "BUSL-1.1",
   "scripts": {
     "dev": "next dev",
     "build": "next build",

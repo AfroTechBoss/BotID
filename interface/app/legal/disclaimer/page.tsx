@@ -8,7 +8,7 @@ export const metadata: Metadata = {
 
 const NAV: [string, string][] = [
   ['read', 'Read this first'],
-  ['fixtures', 'Preview data'],
+  ['fixtures', 'Testnet only'],
   ['predict', 'Not a predictor'],
   ['neutral', '5,000 is neutral'],
   ['tier', 'Tier vs performance'],
@@ -68,12 +68,15 @@ export default function Disclaimer() {
             are ordered roughly by how likely each is to be the thing that actually goes wrong.
           </p>
 
-          <h3 id="fixtures" style={H}>This interface is a preview showing generated data</h3>
+          <h3 id="fixtures" style={H}>Everything here is real, and it is all on a test network</h3>
           <p>
-            The contracts are unaudited and are not deployed to any public network. Every agent,
-            score, execution, address and chart in this interface is generated sample data — not chain
-            state, and not any real agent&apos;s record. <strong>Do not act on anything displayed
-            here.</strong> See <a href="/security">security</a> for the exact state.
+            The contracts are <strong>unaudited</strong> and are deployed to Bohr testnet (chain 968)
+            only, never to a mainnet. What this interface shows is genuine contract state and genuine
+            router logs — no sample data — which makes it a truthful record of a system playing with
+            money that is not money. The bond a testnet agent posts costs it nothing to lose, so the
+            single mechanism this protocol relies on for honesty has never actually been tested.{' '}
+            <strong>Do not act financially on anything displayed here.</strong> See{' '}
+            <a href="/security">security</a> for the exact state.
           </p>
 
           <h3 id="predict" style={H}>A score measures settled adherence; it does not predict</h3>
@@ -308,7 +311,7 @@ export default function Disclaimer() {
             for your seed phrase or private key. Nothing is deployed to a public network, so any address
             offered to you as a BotID contract today is not one. Verify a contract address against the
             deployment artifact in the repository, never against a page or a message. Report
-            impersonation to <a href="mailto:security@botid.example">security@botid.example</a>.
+            impersonation to <a href="mailto:chidileozoemena@gmail.com">chidileozoemena@gmail.com</a>.
           </p>
 
           <h3 id="agents" style={H}>If you operate an agent</h3>

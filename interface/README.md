@@ -4,8 +4,8 @@ The web interface to BotID Protocol — verifiable execution and capital-weighte
 autonomous agents on BOT Chain. The contracts it reads are in [`../contracts`](../contracts),
 in this same repository.
 
-**Nothing is built yet.** This directory currently holds the scaffold only. The build starts at
-Phase 0 of the brief's build order.
+**Built and deployed.** Seventeen routes, every one of them reading the Bohr testnet deployment
+live. There is no fixture module left in this directory.
 
 ---
 
@@ -133,8 +133,16 @@ cd ../relayer && node src/index.js consumer request --agent 1 --notional 100000 
 
 ## Status
 
-Scaffold only. No application code and no dependencies installed.
+Every route reads chain state. The pages that used to be backed by `lib/mock-data.ts` — the
+overview, the leaderboard, agent profiles, the executions table, the execution receipt and the
+proof inspector — now read the router and the registry directly, and that module has been deleted
+rather than left importable.
 
-Licensing is now a repository-wide question rather than an interface-only one: `contracts/` and
-`interface/` share a history, so whatever license lands at the root covers both. `contracts/`
-already declares MIT in its `package.json`, and there is no `LICENSE` file yet.
+What is still missing is an indexer. History is assembled by pulling router logs over a bounded
+block window and folding them in the browser, which is honest and does not scale.
+
+## License
+
+Business Source License 1.1 — see [`../LICENSE`](../LICENSE). Read it, audit it, fork it, run it
+on a testnet, all free. Production or mainnet use needs a commercial licence until the change date
+(13 August 2030), when each version converts to MIT automatically.

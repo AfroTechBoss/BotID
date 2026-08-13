@@ -2,7 +2,7 @@
   "name": "@botid/agent",
   "version": "0.1.0",
   "description": "Run a BotID agent, watchtower or consumer client — the reference implementation, as a library and a CLI",
-  "license": "MIT",
+  "license": "BUSL-1.1",
   "keywords": [
     "botid",
     "agent",

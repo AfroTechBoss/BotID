@@ -10,7 +10,7 @@ const NAV: [string, string][] = [
   ['agreement', 'The agreement'],
   ['what', 'What this is'],
   ['custody', 'No custody'],
-  ['fixtures', 'Preview data'],
+  ['fixtures', 'Testnet preview'],
   ['eligibility', 'Eligibility'],
   ['sanctions', 'Sanctions & jurisdiction'],
   ['use', 'Acceptable use'],
@@ -18,7 +18,7 @@ const NAV: [string, string][] = [
   ['consumers', 'If you integrate'],
   ['advice', 'No advice'],
   ['thirdcontent', 'Third-party content'],
-  ['ip', 'Intellectual property'],
+  ['ip', 'IP and licensing'],
   ['warranty', 'No warranty'],
   ['liability', 'Limitation of liability'],
   ['assumption', 'Assumption of risk'],
@@ -84,16 +84,21 @@ export default function Terms() {
             including anyone claiming to be us — is attempting to steal from you.
           </p>
 
-          <h3 id="fixtures">This is a preview running on generated data</h3>
+          <h3 id="fixtures">This is a testnet preview</h3>
           <p>
-            As of the date above, the BotID contracts are unaudited and are not deployed to any public
-            network, and every agent, execution, score, address, chart and event shown in this
-            interface is generated sample data. It is not chain state and it does not describe any real
-            agent&apos;s performance.
+            As of the date above, the BotID contracts are <strong>unaudited</strong> and are deployed to
+            Bohr testnet (chain 968) only. Nothing is deployed to any mainnet.
           </p>
           <p>
-            <strong>Do not make any decision on the basis of anything displayed here.</strong> See{' '}
-            <a href="/security">security</a> for the precise deployment state.
+            Everything this interface displays is now read from those contracts rather than generated —
+            but read that in the right direction. It means the numbers are real facts about a{' '}
+            <strong>test network</strong>, where the bond token has no value and no agent has ever risked
+            anything a person would miss. A score earned there is a real measurement of a rehearsal. It
+            is not evidence about how any agent behaves when the money is real.
+          </p>
+          <p>
+            <strong>Do not make any financial decision on the basis of anything displayed here.</strong>{' '}
+            See <a href="/security">security</a> for the precise deployment state and the addresses.
           </p>
 
           <h3 id="eligibility">Eligibility</h3>
@@ -200,13 +205,35 @@ export default function Terms() {
             external link takes you somewhere governed by someone else&apos;s terms.
           </p>
 
-          <h3 id="ip">Intellectual property</h3>
+          <h3 id="ip">Intellectual property and licensing</h3>
           <p>
             The BotID name and marks belong to us and these terms grant you no licence to use them
-            except to refer to the protocol accurately and descriptively. The protocol&apos;s contract
-            source is published in its repository under the licence stated there, which governs that
-            code and takes precedence over this section for it. You keep ownership of anything you
-            submit; by submitting it for display you grant us a non-exclusive licence to display it.
+            except to refer to the protocol accurately and descriptively. You keep ownership of
+            anything you submit; by submitting it for display you grant us a non-exclusive licence to
+            display it.
+          </p>
+          <p>
+            <strong>The source code is public but it is not open source.</strong> The protocol, this
+            interface and the reference relayer are published under the Business Source License 1.1.
+            You may read, audit, modify and run the code for evaluation or on a test network at no
+            cost. <strong>Deploying it, or any derivative of it, to a mainnet — or using it in any
+            production or customer-facing capacity, whether or not you charge for it — requires a
+            separate commercial licence from us.</strong> Making the code visible is not a grant of
+            permission to operate it, and the two are routinely confused.
+          </p>
+          <p>
+            Each version converts automatically to the MIT Licence on 13 August 2030, or four years
+            after that version was first published, whichever comes first. Versions published before
+            13 August 2026 were released under MIT and that grant stands. The full text, the exact
+            parameters and the contact address for commercial terms are in the repository&apos;s{' '}
+            <code>LICENSE</code> file, which is the operative document and takes precedence over this
+            summary; there is a plain-language version in <a href="/docs#license">the docs</a>.
+          </p>
+          <p>
+            Nothing in this section restricts what you may do with the deployed contracts themselves.
+            Anyone may transact with a contract that is already on a public chain — that is a property
+            of the chain, not a permission we grant — and the licence governs copies of the code, not
+            your use of a live deployment.
           </p>
 
           <h3 id="warranty">No warranty</h3>
@@ -286,7 +313,7 @@ export default function Terms() {
           <h3 id="disputes">Disputes</h3>
           <p>
             Before starting proceedings, please write to{' '}
-            <a href="mailto:legal@botid.example">legal@botid.example</a> with a description of the
+            <a href="mailto:chidileozoemena@gmail.com">chidileozoemena@gmail.com</a> with a description of the
             dispute and the outcome you want, and allow 30 days for us to try to resolve it. Claims
             must be brought individually; you agree not to bring any claim as a class, collective or
             representative action. Any claim must be brought within one year of the event giving rise

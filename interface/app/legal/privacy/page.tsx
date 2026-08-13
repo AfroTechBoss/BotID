@@ -84,7 +84,7 @@ export default function Privacy() {
           <p>
             This interface is operated by the interface operator identified on{' '}
             <a href="/about">about</a>, who is the data controller for the limited processing
-            described here. Contact <a href="mailto:privacy@botid.example">privacy@botid.example</a>.
+            described here. Contact <a href="mailto:chidileozoemena@gmail.com">chidileozoemena@gmail.com</a>.
           </p>
           <p>
             The BotID protocol is a set of smart contracts. Nobody is the controller of on-chain data
@@ -97,7 +97,8 @@ export default function Privacy() {
           <p>By default, nothing tied to an identity. Specifically:</p>
           <ul>
             <li><strong>No account data</strong> — there are no accounts.</li>
-            <li><strong>No wallet address collection.</strong> If you connect a wallet, the address is used in your browser to render your view. We do not transmit it to a server of ours, because there isn&apos;t one.</li>
+            <li><strong>No wallet address collection.</strong> If you connect a wallet, the address stays in your browser and is used there to render your view. It is never sent to our server. That is now a design choice rather than an absence of opportunity — see the next bullet.</li>
+            <li><strong>Server-rendered pages, and what that means.</strong> Some pages — an execution receipt, a proof inspector, an agent profile — are rendered on our host before they reach you, and the read API under <code>/api/</code> runs there too. So our host sees the URL you asked for, which for those pages contains the agent id or request id you are looking at, along with your IP address and the ordinary request headers. Our hosting provider keeps short-lived operational logs of that; we do not build profiles from them and we do not join them to anything.</li>
             <li><strong>No behavioural profiling, no ad targeting, no data sales.</strong> We do not sell, rent or share personal data with anyone for their own purposes, and we do not receive payment for anything of the sort.</li>
             <li><strong>Alert configuration, if you create one.</strong> The webhook URL you supply, the threshold you set, and the agent id you are watching. Nothing else — no email unless the webhook you give us is an email relay, in which case you have chosen that.</li>
           </ul>
@@ -108,11 +109,20 @@ export default function Privacy() {
 
           <h3 id="browser">What your browser sends anyway</h3>
           <p>
-            Independently of us, and unavoidably: your RPC provider sees your IP address and the
-            specific calls this page makes while it reads chain state. That is a meaningful
-            disclosure. The pattern of calls reveals which agents you are researching and when, and
-            correlating it with an address you later transact from is not difficult for whoever holds
-            those logs. Your wallet provider sees the connection request the moment you click
+            Independently of us, and unavoidably: for the pages your browser reads the chain from
+            directly, your RPC provider sees your IP address and the specific calls made while it
+            reads chain state. That is a meaningful disclosure. The pattern of calls reveals which
+            agents you are researching and when, and correlating it with an address you later transact
+            from is not difficult for whoever holds those logs.
+          </p>
+          <p>
+            Where a page is rendered on our server instead, that exposure moves rather than
+            disappearing: the RPC provider sees our host&apos;s address rather than yours, and our
+            host sees the request. Neither arrangement is private from everyone — it changes who is
+            in a position to watch, which is worth knowing before deciding it does not matter to you.
+          </p>
+          <p>
+            Your wallet provider sees the connection request the moment you click
             &ldquo;Connect wallet,&rdquo; and sees everything you sign. Your hosting provider — and
             every network between you and it — sees the request that fetched this page.
           </p>
@@ -228,7 +238,7 @@ export default function Privacy() {
           <h3 id="rights">Your rights</h3>
           <p>
             You have the rights below over data we hold, which for most visitors is nothing. Write to{' '}
-            <a href="mailto:privacy@botid.example">privacy@botid.example</a>; we will respond within
+            <a href="mailto:chidileozoemena@gmail.com">chidileozoemena@gmail.com</a>; we will respond within
             30 days and will not charge you for a first request.
           </p>
           <div className="table-scroll">
@@ -278,7 +288,7 @@ export default function Privacy() {
             Material changes move the &ldquo;Last updated&rdquo; date at the top of this page.
             Continued use after a change means you accept the revised policy; if you do not, stop
             using the interface. Questions:{' '}
-            <a href="mailto:privacy@botid.example">privacy@botid.example</a>.
+            <a href="mailto:chidileozoemena@gmail.com">chidileozoemena@gmail.com</a>.
           </p>
           <p className="text-muted" style={{ fontSize: 13 }}>
             This policy is written to be accurate about a product that collects almost nothing. It is

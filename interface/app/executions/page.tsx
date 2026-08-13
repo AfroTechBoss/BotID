@@ -162,7 +162,10 @@ export default function Executions() {
             The router is live on {network.name} and nobody has commissioned work through it. This
             table is empty because the chain is.
           </p>
-          <Link href="/docs" className="btn btn-secondary" style={{ display: 'inline-flex' }}>How to request one</Link>
+          {/* Anchored. This used to drop the reader at the top of a 560-line docs page with no
+              indication of which of its fourteen sections answered the question they had just
+              clicked — the signpost pointed at the town, not the street. */}
+          <Link href="/docs#request" className="btn btn-secondary" style={{ display: 'inline-flex' }}>How to request one</Link>
         </div>
       )}
 

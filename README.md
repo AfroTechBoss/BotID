@@ -241,7 +241,7 @@ The agent needs the circuit built first, because it runs it at every tier — se
 | `contracts/abi/` | Consumer-facing ABIs as checked-in TypeScript. Generated, reviewed in diffs |
 | `circuits/` | The Gold tier's ONNX model, `ezkl` pipeline, and the run/prove entrypoints |
 | `relayer/` | Reference agent, watchtower and consumer. One dependency: `ethers` |
-| `interface/` | The web interface. Next.js, not yet built — see [`interface/README.md`](interface/README.md) |
+| `interface/` | The web interface and the read API. Next.js — see [`interface/README.md`](interface/README.md) |
 | `docs/` | The architecture, and the four attacks it exists to prevent |
 
 The interface shares this repository with the contracts rather than living in its own. It reads
@@ -258,12 +258,20 @@ Gold → settle, plus the watchtower's liveness fault path. The circuit compiles
 verifies against its own verifying key, and reproduces the integer reference exactly on every
 calibration sample.
 
-**Not audited and not deployed to any public network.** No subgraph, no frontend, and no
-consumer protocol reading `getProfile` in production — which is the one thing that would tell us
-whether any of this matters (§8).
+**Not audited, and not on mainnet.** The contracts are deployed to Bohr testnet (chain 968) and
+the interface reads them live — every number it renders is contract state or a router log, and
+there are no fixtures left in it. What is still missing is the part that matters: no subgraph, and
+no consumer protocol reading `meetsPolicy` in production, which is the one thing that would tell
+us whether any of this is worth having (§8).
 
 The one open chain dependency is **resolved**: BOT Chain exposes the bn254 precompiles at `0x06`,
 `0x07` and `0x08` at Istanbul prices on both mainnet (chain 677) and testnet (chain 968), so the
 Gold tier can deploy. A three-pair Groth16 verify costs roughly 200–250k gas — about 5 cents at
 the chain's flat 20 gwei. See [`docs/architecture.md` §7](docs/architecture.md) for the
 measurements. `deploy.js` still probes rather than trusting them.
+
+## License
+
+MIT — see [`LICENSE`](LICENSE). Seventeen source files carry an `SPDX-License-Identifier: MIT`
+header, which is a claim about terms that were not written down anywhere; the file is what makes
+the header true.

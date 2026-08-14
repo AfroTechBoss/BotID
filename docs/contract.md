@@ -1941,6 +1941,8 @@ prove it did.
 
 ## Where to go next
 
+- [`docs/relayer.md`](relayer.md) — the same treatment for the off-chain half: the agent, the
+  watchtower, the consumer client and the SDK
 - [`docs/architecture.md`](architecture.md) — the shorter technical map
 - `/docs#lifecycle` on the site — the same lifecycle, narrated live against real chain state
 - `/docs#request` — how to actually place an order, with the real function signature

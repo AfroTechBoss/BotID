@@ -155,7 +155,7 @@ approve a bond.
 
 ## Tests
 
-140 tests across five suites. They are organised around the attacks the design exists to
+255 tests across ten suites. They are organised around the attacks the design exists to
 prevent, not just around function coverage:
 
 | Suite | Covers |
@@ -165,6 +165,11 @@ prevent, not just around function coverage:
 | `InputAttestor` | Publisher quorum, freshness, ordering-based dedup, commitment binding |
 | `Adapters` | All three tiers, plus every field of the execution context as a replay vector |
 | `ExecutionRouter` | Full lifecycle, liveness faults, challenge escalation, fee floor, fee and exposure accounting |
+| `LivenessGrief` | The griefing path: a consumer stalling an agent's capital by never finalising |
+| `Calibration` | Whether the chosen constants actually work: a minimum-bond agent's credit line, how long it takes to climb, and what one execution or one counterparty can do to a history |
+| `Decimals` | Every capital parameter against a 6-decimal bond token, where an 18-decimal default silently never binds |
+| `eip712` | The typed-data envelope and domain separation — the same digest must not verify at a second adapter |
+| `Timelock` | Queue, execute, expire, and the setters deliberately left immediate |
 
 Tests worth reading as documentation of the redesign:
 
@@ -237,7 +242,7 @@ The agent needs the circuit built first, because it runs it at every tier — se
 
 | Directory | What is in it |
 |---|---|
-| `contracts/` | The protocol. Solc 0.8.24, no external dependencies, 140 tests |
+| `contracts/` | The protocol. Solc 0.8.24, no external dependencies, 255 tests |
 | `contracts/abi/` | Consumer-facing ABIs as checked-in TypeScript. Generated, reviewed in diffs |
 | `circuits/` | The Gold tier's ONNX model, `ezkl` pipeline, and the run/prove entrypoints |
 | `relayer/` | Reference agent, watchtower and consumer. One dependency: `ethers` |

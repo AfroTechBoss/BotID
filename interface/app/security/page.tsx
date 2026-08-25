@@ -66,7 +66,7 @@ const THREATS: [string, string, string][] = [
   [
     'Owner key compromise',
     'Whoever holds the owner key retunes slash rates, windows, fee floors, publishers or adapters.',
-    'NOT mitigated. The owner is a single key on the only existing deployment, and there is no multisig. Four setters — the router, the reputation writers, a verification adapter and the input attestor — are now behind a 21-day queue-then-execute delay in the source, which is the subset that can substitute the code deciding whether an execution was honest. Every economic parameter stays instant, the delay is a notice period rather than a veto, and a key that can wait three weeks still wins. Treat this as the largest non-code risk on this page.',
+    'NOT mitigated. The owner is a single key on the only existing deployment, and there is no multisig. Five setters — the registry’s router, its treasury, a reputation writer, a verification adapter and the router’s input attestor — are now behind a 21-day queue-then-execute delay, which is the subset that can substitute the code deciding whether an execution was honest. Every economic parameter stays instant, the delay is a notice period rather than a veto, and a key that can wait three weeks still wins. Treat this as the largest non-code risk on this page.',
   ],
   [
     'Frontend compromise',
@@ -363,11 +363,12 @@ export default function Security() {
               and the adapter registry, and half of that list still takes effect in one block.
             </p>
             <p style={{ marginBottom: 0 }}>
-              What changed is the other half. Four setters — <code>setRouter</code>,{' '}
-              <code>setWriter</code>, <code>setAdapter</code> and <code>setInputAttestor</code> —
-              have to be queued, announced on chain, and then executed no sooner than 21 days later
-              and no later than 35. Those four are the ones that point a contract at code it did not
-              previously depend on: swapping the Bronze adapter for one whose <code>verify</code>{' '}
+              What changed is the other half. Five setters — <code>setRouter</code>,{' '}
+              <code>setTreasury</code>, <code>setWriter</code>, <code>setAdapter</code> and{' '}
+              <code>setInputAttestor</code> — have to be queued, announced on chain, and then executed
+              no sooner than 21 days later and no later than 35. Those five are the ones that point a
+              contract at an address it did not previously depend on, whether that is code or a
+              destination for slashed collateral: swapping the Bronze adapter for one whose <code>verify</code>{' '}
               always returns true does not look like theft in any event these contracts emit, it
               just makes every subsequent delivery pass and every challenge lose. The delay is 21
               days because that is <code>UNBONDING_PERIOD</code>, so an agent that objects can

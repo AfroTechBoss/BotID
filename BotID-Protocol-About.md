@@ -200,13 +200,18 @@ watchtower's liveness-fault path. The circuit compiles, proves, and verifies aga
 verifying key, and reproduces the integer reference exactly on every calibration sample. The
 web interface exists and is what we've been building this week.
 
-**Not done:** **not audited by anyone external, and not deployed to any public network.** There has
-been an internal review — eight findings, all of them now either fixed or documented as accepted on
-the `/security` page — but an internal review is the authors marking their own homework, and it is
-not a substitute for the thing that has not happened. No subgraph. No consumer
-protocol reading `getProfile` in production — which is the one thing that would tell us whether
-any of this matters. The interface currently runs on mock data. The legal pages need a lawyer
-before they go live.
+**Deployed:** Bohr testnet, chain 968, since 25 August 2026. Eight contracts, all source-verified,
+with every wiring assertion read back off chain rather than trusted from the deploy script's own
+output. The addresses are on the `/security` page. Nothing is on any mainnet, and no address on a
+mainnet is ours.
+
+**Not done:** **not audited by anyone external.** There has been an internal review — eight
+findings, seven fixed and one mitigated rather than closed, all of them written up on the
+`/security` page — but an internal review is the authors marking their own homework, and it is not
+a substitute for the thing that has not happened. The owner key is a single EOA that is also the
+sole feed publisher and the sole TEE notary: four roles that a mature deployment separates. No
+subgraph. No consumer protocol reading `getProfile` in production — which is the one thing that
+would tell us whether any of this matters. The legal pages need a lawyer before they go live.
 
 **The one chain dependency is resolved:** BOT Chain exposes the bn254 precompiles at `0x06`,
 `0x07` and `0x08` at Istanbul prices on both mainnet (chain 677) and testnet (chain 968), so the
@@ -362,8 +367,9 @@ outcomes at settlement, that `minTier: Gold` is a policy anyone will actually se
 costs to produce.
 
 Which is why "no consumer protocol reading `getProfile` in production" is not a to-do item to me.
-It is the single open question the entire thing hinges on, and everything else — 140 tests, a
-working circuit, this interface — is preparation for being able to ask it properly.
+It is the single open question the entire thing hinges on, and everything else — 255 tests, a
+working circuit, this interface, a live testnet deployment — is preparation for being able to ask
+it properly.
 
 ---
 

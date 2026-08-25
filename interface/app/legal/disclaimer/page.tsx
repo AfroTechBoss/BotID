@@ -49,7 +49,7 @@ export default function Disclaimer() {
         </aside>
         <main className="legal-body">
           <h1 style={{ fontSize: 28 }}>Risk disclosure</h1>
-          <p className="text-muted" style={{ fontSize: 12 }}>Last updated Aug 10, 2026</p>
+          <p className="text-muted" style={{ fontSize: 12 }}>Last updated Aug 25, 2026</p>
 
           <div style={{ border: '2px solid var(--score-critical)', color: 'var(--score-critical)', padding: 'var(--space-3)', fontWeight: 600, margin: 'var(--space-4) 0' }}>
             You can lose all of the capital you commit. Nothing here is advice. If any part of this
@@ -185,10 +185,13 @@ export default function Disclaimer() {
 
           <h3 id="audit" style={H}>The contracts are not audited</h3>
           <p>
-            No contract in this protocol has been audited. No audit is scheduled and no bug bounty is
-            open. Unaudited smart contracts holding collateral is a well-understood way to lose
-            everything at once. CertiK&apos;s audits of BOT Chain, its DEX and its bridge do not cover
-            BotID and must not be read as coverage. See <a href="/security">security</a>.
+            No contract in this protocol has been audited by anyone outside it. No external audit is
+            scheduled and no bug bounty is open. There has been an internal review — eight findings,
+            seven fixed and one mitigated rather than closed, all of them written up on{' '}
+            <a href="/security">security</a> — but that is the authors marking their own homework, which
+            is the one thing an audit exists to not be. Unaudited smart contracts holding collateral is
+            a well-understood way to lose everything at once. CertiK&apos;s audits of BOT Chain, its DEX
+            and its bridge do not cover BotID and must not be read as coverage.
           </p>
 
           <h3 id="contract" style={H}>Smart contract risk</h3>
@@ -237,11 +240,23 @@ export default function Disclaimer() {
           <p>
             Nearly every protocol parameter is settable by the owner: slash rates, challenge and
             settlement windows, the fee floor, the publisher set, the adapter registry, the scoring
-            constants. On the only existing deployment that owner is a single externally-owned account,
-            with no multisig and no timelock.
+            constants. On the live deployment that owner is a single externally-owned account, with no
+            multisig. It is also the sole input-feed publisher and the sole TEE notary, so four roles
+            that a mature deployment would separate sit on one key.
           </p>
           <p>
-            <strong>Whoever holds that key can change the rules you are relying on, without warning.</strong>{' '}
+            Five of those setters — the registry&apos;s router, its treasury, a reputation writer, a
+            verification adapter, and the router&apos;s input attestor — are now behind a 21-day
+            queue-then-execute delay. Those are the ones that <em>redirect trust</em>: they can
+            substitute the code that decides whether an execution was honest, or where slashed
+            collateral goes, which is a different kind of change from moving a fee. The delay is
+            a smoke alarm, not a lock — it guarantees you get three weeks&apos; warning, and nothing
+            more. Everything else, including the publisher set and every economic parameter, still takes
+            effect the moment the transaction confirms.
+          </p>
+          <p>
+            <strong>Whoever holds that key can change the rules you are relying on, and for most of
+            those rules, without warning.</strong>{' '}
             A compromise of it is a compromise of the protocol&apos;s economics. This is the largest
             non-code risk on this page.
           </p>
@@ -308,9 +323,13 @@ export default function Disclaimer() {
           <p>
             <strong>There is no BotID token, presale, airdrop, staking program or yield product.</strong>{' '}
             Anything presenting itself as one is a scam, however convincing it looks. We will never ask
-            for your seed phrase or private key. Nothing is deployed to a public network, so any address
-            offered to you as a BotID contract today is not one. Verify a contract address against the
-            deployment artifact in the repository, never against a page or a message. Report
+            for your seed phrase or private key. There <em>is</em> a public deployment now — Bohr
+            testnet, chain 968 — so &ldquo;any address claiming to be BotID is fake&rdquo; is no longer
+            the test, and the impersonator&apos;s job just got easier. The addresses on{' '}
+            <a href="/security">security</a> are the whole set; anything not on that list is not ours,
+            including an address on a mainnet, where we have deployed nothing at all. Check a contract
+            against that list or against the deployment artifact in the repository, never against a page
+            or a message that came to you. Report
             impersonation to <a href="mailto:chidileozoemena@gmail.com">chidileozoemena@gmail.com</a>.
           </p>
 

@@ -459,12 +459,16 @@ a zero owner is what separates *absent* from *empty*.
 
 ### 3.12 `index.js` — the command line
 
-The thinnest file in the package. Parses arguments, prints usage, dispatches to one of the three
+The thinnest file in the package. Parses arguments, prints usage, dispatches to one of the four
 roles, and turns any thrown error into a single clean line — with the full stack behind a `DEBUG`
 flag, so normal operation is readable and debugging is still possible.
 
 The modules are loaded **inside** the switch, not at the top. Running the watchtower therefore never
 loads the consumer's code, and a broken module only breaks the role that needs it.
+
+The fourth role is `arena` — the first-party consumer in `src/arena/`, which orders work from every
+registered agent on a schedule and settles it against what the allocation actually returned. It is
+the one role with a document of its own: [docs/arena.md](docs/arena.md).
 
 ---
 
@@ -1037,7 +1041,7 @@ This is the entire published surface. Everything else is internal.
 |---|---|
 | `USAGE` | The help text, printed for no command or an unknown one |
 | `parseArgs(argv)` | Turns `--key value` into settings. A flag with no value becomes `"true"` |
-| `main()` | Dispatch to `agent`, `watchtower` or `consumer` |
+| `main()` | Dispatch to `agent`, `watchtower`, `arena` or `consumer` |
 
 Exit codes: `0` for help asked for deliberately, `1` for an unknown command or any thrown error.
 
@@ -1071,6 +1075,11 @@ Which key does what, and what it costs you if it leaks.
 | `WATCHTOWER_KEY` | Call enforcement functions | **Least serious.** Every function it calls is permissionless — anyone may call them. It can waste its own gas |
 | `PUBLISHER_KEY` | Sign readings | Serious in production. This is why real deployments use a quorum of independent publishers rather than one |
 
+The Arena is the one role that holds two of these at once — `CONSUMER_KEY` to order and settle,
+`PUBLISHER_KEY` to sign the readings it grades against. That concentration is acceptable in a
+first-party Arena and is precisely what a third-party consumer would not have; [`arena.md`](arena.md)
+says so out loud rather than leaving it to be discovered.
+
 The agent owner's key — the one that posted the bond and can withdraw it — **never appears in this
 package at all.** Nothing here can move an agent's bond, change its owner, or withdraw. That
 separation is the point of having an operator key distinct from an owner key: the key that runs
@@ -1080,6 +1089,7 @@ day to day is not the key that holds the capital.
 
 ## Where to go next
 
+- [`arena.md`](arena.md) — the first-party consumer: how work gets ordered and graded
 - [`contract.md`](contract.md) — the same treatment for the on-chain half
 - [`architecture.md`](architecture.md) — the shorter technical map
 - [`../relayer/README.md`](../relayer/README.md) — how to actually run it

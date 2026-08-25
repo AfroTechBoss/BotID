@@ -12,6 +12,13 @@ botid relayer
       Run the permissionless keeper: markExpired, finalize, slashUnresolvedChallenge,
       settleDefault. Needs WATCHTOWER_KEY.
 
+  node src/index.js arena [run|order|settle|once|status]
+      Run the Arena: the first-party consumer. Discovers registered agents, orders work
+      from them on a schedule with real market data, holds the allocation, then settles
+      with what it actually returned. Needs CONSUMER_KEY and PUBLISHER_KEY.
+      "order" and "settle" run one loop each, so they can be restarted separately;
+      "once" does a single pass of both, for cron. See docs/arena.md.
+
   node src/index.js consumer request  --agent <id> [--notional N] [--fee N] [--window secs]
                                       [--feeds A,B,C] [--values 12500,34000,4200]
   node src/index.js consumer settle   --request <id> [--pnl bps] [--sla true] [--limit true]
@@ -42,6 +49,14 @@ async function main() {
       return require("./agent").run();
     case "watchtower":
       return require("./watchtower").run();
+    case "arena": {
+      const arena = require("./arena");
+      if (sub === "status") return arena.status();
+      if (sub === "once") return arena.once();
+      if (sub === "order" || sub === "settle") return arena.run({ mode: sub });
+      if (sub === undefined || sub === "run") return arena.run();
+      throw new Error(`unknown arena command: ${sub}`);
+    }
     case "consumer": {
       const consumer = require("./consumer");
       const fn = consumer[sub];

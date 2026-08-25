@@ -86,6 +86,60 @@ const config = {
   pollIntervalMs: Number(process.env.POLL_INTERVAL_MS ?? 5000),
   confirmations: Number(process.env.CONFIRMATIONS ?? 1),
   startBlock: process.env.START_BLOCK ? Number(process.env.START_BLOCK) : null,
+
+  // --- arena ---------------------------------------------------------------
+  // The first-party consumer. See src/arena/ and docs/arena.md; every one of these is a
+  // policy choice rather than a protocol constant, which is why none of them is read from
+  // the chain.
+  arena: {
+    ledgerFile: process.env.ARENA_LEDGER ?? path.join(__dirname, "..", ".arena", "ledger.json"),
+
+    // Exactly `spec.json.feeds` of them, in a fixed order. The order is part of what the
+    // model sees, so shuffling it between requests would change the answer for reasons that
+    // have nothing to do with the market.
+    assets: (process.env.ARENA_ASSETS ?? "BTC/USD,ETH/USD,SOL/USD").split(",").map((s) => s.trim()),
+
+    // Hours of price history behind each feed reading. The feed value is a rebased index,
+    // not a price — see market.js for why a raw price cannot go in there at all.
+    lookbackHours: Number(process.env.ARENA_LOOKBACK_HOURS ?? 24),
+
+    // How long the allocation is held before it is graded, in hours. Must sit strictly
+    // between the router's challenge window (1h) and its settlement window (7d); checked at
+    // startup against the deployed values rather than trusted.
+    holdHours: Number(process.env.ARENA_HOLD_HOURS ?? 24),
+
+    // Seconds an agent gets to deliver.
+    deliverWindowSec: Number(process.env.ARENA_DELIVER_WINDOW_SEC ?? 900),
+
+    // Notional per job, as a fraction of the agent's own credit line in bps. A constant
+    // would either revert against a small agent or carry no weight against a large one.
+    notionalBps: Number(process.env.ARENA_NOTIONAL_BPS ?? 2_500),
+
+    // Minimum gap between two Arena jobs for the same agent, in seconds.
+    cooldownSec: Number(process.env.ARENA_COOLDOWN_SEC ?? 3_600),
+
+    // Hard ceiling on fees the Arena will spend, in whole bond-token units. Checked before
+    // ordering: the fee budget is finite on any network where the bond token is real, and
+    // discovering that by revert is discovering it too late.
+    feeBudget: process.env.ARENA_FEE_BUDGET ?? null,
+
+    orderIntervalMs: Number(process.env.ARENA_ORDER_INTERVAL_MS ?? 300_000),
+    settleIntervalMs: Number(process.env.ARENA_SETTLE_INTERVAL_MS ?? 300_000),
+
+    // Block AgentRegistered replay starts from. Falls back to START_BLOCK, then to a short
+    // lookback — the same shape as the watchtower, for the same reason: a public RPC refuses
+    // an unbounded eth_getLogs, so "from genesis" is not an option.
+    fromBlock: process.env.ARENA_FROM_BLOCK ? Number(process.env.ARENA_FROM_BLOCK) : null,
+    logWindow: Number(process.env.ARENA_LOG_WINDOW ?? 9_000),
+
+    priceSource: process.env.ARENA_PRICE_SOURCE ?? "coinbase",
+
+    // Where a *remote* agent can fetch the bundle. Without this the Arena emits a bare name,
+    // which only resolves for an agent sharing this filesystem — fine for the local demo and
+    // useless on a public testnet, where the agent is on somebody else's machine and a name
+    // it cannot resolve is a delivery it cannot make.
+    bundleBaseUrl: process.env.ARENA_BUNDLE_BASE_URL ?? null,
+  },
 };
 
 /** Keys `apply` accepts, so a typo is an error rather than a setting that silently does nothing. */
@@ -93,7 +147,7 @@ const SETTABLE = new Set([
   "rpcUrl", "contracts", "chainId", "seeded", "artifactsDir", "agentId", "operatorKey",
   "enclaveKey", "measurement", "circuitsDir", "modelRunner", "runnerCmd", "runnerArgs",
   "proverCmd", "proverArgs", "allowDevProof", "bundleDir", "pollIntervalMs", "confirmations",
-  "startBlock",
+  "startBlock", "arena",
 ]);
 
 let applied = null;

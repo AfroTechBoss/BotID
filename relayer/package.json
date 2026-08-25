@@ -28,7 +28,9 @@
   "scripts": {
     "agent": "node src/index.js agent",
     "watchtower": "node src/index.js watchtower",
-    "consumer": "node src/index.js consumer"
+    "consumer": "node src/index.js consumer",
+    "arena": "node src/index.js arena",
+    "test": "node --test test/arena.test.js"
   },
   "dependencies": {
     "ethers": "^6.17.0"

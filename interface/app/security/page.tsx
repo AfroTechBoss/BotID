@@ -114,17 +114,28 @@ export default function Security() {
 
         <h3>Deployment state</h3>
         <p>
-          BotID is deployed on Bohr testnet, chain 968, as of 2026-08-11, with the bn254 precompiles
+          BotID is deployed on Bohr testnet, chain 968, as of 2026-08-25, with the bn254 precompiles
           confirmed present. There is no mainnet deployment. Bohr is a testnet: its BOT has no
           value, the chain carries no uptime commitment, and the deployment can be replaced without
           notice. Nothing there is a place to put capital you expect to keep.
         </p>
         <p>
+          &ldquo;Replaced without notice&rdquo; is not hypothetical: this is the second deployment,
+          and it replaced the one dated 2026-08-11. Six of the eight contracts changed bytecode when
+          the findings below were remediated, and none of them is upgradeable — the router&apos;s
+          registry, engine and bond token are <code>immutable</code>, so there was no way to swap one
+          contract and keep the rest. The signing domain changed too, so nothing signed for the old
+          adapters verifies against the new ones. If you hold addresses from before that date, they
+          are not stale so much as a different protocol wearing the same name. All eight are
+          source-verified on the explorer; the table below is the current set.
+        </p>
+        <p>
           The owner of every parameter on that deployment is a single externally-owned key, which is
-          also the deployer and the only registered feed publisher. That is three roles on one key:
-          it can change the capital limits, it alone signs the input readings every execution is
-          judged against, and losing it loses all three at once. Acceptable on a testnet, stated
-          plainly because it is exactly the sort of thing that quietly survives into mainnet.
+          also the deployer, the only registered feed publisher, and the only TEE notary. That is
+          four roles on one key: it can change the capital limits, it alone signs the input readings
+          every execution is judged against, it alone decides which enclaves count as Silver, and
+          losing it loses all four at once. Acceptable on a testnet, stated plainly because it is
+          exactly the sort of thing that quietly survives into mainnet.
         </p>
         <p>
           The table below is load-bearing: it is this site&apos;s answer to &ldquo;is this the real
@@ -175,8 +186,10 @@ export default function Security() {
             0x08a284ace0e1e53d8ecffe84217e9680646ac0264ab252948dabbfe7f54d8fa2
           </code>{' '}
           — bound to the <code>Halo2Verifier</code> in the table above. Read back from{' '}
-          <code>ZkAdapter.modelFor()</code> on 2026-08-11. Nothing is registered on mainnet, because
-          there is no mainnet adapter.
+          <code>ZkAdapter.modelFor()</code> on 2026-08-25, against the new adapter. The verifier
+          itself is the one contract carried over from the previous deployment unchanged, so the
+          model binding is identical to what it was. Nothing is registered on mainnet, because there
+          is no mainnet adapter.
         </p>
 
         <h6 style={HEAD}>Misconfiguration, which is not an attack and is still how money is lost</h6>
@@ -366,10 +379,10 @@ export default function Security() {
               covers none of the economic parameters, deliberately. And it arms only when{' '}
               <code>finalizeBootstrap()</code> has been called on all three contracts, which the
               deploy script does last and records in the manifest; a live deployment reporting{' '}
-              <code>bootstrapped() == false</code> has no delay at all. The Bohr deployment dated
-              above predates the mechanism entirely and does not carry it. Moving the key itself
-              behind a multisig remains the single highest-value change available, and it has not
-              been made.
+              <code>bootstrapped() == false</code> has no delay at all. The current Bohr deployment
+              reports <code>true</code> on all three, read back off chain after deployment rather
+              than assumed from the script&apos;s own output. Moving the key itself behind a multisig
+              remains the single highest-value change available, and it has not been made.
             </p>
           </section>
 

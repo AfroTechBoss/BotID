@@ -965,21 +965,33 @@ Known limits, stated plainly:
 
 ## 8. Where they live
 
-Bohr testnet, chain 968, deployed 2026-08-11. Bond token has 6 decimals.
+Bohr testnet, chain 968, deployed 2026-08-25. Bond token has 6 decimals.
 
 | Contract | Address |
 |---|---|
-| ReputationEngine | `0x5BACDa942BD8523a41E1815cE97484be68252597` |
-| AgentRegistry | `0x7E1A468Fc20E1d3EE11953eE46EF0572d3B26914` |
-| InputAttestor | `0xA7c37d4E197A12A2de6753b3D53FE698C39fAc8B` |
-| ExecutionRouter | `0x0D56ca1b8D5FDE1F8b116f051cFaEa199E367416` |
-| SignatureAdapter (Bronze) | `0x91188177F461E63d668d74fa80b4be77ecea0FB0` |
-| TeeAdapter (Silver) | `0x18493523A37831a9bFacBC99F3C3932368592fa5` |
-| ZkAdapter (Gold) | `0x43bbB50D02567005B7dD6F147E0D96b80a8409B9` |
+| ReputationEngine | `0xDF0E2D20E1Da72AcfaE834595631Fc0AF92C7bD4` |
+| AgentRegistry | `0x0bC0F2dd3337004d7Adef8364Fd9Ff33B3959142` |
+| InputAttestor | `0x1F3EEbA18DD9D0FD84a5456E1D6F7394E4d07dc0` |
+| ExecutionRouter | `0xd5AdD347ac5498199A3cdAaeb31d0fFD9Fc2b717` |
+| SignatureAdapter (Bronze) | `0xf4dFcFb1cAE608b40F5a1F88CdEA0DAAdfF615AA` |
+| TeeAdapter (Silver) | `0xde2F8d5002c6d9f5249C393a10e27A3d8a8bFfD5` |
+| ZkAdapter (Gold) | `0x83Aa1c78bAdDdCF9Deb960fC3Cf7c1c3b946d1E3` |
 | Halo2Verifier | `0x4A29F6F49Ef8c7ff6CbC8879659b5C79ADa154b7` |
 | Bond token (test) | `0x75edC9335175Fc0552D51D48439F229c10420fe3` |
 
-Explorer: `https://scan.bohr.life`.
+All eight are source-verified on the explorer: `https://scan.bohr.life`.
+
+**This replaced the deployment dated 2026-08-11.** The security remediation changed the bytecode of
+six of the eight contracts, and nothing here is upgradeable — `registry`, `engine` and `bondToken`
+are `immutable`, so one contract cannot be swapped while the rest stay. `Halo2Verifier` is the
+single address carried over, because its bytecode was untouched and reuse keeps the Gold model
+binding identical.
+
+The old addresses are not merely superseded, they are incompatible: the EIP-712 domain now includes
+the verifying contract, so an attestation signed for the old Bronze adapter does not verify at the
+new one. There is no window in which both sets work. The timelock also arms only on
+`finalizeBootstrap()`, which the old deployment predates entirely; this one reports
+`bootstrapped() == true` on all three contracts, read back off chain rather than assumed.
 
 ### The tunable numbers
 

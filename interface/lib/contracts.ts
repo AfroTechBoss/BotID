@@ -37,6 +37,14 @@ export interface Contract {
  * adapter is bound, and the Gold verifier is the one the manifest names. A manifest records what
  * the deploy *sent*; these are what stuck.
  *
+ * These are the SECOND set. The 2026-08-11 deployment was replaced on 2026-08-25 because the
+ * security remediation changed the bytecode of six of the eight contracts, and none of them is
+ * upgradeable — `registry`, `engine` and `bondToken` are immutable, so there was no way to swap
+ * one contract and keep the rest. The old addresses are not deprecated so much as incompatible:
+ * the signing domain changed with the EIP-712 envelope, so nothing signed for the old adapters
+ * verifies against the new ones. Anything still pointing at the 0x7E1A…6914 set is talking to a
+ * different protocol that happens to share a name.
+ *
  * Mainnet remains empty, and that is the current truth rather than an oversight. Nothing of ours
  * is deployed to BOT Chain.
  *
@@ -76,13 +84,13 @@ export interface Contract {
  */
 export const ADDRESSES = {
   testnet: {
-    AgentRegistry: '0x7E1A468Fc20E1d3EE11953eE46EF0572d3B26914',
-    ExecutionRouter: '0x0D56ca1b8D5FDE1F8b116f051cFaEa199E367416',
-    ReputationEngine: '0x5BACDa942BD8523a41E1815cE97484be68252597',
-    InputAttestor: '0xA7c37d4E197A12A2de6753b3D53FE698C39fAc8B',
-    SignatureAdapter: '0x91188177F461E63d668d74fa80b4be77ecea0FB0',
-    TeeAdapter: '0x18493523A37831a9bFacBC99F3C3932368592fa5',
-    ZkAdapter: '0x43bbB50D02567005B7dD6F147E0D96b80a8409B9',
+    AgentRegistry: '0x0bC0F2dd3337004d7Adef8364Fd9Ff33B3959142',
+    ExecutionRouter: '0xd5AdD347ac5498199A3cdAaeb31d0fFD9Fc2b717',
+    ReputationEngine: '0xDF0E2D20E1Da72AcfaE834595631Fc0AF92C7bD4',
+    InputAttestor: '0x1F3EEbA18DD9D0FD84a5456E1D6F7394E4d07dc0',
+    SignatureAdapter: '0xf4dFcFb1cAE608b40F5a1F88CdEA0DAAdfF615AA',
+    TeeAdapter: '0xde2F8d5002c6d9f5249C393a10e27A3d8a8bFfD5',
+    ZkAdapter: '0x83Aa1c78bAdDdCF9Deb960fC3Cf7c1c3b946d1E3',
     Halo2Verifier: '0x4A29F6F49Ef8c7ff6CbC8879659b5C79ADa154b7',
     bondToken: '0x75edC9335175Fc0552D51D48439F229c10420fe3',
   },
@@ -100,8 +108,9 @@ export const ADDRESSES = {
  * accidentally scan a chain we are not on.
  */
 export const DEPLOY_BLOCK: Partial<Record<NetworkId, bigint>> = {
-  // AgentRegistry's creation transaction, 0x561cc5e3…5a91e6.
-  testnet: 19_486_509n,
+  // First block in which AgentRegistry has code, found by bisecting eth_getCode rather than
+  // copied from a receipt — the manifest does not record creation transactions.
+  testnet: 21_141_227n,
 };
 
 export type ContractName =

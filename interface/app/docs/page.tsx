@@ -57,9 +57,10 @@ const PARAMS: [string, string, string, string][] = [
   ['Liveness slash', 'ExecutionRouter.livenessSlashBps', '200 bps', 'Of remaining bond, on non-delivery.'],
   ['Challenger bounty', 'ExecutionRouter.challengerBountyBps', '5,000 bps', 'Of the slashed amount; the remainder goes to treasury.'],
   ['Protocol fee', 'ExecutionRouter.protocolFeeBps', '500 bps', 'Of the execution fee, taken on settle.'],
-  ['Minimum fee', 'ExecutionRouter.minFeeBps', '10 bps', 'Of notional. Zero-notional requests are exempt.'],
+  ['Minimum fee', 'ExecutionRouter.minFeeBps', '10 bps', 'Of notional. A request must put something at risk — zero notional is refused.'],
   ['Half-weight', 'ReputationEngine.halfWeight', '1,000 USDT', 'Notional at which one observation moves the score halfway to its quality value.'],
   ['Weight cap', 'ReputationEngine.weightCap', '10,000 USDT', 'Ceiling on the capital weight of a single execution.'],
+  ['Consumer weight cap', 'ReputationEngine.consumerWeightCap', '500 USDT', 'Ceiling on the weight one counterparty may spend on one agent per decay half-life.'],
   ['Liveness haircut', 'ReputationEngine.livenessHaircutBps', '1,500 bps', 'Multiplicative, applied outside the EWMA.'],
   ['Verification haircut', 'ReputationEngine.verificationHaircutBps', '6,000 bps', 'Applied on a lost challenge — the severe case.'],
   ['Challenge bond', 'ExecutionRouter.challengeBondAmount', '50 USDT', 'What a challenger posts. Forfeited to the agent if the challenge fails.'],
@@ -462,10 +463,10 @@ instances[nIn .. nIn + nOut)   model output tensor`}</div>
             Score is a capital-weighted EWMA over settled outcomes, decayed toward neutral over time. Range is
             0–10,000; a new agent starts at 5,000.
           </p>
-          <div style={CODE}>{`w      = min(notional, weightCap)          // capital at risk, capped
-q      = quality(outcome) ∈ [0, 10000]     // per-execution quality
+          <div style={CODE}>{`w      = min(notional, weightCap, budget(agent, consumer))  // capital at risk, twice capped
+q      = quality(outcome) ∈ [0, 10000]                      // per-execution quality
 score' = decay(score, Δt) + (q − decay(score, Δt)) · w / (w + K)`}</div>
-          <p>Three properties follow, all intended:</p>
+          <p>Four properties follow, all intended:</p>
           <ol>
             <li>
               <strong>A large execution moves the score far more than a small one.</strong> <code>K</code> is the
@@ -482,6 +483,17 @@ score' = decay(score, Δt) + (q − decay(score, Δt)) · w / (w + K)`}</div>
               <strong>Faults are not smoothed.</strong> A liveness fault or a lost challenge applies a
               multiplicative haircut outside the EWMA <em>and</em> increments a permanent fault counter that
               consumers read independently of the score. Volume cannot bury a fault.
+            </li>
+            <li>
+              <strong>No single counterparty can define a score.</strong> Settlement is unilateral — the
+              consumer reports the outcome — and the consumer also picks the <code>notional</code> that
+              outcome is weighted by. The damage of a false report therefore scales with a number the liar
+              chooses, while the cost is <code>minFeeBps</code> of it, so no fee floor can close a gap the
+              attacker scales on both sides. Each consumer instead draws from a per-agent weight budget,{' '}
+              <code>consumerWeightCap</code>, defaulting to half of <code>K</code>: one counterparty moves a
+              score at most a third of the way toward its claimed quality, and the budget refills on the
+              same half-life the score decays on. Earning a reputation and destroying one both take several
+              independent counterparties.
             </li>
           </ol>
           <p>
@@ -655,7 +667,11 @@ score' = decay(score, Δt) + (q − decay(score, Δt)) · w / (w + K)`}</div>
             </li>
             <li>
               <strong>Protocol parameters are owner-settable</strong>, including slash rates and windows. That is
-              a governance surface, and it is currently a single owner key.
+              a governance surface, and it is currently a single owner key. The four setters that
+              can redirect trust — the router, the reputation writers, a verification adapter, the
+              input attestor — have to be queued 21 days ahead and are announced on chain when they
+              are; everything else takes effect in the block it lands in. See{' '}
+              <a href="/security">security</a>.
             </li>
             <li><strong>The insurance vault does not exist.</strong> A bond is skin in the game, not cover for your loss.</li>
           </ul>

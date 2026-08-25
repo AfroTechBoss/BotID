@@ -100,12 +100,12 @@ challenged.
 Score is a capital-weighted EWMA over settled outcomes, decayed toward neutral over time:
 
 ```
-w      = min(notional, weightCap)          // capital actually at risk, capped
+w      = min(notional, weightCap, budget(agent, consumer))  // at risk, capped, and budgeted
 q      = quality(outcome) ∈ [0, 10000]     // graded quality of this one execution
 score' = decay(score, Δt) + (q − decay(score, Δt)) · w / (w + K)
 ```
 
-Three deliberate properties fall out of that:
+Four deliberate properties fall out of that:
 
 1. **Size matters.** A $100k execution moves the score far more than a $10 one. `K` is the
    half-weight constant — the notional at which one observation drags the score halfway to `q`.
@@ -116,6 +116,12 @@ Three deliberate properties fall out of that:
 3. **Faults are not smoothed away.** A liveness fault or a lost challenge applies a direct
    multiplicative haircut *and* increments a permanent counter consumers can read separately
    from the score. You cannot bury a failure under a thousand clean executions.
+4. **No one counterparty writes the record.** The consumer reports the economic outcome
+   unilaterally, and nothing on chain can attest to realised P&L, so each consumer gets a per-agent
+   weight budget — `consumerWeightCap`, half of `K` by default — that its reports draw down and
+   that refills on the same half-life as the score. One determined counterparty can drag a score
+   about a third of the way toward whatever it claims; it cannot destroy one, and it cannot
+   manufacture one either, because the budget is spent symmetrically.
 
 And `quality()` deliberately does **not** reward raw P&L linearly — that would pay agents to
 gamble with other people's capital. It gives full marks for clean delivery inside declared
@@ -187,14 +193,17 @@ prediction market might take Bronze with a low ceiling. Reads are free and alway
 
 I'd rather you hear this from me than find it later.
 
-**Built and working:** the contracts (Solc 0.8.24, no external dependencies, 140 tests organised
+**Built and working:** the contracts (Solc 0.8.24, no external dependencies, 255 tests organised
 around the four attacks rather than around function coverage). The full lifecycle runs end to
 end on a local chain — request → deliver → challenge → escalate to Gold → settle — plus the
 watchtower's liveness-fault path. The circuit compiles, proves, and verifies against its own
 verifying key, and reproduces the integer reference exactly on every calibration sample. The
 web interface exists and is what we've been building this week.
 
-**Not done:** **not audited, and not deployed to any public network.** No subgraph. No consumer
+**Not done:** **not audited by anyone external, and not deployed to any public network.** There has
+been an internal review — eight findings, all of them now either fixed or documented as accepted on
+the `/security` page — but an internal review is the authors marking their own homework, and it is
+not a substitute for the thing that has not happened. No subgraph. No consumer
 protocol reading `getProfile` in production — which is the one thing that would tell us whether
 any of this matters. The interface currently runs on mock data. The legal pages need a lawyer
 before they go live.
@@ -517,7 +526,11 @@ Its constants are the policy, and each one has a plain-world twin. `halfWeight` 
 **surgeon's caseload rule**: a thousand successful mole removals do not qualify you for heart
 surgery, so the size of the job determines how much the outcome tells us. `weightCap` 1,000,000 is
 the flip side — one enormous job cannot make your whole record, the way a single lottery win does
-not make someone a good investor. `decayHalfLife` 90 days is a **fitness certificate with an expiry
+not make someone a good investor. `consumerWeightCap` 50,000 is the **one-review-per-customer rule**:
+a restaurant guide that let a single diner file fifty one-star reviews would be measuring that
+diner, not the restaurant, so each counterparty gets a fixed say per agent — spent whether the
+review is glowing or damning, and slowly refilled — which is what stops a consumer who can lie
+about its own P&L from writing the whole record. `decayHalfLife` 90 days is a **fitness certificate with an expiry
 date**: a clean bill of health from two years ago is not evidence about today. And
 `livenessHaircutBps` 1,500 is the **no-show penalty** — it is deducted directly rather than averaged
 in, because a restaurant that fails to open is not defended by the four hundred nights it did.
@@ -557,9 +570,12 @@ the same curve of cost against certainty, and the adapters are the three machine
 `Digest.execution(ctx, address(this))`. Deliberately weak cryptographically, **and that is the
 design.** A signed delivery note is worthless as cryptography and priceless as *liability*: it
 costs nothing to produce, works for any model including LLMs, and is honest only because a
-slashable bond stands behind a claim anyone can escalate. Note the adapter's own address inside the
-digest — domain separation, the equivalent of pre-printing the depot's name on the pad so a note
-signed at one depot cannot be presented at another.
+slashable bond stands behind a claim anyone can escalate. Note the adapter's own address in the
+EIP-712 domain the digest is sealed under — domain separation, the equivalent of pre-printing the
+depot's name and the chain's on the pad, so a note signed at one depot cannot be presented at
+another. The `\x19\x01` envelope around it is the rest of the letterhead: it lets the operator's
+wallet *render* the request id and the deadline instead of asking for a signature over one opaque
+word, and it keeps a signed delivery note structurally incapable of also being a transaction.
 
 **`TeeAdapter` (Silver, 114 lines).** Verifies a signature from an *enrolled enclave key*, checked
 against a measurement allowlist (PCR0 / MRENCLAVE) with an expiry. The measurement is the **serial

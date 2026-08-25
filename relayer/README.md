@@ -218,6 +218,13 @@ node src/index.js consumer settle --request <requestId> --pnl -120
 - **`deliverBy` is the deadline that costs money.** Missing it is a liveness slash plus a
   permanent fault, so delivery is retried with backoff; reverts are not retried, because the
   chain has already decided.
+- **Inputs it cannot verify are declined, not retried.** Anyone may commission work against your
+  agent, and `inputCommitment` is taken on trust, so an order can be built on a commitment no
+  bundle will ever match. Retrying one of those until `deliverBy` earns a liveness fault for a job
+  that was never doable. The agent loop calls `reject` instead — but only inside the router's
+  `rejectionWindow` (5 minutes from the order), so **a relayer that is offline longer than that
+  window can still be griefed into a fault.** This is the operational reason to keep the agent
+  process supervised and its restarts fast.
 - **`retry` distinguishes transient from permanent.** Repeating a revert burns gas and burns the
   deadline a fallback might still have made.
 - Not audited. Not hardened for production key custody.

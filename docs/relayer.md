@@ -154,6 +154,7 @@ function in it is a mirror of a function in `contracts/src`:
 
 | Here | Mirrors |
 |---|---|
+| `domain` | `Digest.domainSeparator`'s inputs |
 | `executionDigest` | `Digest.execution` |
 | `feedDigest` | `InputAttestor.feedDigest` |
 | `bundleCommitment` | `InputAttestor.commit` |
@@ -169,23 +170,41 @@ error, no log line, no single party at fault. Just every honest delivery being r
 **Analogy:** two clocks in a building. If one stops, you notice. If one runs four minutes slow,
 everyone keeps their appointments and misses them all.
 
-The codebase handles this three ways. First, `toField` in particular has **three** copies —
-Solidity, JavaScript and Python — and the comment names all three, because the person editing one
-needs to know the others exist. Second, `chain.js` checks the feed typehash against the deployed
-contract at startup (below). Third, the export tooling can be run in `--check` mode so a contract
-change that was not re-exported fails the check instead of working on one machine and not another.
+The codebase handles this four ways.
 
-The one constant that *cannot* be checked at startup is `EXECUTION_TYPEHASH`, because `Digest` is a
-Solidity library and libraries have no on-chain getter. The file marks it with `void
-EXECUTION_TYPEHASH;` — a line that does nothing except say "yes, this was considered."
+First, **the mirrors are not transcriptions.** `executionDigest` and `feedDigest` do not re-run the
+contract's `abi.encode` by hand; they go through `ethers.TypedDataEncoder`, an independent
+implementation of the published EIP-712 standard. That distinction is the whole point. A mirror
+that repeats the contract's arithmetic agrees with the contract even when both are wrong; an
+independent implementation of the same standard disagrees. For the same reason the typehashes are
+**derived** from the field lists — `EXECUTION_TYPES` and `FEED_TYPES` — rather than copied as
+literal strings, so a drift in either list shows up as a failing signature rather than as a comment
+nobody re-read.
+
+Second, `toField` has **three** copies — Solidity, JavaScript and Python — and the comment names all
+three, because the person editing one needs to know the others exist.
+
+Third, `chain.js` no longer checks one constant and trusts the rest. At startup it hands a probe
+context to each deployed adapter and compares the **finished digest**, and does the same for the
+attestor's domain separator, typehash and feed digest. That covers the envelope, the domain and the
+field list in one call. The old check could only assert `FEED_TYPEHASH` and marked the gap with
+`void EXECUTION_TYPEHASH;` — a line that did nothing except say "yes, this was considered." `Digest`
+is still a library with no on-chain getter; what closed the gap is `ExecutionVerifier`, a pure view
+on each adapter returning the digest itself.
+
+Fourth, the export tooling can be run in `--check` mode so a contract change that was not
+re-exported fails the check instead of working on one machine and not another.
 
 Two other things worth understanding here:
 
-**`signDigest` adds no prefix.** Most wallet signing wraps your message in a standard preamble
-before hashing, so that a message shown in a wallet cannot be a transaction in disguise. These
-contracts `ecrecover` the raw digest, so the relayer signs the raw digest. The comment says so
-explicitly, because signing raw bytes is normally a red flag and a reader deserves to know it was
-deliberate.
+**Signing is EIP-712 typed data.** `executionTypedData` and `feedTypedData` return the
+`{domain, types, message}` triple a wallet renders, so an operator approving a delivery sees a
+request id and a deadline rather than one opaque 32-byte word. `signDigest` still exists and still
+signs 32 bytes with no extra prefix — that is correct and not a shortcut, because an EIP-712 digest
+*is* the thing a key signs, and the `` envelope has already been applied by the time it
+gets there. `wallet.signTypedData(...)` and `signDigest(wallet, executionDigest(...))` produce the
+same bytes; `contracts/test/eip712.test.js` asserts exactly that, which is the only real evidence
+the envelope is right.
 
 **`MAX_ABS` appears here as well as in the adapter.** Negative numbers do not exist in the proof
 system's number space — it wraps around, so `−42` is represented as `P − 42`. Without a bound, a
@@ -240,11 +259,31 @@ the reveal. An input commitment is public from the moment the job is placed; wit
 could guess small values and check them against the hash until the price fell out — and the agent
 could read its own inputs straight out of the commitment it is supposed to be blind to.
 
-**`fetchBundle`** downloads whatever the job's URI points at. Handles three shapes: a local file, an
-HTTP address, or a bare name resolved inside the local bundle directory. Note `redirect: "error"` on
-the HTTP path — it refuses to follow redirects, so a URI cannot quietly become a different URI.
+**`fetchBundle`** downloads whatever the job's URI points at. Two shapes: an `http(s)` address, or a
+bare name resolved inside the local bundle directory.
 
-The URI is **completely untrusted**. It is a locator, not an authority.
+The URI is **completely untrusted**. It is a locator, not an authority — anyone can put one on chain
+for the price of gas, because `requestExecution` is permissionless. `verify` below makes the
+*contents* safe. It cannot make the *fetch* safe, because the fetch happens first, from inside the
+operator's own network. So the fetch is constrained here instead:
+
+- **`file://` is refused outright.** It was an arbitrary read of the operator's disk — `.env`, the
+  operator key — wearing the costume of a locator. If you were using it for local work, drop the
+  bundle in `BUNDLE_DIR` and reference it by name; that is the same convenience, confined.
+- **A bare name must be a name.** No separators, no `..`, and the resolved path is checked to still
+  be inside `BUNDLE_DIR` afterwards.
+- **An `http(s)` host must resolve to a public address.** Every address the name resolves to is
+  checked, not just the first — loopback, link-local (which is where the cloud metadata endpoint
+  that hands out credentials lives), the private ranges, CGNAT, and their IPv6 equivalents. Set
+  `ALLOW_PRIVATE_INPUT_URI=true` only if you are deliberately serving bundles from your own network.
+- **Redirects stay off** (`redirect: "error"`), so a public URL cannot bounce to a private one on
+  the second hop, and the response is read against a 4 MiB budget and a 10s timeout rather than
+  trusting `content-length`.
+
+One residual gap, recorded rather than papered over: a hostname that passes the address check could
+answer differently for the socket a moment later — DNS rebinding. Closing it means dialling the
+checked IP and carrying the `Host` header through TLS, which is a larger change than the traffic
+here justifies.
 
 **`verify`** is the line that makes the previous paragraph safe. It recomputes the commitment from
 the bytes that arrived and compares it to what the consumer committed to on chain. Whatever served
@@ -683,7 +722,6 @@ and discard almost all of them.
 | `_connect()` | Leading underscore — internal, not part of the public API |
 | `Status.Pending` | A named constant standing in for a number, mirroring the contract's enum |
 | `/* Pending */` after a `1` | An inline reminder of what a bare number means |
-| `void EXECUTION_TYPEHASH;` | "This was considered and cannot be checked here" |
 | `{ attempts: 5, label: "…" }` | Named options rather than positional arguments, so a call site is readable |
 | `e.shortMessage ?? e.message` | `ethers` errors carry a readable summary; fall back to the raw one |
 
@@ -727,6 +765,7 @@ and discard almost all of them.
 | `proverArgs` | — | `["prove.py"]` | Empty when a custom prover command is set |
 | `allowDevProof` | `ALLOW_DEV_PROOF` | `false` | **Emits an empty proof.** Mock verifier only |
 | `bundleDir` | `BUNDLE_DIR` | `.bundles` | Where demo bundles are written and read |
+| `allowPrivateInputURI` | `ALLOW_PRIVATE_INPUT_URI` | `false` | Permit an `inputURI` that resolves to a private or loopback address. **Off by default** — see `fetchBundle` |
 | `pollIntervalMs` | `POLL_INTERVAL_MS` | `5000` | Watchtower pass interval |
 | `confirmations` | `CONFIRMATIONS` | `1` | Blocks to wait after a transaction |
 | `startBlock` | `START_BLOCK` | `null` | Overrides the catch-up lookback |
@@ -776,8 +815,10 @@ call overrides it to 5, because a missed delivery costs a fault.
 | Name | What it is |
 |---|---|
 | `coder` | The shared encoder. One instance, reused |
-| `EXECUTION_TYPEHASH` | Hash of the execution field list. **Must match `Digest.sol` byte for byte** |
-| `FEED_TYPEHASH` | Hash of the reading field list. **Checked against the chain at startup** |
+| `DOMAIN_NAME`, `DOMAIN_VERSION` | `"BotID"` and `"1"`. The EIP-712 domain, checked against every deployed contract at startup |
+| `EXECUTION_TYPES`, `FEED_TYPES` | The field lists, in order. The typehashes are **derived from these**, not transcribed |
+| `EXECUTION_TYPEHASH` | Derived from `EXECUTION_TYPES`. Must equal the string in `Digest.sol` |
+| `FEED_TYPEHASH` | Derived from `FEED_TYPES`. **Checked against the chain at startup** |
 | `BUNDLE_TYPE` | The byte layout of a signed bundle: a list of (feedId, valueHash, timestamp, signatures) |
 | `REVEAL_TYPE` | The byte layout of `ZkAdapter.Reveal[]` |
 | `BN254_P` | The proof system's field size. Same number as `ZkAdapter.P` and `common.py`'s `P` |
@@ -787,8 +828,11 @@ call overrides it to 5, because a missed delivery costs a fault.
 
 | Name | Mirrors | What it does |
 |---|---|---|
-| `executionDigest(chainId, verifier, ctx)` | `Digest.execution` | The digest every attestation binds. Includes the adapter address, which is what stops a Bronze signature being replayed at the ZK adapter |
+| `domain(chainId, verifyingContract)` | `Digest.domainSeparator`'s inputs | The EIP-712 domain: name, version, chain, verifying contract |
+| `executionDigest(chainId, verifier, ctx)` | `Digest.execution` | The digest every attestation binds. The adapter address is in the **domain**, which is what stops a Bronze signature being replayed at the TEE adapter |
 | `feedDigest(chainId, attestor, feed)` | `InputAttestor.feedDigest` | What a publisher signs for one reading |
+| `executionTypedData(chainId, verifier, ctx)` | — | The `{domain, types, message}` triple for `wallet.signTypedData`. What makes a delivery renderable in a wallet |
+| `feedTypedData(chainId, attestor, feed)` | — | The same, for a publisher's reading |
 | `bundleCommitment(chainId, attestor, feeds)` | `InputAttestor.commit` | The hash over the ordered leaf digests |
 | `encodeBundle(feeds)` | — | Pack a bundle into bytes. **Signatures must already be in ascending signer order** |
 | `decodeBundle(hex)` | — | Unpack it |
@@ -796,7 +840,7 @@ call overrides it to 5, because a missed delivery costs a fault.
 | `valueHash(value, salt)` | `ZkAdapter._commit`'s inner hash | The salted hash of one reading |
 | `zkInstances(reveals, outputs, bits)` | — | The public values: quantised inputs, then outputs, and nothing else |
 | `encodeZkAttestation(proof, instances, reveals)` | — | Pack the Gold attestation |
-| `signDigest(wallet, digest)` | — | Sign raw 32 bytes. **No prefix** — the contracts recover the digest itself |
+| `signDigest(wallet, digest)` | — | Sign 32 bytes with no further prefix. Correct: an EIP-712 digest is already enveloped, and the contracts `ecrecover` it directly. Equivalent to `signTypedData` over the same message |
 
 ---
 
@@ -821,12 +865,19 @@ call overrides it to 5, because a missed delivery costs a fault.
 
 `zkAdapter` may be `null`. Everything downstream checks.
 
-### The two startup checks
+### The startup checks
 
 | Check | What it prevents |
 |---|---|
 | Manifest chain id vs. the RPC's | Transactions aimed at addresses that mean something else on another chain |
-| `FEED_TYPEHASH` vs. the deployed attestor | Every signature being silently worthless |
+| `DOMAIN_SEPARATOR()` vs. this build's, on the attestor and both signature adapters | A drift in name, version, chain id or address producing signatures valid nowhere |
+| `FEED_TYPEHASH` vs. the deployed attestor | A drift in the reading field list |
+| `feedDigest` and `executionDigest` over a probe context, vs. the local mirrors | Everything the two rows above cannot see — the envelope itself, and any dropped or reordered field |
+
+`assertDigestsAgree` performs the last three. The probe context uses distinguishable, non-zero
+values on purpose: against a context of all zeroes, a dropped or reordered field would produce the
+same digest and the check would pass. `ZkAdapter` is absent from it because a Gold attestation is a
+proof, not a signature, so it has no execution digest to disagree about.
 
 ---
 
@@ -849,7 +900,7 @@ Stands in for a production oracle network. It is not one, and the file says so.
 |---|---|
 | `buildBundle(chainId, attestor, readings, publishers)` | Sorts the publishers by address, derives each reading's hash, collects signatures, returns `{feeds, bundle, commitment}` |
 | `newSalt()` | 32 random bytes. Nothing is derived from it — that is the point |
-| `fetchBundle(uri)` | `file://`, `http(s)://` (**no redirects**), or a bare name in the bundle directory |
+| `fetchBundle(uri)` | `http(s)://` to a **public** address (no redirects, size- and time-capped) or a bare name in the bundle directory. `file://` is refused |
 | `verify(chainId, attestor, bundleHex, expected)` | **The line.** Recompute and compare, or throw |
 | `open(feeds, readings)` | Confirm each served number against its committed hash. `null` when none were served |
 | `writeBundle(name, payload)` | Save a bundle for the demo to pass around |

@@ -101,7 +101,8 @@ thing across the whole system rather than one thing per room.
 
 **Status** — where a job is. `Pending` → `Delivered` → (`Challenged`) → `Finalized` → `Settled`,
 with two bad endings: `Expired` (never delivered) and `Faulted` (challenged and could not
-answer). Once a job reaches `Settled`, `Expired` or `Faulted` it never changes again.
+answer), and one neutral one: `Rejected` (the agent declined the order up front). Once a job
+reaches `Settled`, `Expired`, `Faulted` or `Rejected` it never changes again.
 
 **Outcome** — what the customer reports at the end: profit or loss in basis points relative to
 the size of the job, plus two yes/no flags — was it late or out of spec, and did it breach the
@@ -137,8 +138,10 @@ would lock the protocol's admin functions forever.
 
 ### 3.3 `Digest.sol` — the job number stamped on every document
 
-One function. It takes the seven facts of a `VerificationContext` and squeezes them into a single
-fixed-length fingerprint, together with the chain it happened on and the address of the checker.
+It takes the seven facts of a `VerificationContext` and squeezes them into a single fixed-length
+fingerprint, together with the chain it happened on and the address of the checker. The result is
+an **EIP-712 typed-data hash**: `keccak256(0x1901 || domainSeparator || structHash)`, where the
+domain is `{name: "BotID", version: "1", chainId, verifyingContract}`.
 
 **Why it exists:** evidence has to be *about something*. A signature that says "I did the work"
 is worthless, because it can be pasted onto any job. A signature over this digest says "I did
@@ -148,6 +151,33 @@ fails.
 
 **Analogy:** a stamped and numbered docket. The signature isn't on a blank sheet, it's across the
 docket number. Reuse is visible immediately.
+
+**Why the envelope, given that the docket number was already unique.** The chain id and the
+verifier address were always in the hash — they have moved into the domain, where EIP-712 puts
+them, and they bind exactly as much as before. Nothing was ever forgeable without the `\x19\x01`
+prefix. Two other things followed from its absence anyway. A signer could not *render* what it was
+agreeing to: an operator approving a delivery saw one opaque 32-byte word rather than a request id
+and a deadline, so every attestation in the protocol was a blind sign. And a key that signs bare
+32-byte hashes has given up the one structural guarantee that its signatures cannot also be
+*transactions* — the `\x19` prefixes exist to keep those two signable spaces disjoint, because an
+RLP-encoded transaction never begins with that byte.
+
+**Analogy:** the envelope is the letterhead. The same sentence carries different weight on a blank
+sheet and on a sheet naming the company, the department and the date — and whoever holds a signed
+blank sheet gets to decide later what was agreed.
+
+`EXECUTION_TYPEHASH` is byte-for-byte the string it always was, which is what made the change
+possible without touching the field list. `version` is `"1"`, and it is a deliberate string rather
+than a number nobody thinks about: the next change to the field list should bump it, so old
+signatures stop verifying on the same block instead of lingering in an ambiguous middle state.
+
+Every contract that is a `verifyingContract` — `InputAttestor`, `SignatureAdapter`, `TeeAdapter` —
+inherits `EIP712Domain`, so it answers `DOMAIN_SEPARATOR()` and the ERC-5267 `eip712Domain()`
+(`fields = 0x0f`: name, version, chainId and verifyingContract present, no salt, no extensions).
+The two adapters additionally inherit `ExecutionVerifier`, which exposes
+`executionDigest(ctx)` — the exact bytes an attestation must be signed over, readable from the
+deployed contract. That getter exists so the relayer can hand a probe context to the chain and
+compare the finished digest rather than compare one constant and trust the rest.
 
 One deliberate omission worth knowing about: `operator` is in the context but is **not** in the
 digest. That is not an oversight. The operator is the answer the signature is checked *against* —
@@ -326,7 +356,18 @@ registry (to create a record) and the router (to update one) can call them. Nobo
 their own reference.
 
 **`recordOutcome`** — a job settled. Decay the score to today, work out this job's quality mark,
-and fold it in weighted by the money at stake. Bump the settled counter.
+and fold it in weighted by the money at stake — but only up to what the *reporting customer* has
+left in its budget. Bump the settled counter.
+
+That budget is `consumerWeightCap`, and it is there because settling is unilateral: the customer
+reports the result, and the customer also picks the notional the result is weighted by. Damage
+therefore scales with a number the liar chooses while the cost is a tenth of a percent of it, and
+no fee floor can close a gap the attacker scales both sides of. So no single counterparty gets to
+define an agent's reference. Think of it as one signature on a reference letter: it counts, and it
+counts for a lot, but a reputation is the stack of them and no one signature is the stack. The
+budget refills on the same 90-day half-life the score itself decays on, so a customer of long
+standing keeps its voice; spending is symmetric, because it is an influence budget and not a
+punishment.
 
 **`recordFault`** — the agent failed. Decay to today, then apply a flat multiplicative cut:
 15% off for a liveness fault (accepted a job and never delivered), 60% off for a verification
@@ -525,9 +566,17 @@ The customer calls the router with:
 - **which agent**
 - **the input commitment** — the frozen data
 - **notional** — how much capital this decision governs. Not a price. It is the weight of the
-  eventual score update and the thing checked against the agent's credit line.
+  eventual score update and the thing checked against the agent's credit line. **It cannot be
+  zero.** An order with nothing at risk is still a live obligation the agent can be slashed over,
+  but reserving zero adds nothing to `openNotional` — and `openNotional == 0` is the whole of the
+  early-exit gate on the registry. A customer could otherwise park a free order against an agent,
+  watch it walk out through `withdrawEarly` with its bond, and leave the slash computing a
+  percentage of nothing. The gate reads `openNotional` as a proxy for "no open orders"; refusing a
+  zero notional here is what makes that proxy faithful.
 - **fee** — what the agent gets paid, at least the floor percentage of notional. Escrowed now.
-- **deliverBy** — an absolute deadline
+- **deliverBy** — an absolute deadline, and it must be at least `minDeliveryWindow` away. "In the
+  future" is not enough: a deadline in the next block is one no operator could ever meet, and
+  ordering one is how you slash an agent for a job it never had a chance at.
 - **inputURI** — where to fetch the bundle. **Emitted only, never stored, never trusted.** A hash
   tells you *what* the data is, not *where* it is, so without this the agent has nowhere to look.
   But the agent must still check what it fetches hashes to the commitment — a hostile link can
@@ -538,6 +587,30 @@ agent's credit (this fails if the agent is over its limit or inactive), files th
 `Pending`, and pulls the fee into escrow.
 
 *Gotcha for anyone actually calling this: approve the token first, or it reverts on the transfer.*
+
+### Step 3b — `reject` — the agent's right of refusal
+
+Anyone may place an order, and `inputCommitment` is taken entirely on trust — it is a bare 32-byte
+hash, and nothing on chain can distinguish a commitment to a real publisher-signed bundle from a
+number somebody made up. An order built on a made-up commitment can never pass the input check in
+Step 4, so it can never be delivered.
+
+Without a way out, that is a weapon. Anyone could order impossible work from any active agent, wait
+for the deadline, call `markExpired` themselves, and collect half the slash as the bounty — paying
+only gas, repeatable, and the agent could do nothing about it. It could not deliver, and it could
+not decline.
+
+So it can decline. Within `rejectionWindow` (5 minutes) of the order being placed, the **operator**
+may close it: the credit is released, the fee is refunded, and **nothing is recorded against the
+agent** — no fault, no slash, no mark on the score.
+
+The window is what keeps this honest. An unlimited right of refusal would be a different thing
+entirely — the agent would sit on every order and bail out the moment one looked like going badly,
+and the liveness fault would never fire again. Five minutes means the decision is made at *order*
+time, before the agent knows anything about how the job would have gone.
+
+**Analogy:** a market maker may decline to quote. It may not un-fill a quote it has already
+filled. Declining is free; reneging is what the liveness fault is for.
 
 ### Step 4 — `deliver` — the work comes back
 
@@ -618,7 +691,9 @@ saying nothing. **Analogy:** the invoice is deemed accepted if nobody disputes i
 
 ### Bad ending — `markExpired`
 
-The agent accepted a job and never delivered. Once the deadline passes, **anyone** can call this:
+The agent accepted a job and never delivered. "Accepted" is a real thing now: the operator had
+five minutes to decline it (Step 3b) and let them pass. Once the deadline passes, **anyone** can
+call this:
 
 - 2% of the remaining bond is slashed, half of it a bounty to whoever called
 - a **liveness fault** is recorded — a 15% haircut to the score
@@ -642,6 +717,13 @@ a much bigger one.**
                               │        markExpired:            (terminal)
                               │        −2% bond, −15% score,
                               │        fee refunded
+                              │
+                              ├─── within 5 min ────────▶ REJECTED
+                              │     reject (operator):        (terminal)
+                              │     credit released,
+                              │     fee refunded,
+                              │     nothing recorded
+                              │
                      deliver  │  inputs checked, evidence checked
                               ▼
                  ┌────────────┴────────────┐
@@ -918,6 +1000,7 @@ restating all eight.
 | `challengerBountyBps` | 50% of slashed | The rest goes to the treasury |
 | `halfWeight` | job size for 50% influence | The anti-grinding dial — raising it makes reputation slower and dearer to manufacture |
 | `weightCap` | ceiling on weight | So one outsized job can't dominate |
+| `consumerWeightCap` | half of `halfWeight` | Weight one *customer* may spend per half-life, so one counterparty can't dominate either |
 | `decayHalfLife` | 90 days | How fast idle scores fade to neutral |
 | `livenessHaircutBps` | 15% | Score cut for not delivering |
 | `verificationHaircutBps` | 60% | Score cut for a lost challenge |
@@ -1078,8 +1161,9 @@ Two related keywords, both about values that never change:
 `immutable` is a security statement in itself: **the router's `registry`, `engine` and `bondToken`
 addresses can never be changed, by anyone, including the owner.** They were burned in at deploy
 time. Compare that with `inputAttestor` and `treasury`, which are ordinary variables the owner can
-point elsewhere. That distinction *is* the trust model — worth checking on any protocol, not just
-this one.
+point elsewhere — behind a 21-day queue once `finalizeBootstrap()` has run (see `Timelocked`), but
+still, eventually, elsewhere. That distinction *is* the trust model — worth checking on any
+protocol, not just this one. A notice period changes when a redirection lands, not whether it can.
 
 ## A.6 The four declaration kinds
 
@@ -1151,6 +1235,25 @@ works for both is: it arrived, and if there *is* a receipt it doesn't say "refus
 demanding a receipt from everyone rejects half the couriers; a rule ignoring receipts entirely
 accepts a "refused" slip as a delivery.
 
+**That tolerance is exactly why the helper also checks the address has code.** Accepting silence as
+success has a sharp edge: calling an address with *no contract at it* also succeeds and also returns
+nothing. Byte for byte, "the token moved your money and said nothing" and "there is no token here at
+all" are the same answer. Without a check, the library reports both as a transfer.
+
+The failure that produces is silent, total and permanent. A wrong constructor argument — a typo in
+an address, a testnet token pasted into a mainnet deploy — and every deposit, fee and slash appears
+to work while nothing moves. `getProfile` reports bonds the protocol does not hold, and the first
+sign of trouble is a withdrawal that cannot be paid. So `safeTransfer` and `safeTransferFrom` each
+begin with a one-word check that the address has code, and raise `NotAContract` if it does not.
+
+**Analogy:** the courier rule above works only if the address on the parcel is a building. Deliver to
+an empty lot and the driver comes back reporting no problem — nobody refused anything. "No
+complaint" is only evidence of delivery once you know there was somebody there to complain.
+
+The check costs one `EXTCODESIZE` per transfer and moves the failure to the **first deposit**, where
+it is a revert on the very first transaction against a misconfigured deployment, rather than to the
+first withdrawal, where it is a hole in the balance sheet.
+
 The same pattern gives `safeTransfer` for sending the contract's own tokens.
 
 ## A.8 Basis points
@@ -1210,6 +1313,7 @@ directly, never something the protocol does on their behalf, and a protocol that
 | Member | Kind | What it does |
 |---|---|---|
 | `TransferFailed()` | error | The token call failed, or returned an explicit false |
+| `NotAContract()` | error | There is no code at the token address, so "no complaint" proves nothing |
 | `safeTransfer(token, to, amount)` | internal | Send the contract's own tokens, checking the result properly |
 | `safeTransferFrom(token, from, to, amount)` | internal | Pull tokens using an allowance, checking the result properly |
 
@@ -1237,6 +1341,66 @@ See A.7 for the reasoning. A `library` is a bundle of functions with no storage 
 
 A `constructor` is the one function that runs exactly once, at deployment, and then no longer
 exists. It's the setup, not part of the running contract.
+
+### `abstract contract Timelocked is Ownable`
+
+A queue-then-execute notice period on the handful of setters that can **redirect trust**.
+`AgentRegistry`, `ExecutionRouter` and `ReputationEngine` inherit it.
+
+| Name | Kind | Detail |
+|---|---|---|
+| `TIMELOCK_DELAY` | `uint64 public constant` = 21 days | How long a queued action waits. Equal to `AgentRegistry.UNBONDING_PERIOD` |
+| `TIMELOCK_GRACE` | `uint64 public constant` = 14 days | How long after its `eta` a queued action stays executable |
+| `timelockEta` | `mapping(bytes32 => uint64) public` | Earliest execution time by action id. **Zero means not queued** |
+| `bootstrapped` | `bool public` | Whether the delay is live. One-way |
+| `NotQueued()` | error | No entry for this action id — including "you queued a *different* action" |
+| `Premature()` | error | Before the `eta` |
+| `Stale()` | error | Past `eta + TIMELOCK_GRACE` |
+| `AlreadyBootstrapped()` | error | `finalizeBootstrap` called twice |
+| `ActionQueued(action, eta)` | event | Alongside the typed `*Queued` event on each contract |
+| `ActionCancelled(action)` | event | A queued action was withdrawn |
+| `Bootstrapped()` | event | The delay went live |
+| `finalizeBootstrap()` | onlyOwner | Closes the deployment window. **Cannot be undone** |
+| `cancel(action)` | onlyOwner | Withdraw a queued action before it executes |
+| `_queue(action)` | internal, onlyOwner | Stamps `block.timestamp + TIMELOCK_DELAY` and emits. Re-queueing restarts the clock |
+| `_consume(action)` | internal | Checks the window and **deletes the entry**, so executing twice needs announcing twice. No-op while `!bootstrapped` |
+
+**What it covers, and why only that.** Five setters: `AgentRegistry.setRouter` and `setTreasury`,
+`ReputationEngine.setWriter`, `ExecutionRouter.setAdapter` and `setInputAttestor`. These are the
+ones that point a contract at code it did not previously depend on. Swapping the Bronze adapter for
+one whose `verify` returns true unconditionally does not look like theft in any event these
+contracts emit — every delivery afterwards is simply accepted and every challenge against one
+loses. The economic parameters are deliberately **not** covered: each is bounded in its own setter,
+they move on a different cadence, and none of them can make a dishonest execution verify. Three
+weeks in front of a fee change buys nothing and teaches everyone to route around the mechanism.
+
+**Why 21 days.** An agent that objects to a rewiring has exactly one remedy — withdraw its bond —
+and that takes `UNBONDING_PERIOD`. A notice period shorter than the exit it exists to permit is a
+notice period that does nothing. Both are constants, and each constructor asserts the relation, so
+they cannot drift apart silently.
+
+**Why a grace window.** Without an expiry, a queue entry is a standing option: an owner could queue
+a rewiring, let the objection pass unremarked, and execute it two years later against an audience
+that had long since stopped watching. Past `eta + 14 days` the plan has to be announced again.
+
+**Why `bootstrapped` exists.** Wiring a protocol takes six calls that all have to land before
+anything works, and a three-week wait between deploying the router and telling the registry about
+it would make deployment impossible rather than safe. The setters therefore run immediately until
+`finalizeBootstrap()`, which the deploy script calls **last** on all three contracts and records in
+the manifest. That it is one-way is the whole guarantee — and it is worth being explicit about what
+it does not guarantee: a deployment that never calls it has no timelock at all. `bootstrapped()`
+returning false on a live deployment is a finding, not a detail.
+
+**Action ids.** Each guarded setter has a matching `queue*` and a `*Action(...)` view returning the
+id, because `cancel` takes a raw `bytes32` and an id reconstructed by hand off a slightly different
+encoding cancels nothing while looking exactly like it worked. The id commits to the **selector and
+every argument**, which is what stops a queued grant from executing as a revocation, an adapter
+queued for Silver from landing on Gold, or a queued treasury change from executing as a router
+change to the same address.
+
+**Analogy:** a landlord can change the tenancy terms whenever they like, but changing the locks
+takes notice — long enough that anyone who objects can move out first. It is a notice period, not a
+veto. Nobody can stop a queued change; they can only see it coming and leave.
 
 ---
 
@@ -1269,6 +1433,7 @@ unwritten record naturally reads as `None`, so "no tier" and "never registered" 
 | `Settled` | 5 | **Terminal.** Outcome recorded, fee paid |
 | `Expired` | 6 | **Terminal.** Never delivered — liveness fault |
 | `Faulted` | 7 | **Terminal.** Lost a challenge — verification fault |
+| `Rejected` | 8 | **Terminal.** The operator declined the order inside the rejection window. No fault, no slash, fee refunded |
 
 ### `struct VerificationContext`
 
@@ -1344,11 +1509,30 @@ score in it is always decayed to now.
 
 | Name | Kind | Detail |
 |---|---|---|
-| `EXECUTION_TYPEHASH` | `bytes32 internal constant` | A hash of the *text of the field list*. Domain separation: if the field list ever changes, this constant changes, and every old signature stops verifying automatically |
-| `execution(ctx, verifier)` | `internal view` | Hashes the typehash, `block.chainid`, the verifier address, and six of the seven context fields into one digest |
+| `DOMAIN_TYPEHASH` | `bytes32 internal constant` | `EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)` |
+| `DOMAIN_NAME`, `DOMAIN_VERSION` | `bytes32 internal constant` | `keccak256("BotID")` and `keccak256("1")`, hashed at compile time |
+| `EXECUTION_TYPEHASH` | `bytes32 internal constant` | A hash of the *text of the field list*. If the field list ever changes, this constant changes, and every old signature stops verifying automatically |
+| `domainSeparator(verifyingContract)` | `internal view` | The EIP-712 domain hash. Reads `block.chainid` **live** rather than caching it in an immutable — the saving is one keccak over five words, and the cost of caching is that every signature stays valid on both sides of a chain split |
+| `toTypedDataHash(verifyingContract, structHash)` | `internal view` | `keccak256(0x1901 ‖ domainSeparator ‖ structHash)` |
+| `execution(ctx, verifier)` | `internal view` | Hashes six of the seven context fields into a struct hash, then wraps it in the envelope for `verifier` |
 
 Three levels of scoping in one hash: **which schema** (typehash), **which chain** (chainid), **which
-checker** (verifier address). A signature is valid for exactly one job, on one chain, at one adapter.
+checker** (verifying contract). A signature is valid for exactly one job, on one chain, at one
+adapter. The last two now live in the domain rather than in the struct, which is where EIP-712 puts
+them; they bind exactly as tightly as before.
+
+`Digest` is a library, so its constants have no on-chain getter. Two mixins in the same file supply
+what tooling and the relayer need:
+
+| Name | Kind | Detail |
+|---|---|---|
+| `EIP712Domain.DOMAIN_SEPARATOR()` | `external view` | The separator this contract verifies under. What the relayer checks its own domain against at startup |
+| `EIP712Domain.eip712Domain()` | `external view` | ERC-5267 discovery. Returns `fields = 0x0f`, `"BotID"`, `"1"`, `block.chainid`, `address(this)`, no salt, no extensions |
+| `ExecutionVerifier.executionDigest(ctx)` | `external view` | The exact bytes an attestation for `ctx` must be signed over **at this adapter** |
+
+`InputAttestor` inherits `EIP712Domain`; `SignatureAdapter` and `TeeAdapter` inherit
+`ExecutionVerifier`, which extends it. `ZkAdapter` inherits neither: a Gold attestation is a proof,
+not a signature, so it has no execution digest to disagree about.
 
 ---
 
@@ -1399,9 +1583,9 @@ convention is a bug waiting for someone to edit one of them.
 |---|---|
 | `enum FaultKind` | `Liveness` (0) = accepted and never delivered; `Verification` (1) = lost a challenge |
 | `initAgent(agentId)` | Open a file at neutral |
-| `recordOutcome(agentId, outcome, notional, lossToleranceBps)` | Fold in a settled job |
+| `recordOutcome(agentId, consumer, outcome, notional, lossToleranceBps)` | Fold in a settled job, weighted by `consumer`'s remaining budget |
 | `recordFault(agentId, kind)` | Apply a haircut and increment the counter |
-| `getScore` / `getStats` | Reads |
+| `getScore` / `getStats` / `remainingWeight` | Reads |
 
 ### `IReputationOracle` — the read side, for customers
 
@@ -1424,7 +1608,7 @@ lets the read surface stay small and stable while the internals change.
 
 | Name | Type | What it is |
 |---|---|---|
-| `FEED_TYPEHASH` | `bytes32 public constant` | Domain separator for a single reading |
+| `FEED_TYPEHASH` | `bytes32 public constant` | The EIP-712 type hash for a single reading — `FeedReading(bytes32 feedId,bytes32 valueHash,uint64 timestamp)`. Public, so the relayer can check its own copy against the chain |
 | `publishers` | `mapping(address => bool) public` | Which data sources count |
 | `publisherCount` | `uint256 public` | How many, because a mapping cannot count itself |
 | `quorum` | `uint256 public` | How many independent signatures each reading needs. Default 1 |
@@ -1436,7 +1620,9 @@ lets the read surface stay small and stable while the internals change.
 |---|---|---|
 | `setPublisher(publisher, allowed)` | owner | Add or remove a source. Returns early if nothing changes, so `publisherCount` can't drift |
 | `setQuorum(quorum_, maxAge_)` | owner | **Cannot set a quorum above the publisher count** — that would be an unmeetable threshold that bricks every delivery |
-| `feedDigest(feedId, valueHash, timestamp)` | anyone, view | The exact bytes a publisher signs |
+| `feedDigest(feedId, valueHash, timestamp)` | anyone, view | The exact bytes a publisher signs — an EIP-712 typed-data hash under this contract's own domain |
+| `DOMAIN_SEPARATOR()` | anyone, view | Inherited from `EIP712Domain`. See §B.3 |
+| `eip712Domain()` | anyone, view | ERC-5267 discovery. Inherited. See §B.3 |
 | `commit(feeds)` | anyone, view | Hash of the ordered bundle. **Order is significant.** Signatures are *not* part of it, so a caller wanting only the hash can pass empty signature arrays |
 | `verifyInputs(commitment, bundle, asOf)` | anyone, view | The real check — decode, verify each reading, then compare the commitment |
 | `_tryRecover(digest, signature)` | private, pure | Recover a signer, returning `address(0)` rather than reverting on a malformed one |
@@ -1617,10 +1803,12 @@ the party being checked. Let the agent choose it and it could reclassify an inpu
 |---|---|---|---|
 | `halfWeight` | `uint256 public` | 100,000 tokens | Job size at which one observation moves the score halfway. **The anti-grinding dial** |
 | `weightCap` | `uint256 public` | 1,000,000 tokens | Ceiling on weight, so one outsized job can't dominate |
+| `consumerWeightCap` | `uint256 public` | 50,000 tokens | Weight one **customer** may spend on one agent per half-life. Zero disables it |
 | `decayHalfLife` | `uint256 public` | 90 days | How fast an idle score fades toward neutral |
 | `livenessHaircutBps` | `uint32 public` | 1,500 (15%) | Cut for not delivering |
 | `verificationHaircutBps` | `uint32 public` | 6,000 (60%) | Cut for a lost challenge |
 | `_records` | `mapping(uint256 => Record) private` | | Agent id → its record |
+| `_budgets` | `mapping(uint256 => mapping(address => Budget)) private` | | Agent id → customer → weight already spent. Read through `ScoreMath.fade`; the stored figure is stale by design |
 | `writers` | `mapping(address => bool) public` | | Who may write. **The registry and the router, nobody else** |
 
 `struct Record`:
@@ -1631,25 +1819,38 @@ the party being checked. Let the agent choose it and it could reclassify an inpu
 | `faults` | Lifetime fault count. Never decays, never resets |
 | `settledExecutions` | Lifetime settled count |
 | `lastUpdateAt` | When `score` was written. **Decay is measured from here** |
-| `lastActiveAt` | Last time anything happened. What `maxStalenessSeconds` is checked against |
+| `lastActiveAt` | Last time the agent **did its job**. What `maxStalenessSeconds` is checked against |
 | `initialized` | Does this record exist? Distinguishes "new agent, score 5,000" from "no such agent" |
 
-`lastUpdateAt` and `lastActiveAt` are always set together and currently always equal — but they mean
-different things, and separating them is what allows decay to be re-based independently of activity
-later without changing the staleness semantics.
+The two timestamps mean different things and are no longer always equal. `lastUpdateAt` moves on
+every write, including a fault, because decay has to be measured from the last time the score was
+written. `lastActiveAt` moves only on `initAgent` and `recordOutcome`, because it answers "when did
+this agent last do its job" — and a fault is the opposite of doing the job. Stamping it on a fault
+was self-defeating: an agent that had gone dark would accrue a liveness fault through `markExpired`,
+and the fault itself would refresh its freshness, so any passer-by could restore a stale agent to
+`meetsPolicy` eligibility for the price of gas by reporting that it had failed.
 
 ### Functions
 
 | Function | Who | What it does |
 |---|---|---|
-| `setWriter(writer, allowed)` | owner | Grant or revoke write access |
-| `setParameters(halfWeight_, weightCap_, decayHalfLife_, livenessHaircutBps_, verificationHaircutBps_)` | owner | Retune. Rejects zeros and haircuts above 100% |
+| `queueWriter(writer, allowed)` | owner | Announce a change to the writer list. See `Timelocked` |
+| `setWriter(writer, allowed)` | owner | Grant or revoke write access. **Queued 21 days ahead** once bootstrapped — including revocation, so the owner cannot silently stop the router recording faults |
+| `writerAction(writer, allowed)` | anyone, view | The action id the pair above uses, and `cancel` expects |
+| `setParameters(halfWeight_, weightCap_, consumerWeightCap_, decayHalfLife_, livenessHaircutBps_, verificationHaircutBps_)` | owner | Retune. Rejects zeros, haircuts above 100%, and a consumer cap that won't fit in 128 bits |
 | `initAgent(agentId)` | **writer** | Open a file at neutral. Reverts if already open |
-| `recordOutcome(agentId, outcome, notional, lossToleranceBps)` | **writer** | Decay → quality → cap the weight → fold in → increment the settled count |
+| `recordOutcome(agentId, consumer, outcome, notional, lossToleranceBps)` | **writer** | Decay → quality → cap the weight → **draw it from the customer's budget** → fold in → increment the settled count |
 | `recordFault(agentId, kind)` | **writer** | Decay → haircut → increment the fault count |
 | `getScore(agentId)` | anyone, view | **Decayed to now.** Returns 0 for an unknown agent |
 | `getStats(agentId)` | anyone, view | Score, faults, settled count, last active |
+| `remainingWeight(agentId, consumer)` | anyone, view | Weight that customer may still spend on that agent. `type(uint256).max` when the cap is disabled |
+| `_spend(agentId, consumer, weight)` | private | Fades the stored budget to now, clamps `weight` to what's left, and books it |
 | `_decayed(record)` | private, view | Applies decay from `lastUpdateAt` to now |
+
+A customer whose budget is exhausted still gets weight zero rather than a revert, and `observe`
+leaves the score untouched at zero weight. Its reports still settle, still pay the agent, and still
+count toward `settledExecutions` — they simply stop moving the score. The protocol is declining to
+take one party's word for it again, not declining to do business.
 
 The counters use `unchecked { r.faults += 1; }`. Normally Solidity checks every addition for
 overflow; `unchecked` skips that check to save gas. It's safe here because overflowing a 32-bit
@@ -1660,8 +1861,9 @@ counter needs four billion faults — the check is guarding against something th
 | Name | Kind | When |
 |---|---|---|
 | `WriterSet(writer, allowed)` | event | Write access changed |
+| `WriterQueued(writer, allowed, eta)` | event | A change to the writer list was announced |
 | `AgentInitialized(agentId, score)` | event | A file was opened |
-| `OutcomeRecorded(agentId, quality, weight, newScore)` | event | A job settled. **Publishes the quality and the weight**, so anyone can recompute the score move themselves |
+| `OutcomeRecorded(agentId, consumer, quality, weight, newScore)` | event | A job settled. **Publishes the quality and the weight actually applied** — already clamped by both caps — so anyone can recompute the score move themselves, and see when a report was discounted |
 | `FaultRecorded(agentId, kind, newScore, faults)` | event | A fault landed |
 | `ParametersUpdated()` | event | Retuned |
 | `NotWriter()` | error | You aren't on the writer list |
@@ -1707,8 +1909,11 @@ counter needs four billion faults — the check is guarding against something th
 
 | Function | Who | What it does |
 |---|---|---|
-| `setRouter(router_)` | owner | Point at the router. **This is what wires the system together** |
-| `setTreasury(treasury_)` | owner | Where penalties go |
+| `queueRouter(router_)` | owner | Announce a change of router. See `Timelocked` |
+| `setRouter(router_)` | owner | Point at the router. **This is what wires the system together.** Queued 21 days ahead once bootstrapped |
+| `queueTreasury(treasury_)` | owner | Announce a change of treasury |
+| `setTreasury(treasury_)` | owner | Where penalties go. Queued 21 days ahead once bootstrapped. Nothing is held at this address between transactions, so a change cannot take anything retroactively — it redirects every future payment, which is worth announcing |
+| `routerAction(router_)` / `treasuryAction(treasury_)` | anyone, view | The action ids the pairs above use |
 | `setLimits(minBond_, globalNotionalCap_)` | owner | Rejects zeros |
 | `setEarlyExitPenaltyBps(bps)` | owner | Capped at 100% |
 
@@ -1765,6 +1970,8 @@ counter needs four billion faults — the check is guarding against something th
 | `ExposureChanged(agentId, openNotional)` | Every reserve and release |
 | `ActiveSet(agentId, active)` | Availability toggled |
 | `RouterSet(router)` | Wiring changed |
+| `TreasurySet(treasury)` | Where penalties go changed. **Previously silent** |
+| `RouterQueued(router, eta)` / `TreasuryQueued(treasury, eta)` | Either change was announced |
 
 ### Errors
 
@@ -1805,9 +2012,11 @@ counter needs four billion faults — the check is guarding against something th
 | `inputAttestor` | `IInputAttestor public` | | Data checker. **Changeable by the owner** — the one dependency that is |
 | `adapters` | `mapping(Tier => IVerificationAdapter) public` | | Tier → its specialist |
 | `challengeWindow` | `uint64 public` | 1 hour | How long a Bronze/Silver delivery is challengeable |
+| `minDeliveryWindow` | `uint64 public` | 15 min | Shortest deadline an order may set. Below this every order is undeliverable by construction |
+| `rejectionWindow` | `uint64 public` | 5 min | How long the operator has to decline an order. Must stay under `minDeliveryWindow` |
 | `escalationWindow` | `uint64 public` | 6 hours | How long the agent has to answer |
 | `settlementWindow` | `uint64 public` | 7 days | How long the customer has to report |
-| `challengeBondAmount` | `uint256 public` | 100 tokens | Deposit to challenge |
+| `challengeBondAmount` | `uint256 public` | 100 tokens | Deposit to challenge. Held per request in a `uint128`, and `setParameters` refuses anything larger — see below |
 | `faultSlashBps` | `uint32 public` | 2,000 (20%) | Lost challenge, of remaining bond |
 | `livenessSlashBps` | `uint32 public` | 200 (2%) | Non-delivery, of remaining bond |
 | `challengerBountyBps` | `uint32 public` | 5,000 (50%) | Share of the slash paid to whoever caught it |
@@ -1833,16 +2042,20 @@ locked while you're inside.
 
 | Function | Who | What it does |
 |---|---|---|
-| `setAdapter(tier, adapter)` | owner | Register a specialist. **Refuses an adapter whose own `tier()` disagrees** — you cannot register the Bronze checker as the Gold one. Refuses tier `None`. Address zero unregisters |
-| `setInputAttestor(attestor)` | owner | Swap the data checker |
+| `queueAdapter(tier, adapter)` | owner | Announce an adapter change. See `Timelocked` |
+| `setAdapter(tier, adapter)` | owner | Register a specialist. **Refuses an adapter whose own `tier()` disagrees** — you cannot register the Bronze checker as the Gold one. Refuses tier `None`. Address zero unregisters. **Queued 21 days ahead** once bootstrapped: an adapter *is* the verification, so this is the single most valuable thing the owner key can do |
+| `queueInputAttestor(attestor)` | owner | Announce a change of input attestor |
+| `setInputAttestor(attestor)` | owner | Swap the data checker. Queued 21 days ahead once bootstrapped. An attestor that accepts anything lets an agent pick its inputs after the fact |
+| `adapterAction(tier, adapter)` / `inputAttestorAction(attestor)` | anyone, view | The action ids the pairs above use |
 | `setMinFeeBps(minFeeBps_)` | owner | Capped at 1,000 (10%). Kept off `setParameters` because it's an economic lever on a different cadence — and because a call that must restate eight values to change one invites transcription mistakes |
-| `setParameters(...eight values...)` | owner | The safety windows and slash rates. **Enforces that `settlementWindow + escalationWindow` stays inside the 21-day unbonding period**, or an agent could withdraw before the outcomes it is responsible for landed |
+| `setParameters(...eight values...)` | owner | The safety windows and slash rates. **Enforces that `settlementWindow + escalationWindow` stays inside the 21-day unbonding period**, or an agent could withdraw before the outcomes it is responsible for landed. Also refuses a `challengeBondAmount` above 2^128 − 1: `challenge` collects the full `uint256` but records `uint128(challengeBondAmount)` on the request, and every refund pays out the *recorded* field, so above that bound the amount taken and the amount returned are different numbers and the difference is unrecoverable. The bound is enforced here rather than at the cast so the revert lands on the governance call that is wrong, where it can still be corrected, instead of on the first challenger to post a bond |
+| `setDeliveryWindows(minDeliveryWindow_, rejectionWindow_)` | owner | The order-time windows. Set together because they are the only two parameters with an invariant *between* them — rejection must be strictly shorter than delivery. Neither may be zero: either one alone reopens the griefing vector |
 
 ### Functions — the lifecycle
 
 | Function | Who | Phase |
 |---|---|---|
-| `requestExecution(agentId, inputCommitment, notional, fee, deliverBy, inputURI)` | **anyone — the customer** | Order. Reserves credit, escrows the fee, returns the request id |
+| `requestExecution(agentId, inputCommitment, notional, fee, deliverBy, inputURI)` | **anyone — the customer** | Order. Reserves credit, escrows the fee, returns the request id. Rejects a zero notional, a fee under the floor, and a deadline inside `minDeliveryWindow` |
 | `deliver(requestId, outputCommitment, inputBundle, attestation)` | **operator only** | Deliver. Checks inputs, checks evidence, sets the clocks |
 | `challenge(requestId)` | **anyone** | Demand escalation, posting a deposit |
 | `resolveChallenge(requestId, zkProof)` | **operator only** | Answer with a Gold proof. **The deposit goes to the agent owner** |
@@ -1850,6 +2063,7 @@ locked while you're inside.
 | `finalize(requestId)` | **anyone** | Close an unchallenged window. The only lifecycle function with **no** reentrancy guard, because it moves no money |
 | `settle(requestId, outcome)` | **customer only** | Report the result. **The score moves here** |
 | `settleDefault(requestId)` | **anyone** | After the window, settle at par so a silent customer can't hold the agent hostage |
+| `reject(requestId)` | **operator only** | Decline an order, within `rejectionWindow` of it being placed. Releases the credit and refunds the fee. **No fault, no slash** |
 | `markExpired(requestId)` | **anyone** | Never delivered. Slash, record a liveness fault, refund the customer |
 
 ### Functions — internal
@@ -1877,9 +2091,13 @@ locked while you're inside.
 | `ExecutionFinalized(requestId, tier)` | Evidence final |
 | `ExecutionSettled(requestId, agentId, realizedPnlBps)` | Settled |
 | `ExecutionExpired(requestId, agentId, slashed)` | Never delivered |
+| `ExecutionRejected(requestId, agentId, consumer)` | Declined at order time. No fault, no slash |
 | `AdapterSet(tier, adapter)` / `ParametersUpdated()` | Configuration |
+| `InputAttestorSet(attestor)` | Where every input bundle is checked. **Previously silent** |
+| `AdapterQueued(tier, adapter, eta)` / `InputAttestorQueued(attestor, eta)` | Either change was announced |
 
-These nine events are the entire history of the protocol. The website is built from them, and
+The nine lifecycle events above the configuration rows are the entire history of the protocol —
+the rest are governance. The website is built from them, and
 anyone can rebuild the same view independently — that is what "verifiable" means in practice.
 
 ### Errors
@@ -1897,6 +2115,8 @@ anyone can rebuild the same view independently — that is what "verifiable" mea
 | `NoAdapter()` | No specialist registered for that tier |
 | `InvalidParameter()` | A bad admin value |
 | `FeeBelowFloor()` | The fee is under `minFeeBps` of notional |
+| `DeliveryWindowTooShort()` | The deadline is under `minDeliveryWindow` away — including a deadline already in the past |
+| `ZeroNotional()` | The order puts nothing at risk, so the registry's early-exit gate could not see it |
 
 ---
 

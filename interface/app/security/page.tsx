@@ -36,7 +36,7 @@ const THREATS: [string, string, string][] = [
   [
     'Score grinding',
     'Accumulate a high score cheaply, then use it once at size.',
-    'Mitigated. Weight is min(notional, weightCap) — a score can only be earned at roughly the size at which it will be spent. Credit is a step function of score, so a marginal point never silently lifts a ceiling.',
+    'Mitigated. Weight is min(notional, weightCap, remaining budget for this counterparty) — a score can only be earned at roughly the size at which it will be spent, and no single counterparty can supply the whole record. Credit is a step function of score, so a marginal point never silently lifts a ceiling.',
   ],
   [
     'Stale reputation resale',
@@ -46,7 +46,7 @@ const THREATS: [string, string, string][] = [
   [
     'Dishonest outcome reporting',
     'The consumer calls settle() with a false realizedPnlBps, slaBreached or limitBreached, corrupting the score.',
-    'NOT mitigated, and not mitigable. Realised P&L is a fact about the world off chain and no proof system attests to it. This is the softest joint in the protocol. Weigh a record spread across many distinct consumers far above a long history with one.',
+    'Bounded, not prevented. Realised P&L is a fact about the world off chain and no proof system attests to it, so a determined consumer can always lie about its own trade — that much is not mitigable, and it remains the softest joint in the protocol. What is enforced is the blast radius: consumerWeightCap gives each counterparty a per-agent weight budget, defaulting to half the half-weight constant, so one liar drags a score at most a third of the way toward its claimed quality and the second report inside the same half-life is nearly mute. The advice to weigh a record spread across many distinct consumers above a long history with one is now the arithmetic rather than a suggestion.',
   ],
   [
     'Non-delivery',
@@ -66,7 +66,7 @@ const THREATS: [string, string, string][] = [
   [
     'Owner key compromise',
     'Whoever holds the owner key retunes slash rates, windows, fee floors, publishers or adapters.',
-    'NOT mitigated. Parameters are owner-settable and the owner is a single key on the only existing deployment. There is no timelock and no multisig. Treat this as the largest non-code risk on this page.',
+    'NOT mitigated. The owner is a single key on the only existing deployment, and there is no multisig. Four setters — the router, the reputation writers, a verification adapter and the input attestor — are now behind a 21-day queue-then-execute delay in the source, which is the subset that can substitute the code deciding whether an execution was honest. Every economic parameter stays instant, the delay is a notice period rather than a veto, and a key that can wait three weeks still wins. Treat this as the largest non-code risk on this page.',
   ],
   [
     'Frontend compromise',
@@ -86,7 +86,7 @@ const ASSUMPTIONS: [string, string][] = [
   ['TEE vendor integrity, for Silver', 'A Silver attestation reduces to trusting AWS Nitro, Intel SGX or Phala and a measurement allowlist. Enclave breaks are a live research area; Silver is stronger than a bare signature and weaker than a proof.'],
   ['Trusted setup, for Gold', 'Groth16 needs a per-circuit setup. A compromised setup for a circuit means forgeable proofs for that model.'],
   ['Correctness of ezkl compilation', 'A Gold proof attests that the compiled circuit ran, not that the circuit faithfully represents the model an author intended. Division in ezkl is a reciprocal lookup that returns zero for large divisors, and a scale of 0 quantises reciprocals to zero — compiling, proving and verifying successfully while computing nothing.'],
-  ['A single owner key', 'Every parameter listed in the docs is settable by it, with no timelock.'],
+  ['A single owner key', 'Every parameter listed in the docs is settable by it. Four of those setters now wait 21 days; the rest take effect in the block they land in.'],
   ['The chain beneath it', 'Finality, censorship-resistance and gas pricing are BOT Chain’s properties, not BotID’s.'],
 ];
 
@@ -177,6 +177,38 @@ export default function Security() {
           — bound to the <code>Halo2Verifier</code> in the table above. Read back from{' '}
           <code>ZkAdapter.modelFor()</code> on 2026-08-11. Nothing is registered on mainnet, because
           there is no mainnet adapter.
+        </p>
+
+        <h6 style={HEAD}>Misconfiguration, which is not an attack and is still how money is lost</h6>
+        <p>
+          The threat model below is about adversaries. This is about the owner key making an honest
+          mistake, which on a one-key deployment is the likelier of the two. Two such mistakes used
+          to fail <em>silently</em>, and both now fail loudly instead.
+        </p>
+        <p>
+          <strong>A bond token address with no contract at it.</strong> The transfer helpers accept a
+          call that returns no data as a success, because USDT and others really do return nothing on
+          a real transfer. Calling an address with no code also succeeds and also returns nothing, so
+          the two are indistinguishable — a typo in a constructor argument would have made every
+          deposit, fee and slash appear to work while nothing moved, with the protocol reporting bonds
+          it did not hold and the first symptom arriving at the first withdrawal. Both helpers now
+          check the address has code and revert with <code>NotAContract</code>, which moves the
+          failure to the first deposit.
+        </p>
+        <p>
+          <strong>A challenge bond above 2<sup>128</sup>.</strong> The bond is collected as a{' '}
+          <code>uint256</code> and recorded per request as a <code>uint128</code>, and every refund
+          pays out the recorded field. Past that boundary those are different numbers and the
+          difference is simply gone — not refunded, not recoverable, and absent from every event,
+          because a truncating cast is silent by construction. <code>setParameters</code> now refuses
+          the value outright, so the revert lands on the governance call that is wrong, where it can
+          still be corrected, rather than on the first challenger to post a bond.
+        </p>
+        <p>
+          Neither was reachable by an attacker and neither is a claim that the owner key is safe —
+          see <em>Owner key compromise</em> below, which is still the largest risk here even with a
+          notice period on four of its setters. What they are is two cases
+          where a wrong value used to be indistinguishable from a right one, and now is not.
         </p>
 
         <h3>Threat model</h3>
@@ -313,10 +345,31 @@ export default function Security() {
           <section>
             <h6 style={{ color: 'var(--text-muted)', marginBottom: 'var(--space-2)' }}>Key custody</h6>
             <p style={{ margin: 0 }}>
-              The protocol owner key is a single externally-owned account. No multisig, no timelock,
-              no governance contract. It can retune slash rates, windows, fee floors, the publisher
-              set and the adapter registry. Moving it behind a multisig with a timelock is the single
-              highest-value change available and it has not been made.
+              The protocol owner key is a single externally-owned account. No multisig, no
+              governance contract. It can retune slash rates, windows, fee floors, the publisher set
+              and the adapter registry, and half of that list still takes effect in one block.
+            </p>
+            <p style={{ marginBottom: 0 }}>
+              What changed is the other half. Four setters — <code>setRouter</code>,{' '}
+              <code>setWriter</code>, <code>setAdapter</code> and <code>setInputAttestor</code> —
+              have to be queued, announced on chain, and then executed no sooner than 21 days later
+              and no later than 35. Those four are the ones that point a contract at code it did not
+              previously depend on: swapping the Bronze adapter for one whose <code>verify</code>{' '}
+              always returns true does not look like theft in any event these contracts emit, it
+              just makes every subsequent delivery pass and every challenge lose. The delay is 21
+              days because that is <code>UNBONDING_PERIOD</code>, so an agent that objects can
+              finish withdrawing its bond before the change lands.
+            </p>
+            <p style={{ marginBottom: 0 }}>
+              Read it for what it is. It is a notice period, not a veto — nobody can stop a queued
+              change, only see it coming and leave. It does nothing about a key that is patient. It
+              covers none of the economic parameters, deliberately. And it arms only when{' '}
+              <code>finalizeBootstrap()</code> has been called on all three contracts, which the
+              deploy script does last and records in the manifest; a live deployment reporting{' '}
+              <code>bootstrapped() == false</code> has no delay at all. The Bohr deployment dated
+              above predates the mechanism entirely and does not carry it. Moving the key itself
+              behind a multisig remains the single highest-value change available, and it has not
+              been made.
             </p>
           </section>
 

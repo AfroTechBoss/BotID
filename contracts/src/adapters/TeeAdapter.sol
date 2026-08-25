@@ -2,7 +2,7 @@
 pragma solidity ^0.8.24;
 
 import {Tier, VerificationContext} from "../libraries/Types.sol";
-import {Digest} from "../libraries/Digest.sol";
+import {Digest, ExecutionVerifier} from "../libraries/Digest.sol";
 import {Ownable} from "../libraries/Utils.sol";
 import {IVerificationAdapter} from "../interfaces/IVerificationAdapter.sol";
 
@@ -22,7 +22,7 @@ import {IVerificationAdapter} from "../interfaces/IVerificationAdapter.sol";
 ///      assumption is therefore the notary set plus the vendor, and enrolments are short-lived
 ///      by design. Migrating enrolment to on-chain document verification is a drop-in change to
 ///      this contract that touches nothing else.
-contract TeeAdapter is IVerificationAdapter, Ownable {
+contract TeeAdapter is IVerificationAdapter, Ownable, ExecutionVerifier {
     struct Enrolment {
         bytes32 measurement; // PCR0 / MRENCLAVE of the code the enclave is running
         uint64 expiresAt;

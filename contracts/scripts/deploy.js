@@ -72,6 +72,8 @@ async function hasBn254Precompiles() {
  *
  *   - `halfWeight`/`weightCap` too large by 10^12 makes the EWMA weight one part in a trillion.
  *     Scores never move. Every agent sits at neutral forever and the protocol produces nothing.
+ *   - `consumerWeightCap` too large by 10^12 never binds, and a single consumer gets its full
+ *     unbudgeted say again — the ceiling is simply absent, and everything still works.
  *   - `challengeBondAmount` too large by 10^12 makes challenges unaffordable, which quietly
  *     removes the only thing making Bronze and Silver honest.
  *
@@ -107,6 +109,11 @@ async function hasBn254Precompiles() {
 const CAPITAL_DEFAULTS = {
   HALF_WEIGHT: "1000",
   WEIGHT_CAP: "10000",
+  // Half of HALF_WEIGHT, so one counterparty moves a score at most a third of the way toward its
+  // claimed quality per decay half-life. Kept a fixed ratio of HALF_WEIGHT rather than an
+  // independent dollar figure: it is a statement about how much one voice counts against the
+  // EWMA, and the EWMA's scale is HALF_WEIGHT. See ReputationEngine.consumerWeightCap.
+  CONSUMER_WEIGHT_CAP: "500",
   MIN_BOND: "100",
   GLOBAL_NOTIONAL_CAP: "5000000",
   CHALLENGE_BOND: "50",
@@ -236,6 +243,7 @@ async function main() {
   const decimals = await bondTokenDecimals(bondToken);
   const halfWeight = capital("HALF_WEIGHT", decimals);
   const weightCap = capital("WEIGHT_CAP", decimals);
+  const consumerWeightCap = capital("CONSUMER_WEIGHT_CAP", decimals);
   const minBond = capital("MIN_BOND", decimals);
   const globalNotionalCap = capital("GLOBAL_NOTIONAL_CAP", decimals);
   const challengeBond = capital("CHALLENGE_BOND", decimals);
@@ -362,6 +370,7 @@ async function main() {
   const [
     onChainHalfWeight,
     onChainWeightCap,
+    onChainConsumerWeightCap,
     onChainMinBond,
     onChainCap,
     onChainChallengeBond,
@@ -369,19 +378,26 @@ async function main() {
   ] = await Promise.all([
     engine.halfWeight(),
     engine.weightCap(),
+    engine.consumerWeightCap(),
     registry.minBond(),
     registry.globalNotionalCap(),
     router.challengeBondAmount(),
     registry.earlyExitPenaltyBps(),
   ]);
 
-  if (onChainHalfWeight !== halfWeight || onChainWeightCap !== weightCap) {
+  if (
+    onChainHalfWeight !== halfWeight ||
+    onChainWeightCap !== weightCap ||
+    onChainConsumerWeightCap !== consumerWeightCap
+  ) {
     wiring.push([
-      `engine.setParameters(halfWeight ${whole(halfWeight)}, weightCap ${whole(weightCap)})`,
+      `engine.setParameters(halfWeight ${whole(halfWeight)}, weightCap ${whole(weightCap)}, ` +
+        `consumerWeightCap ${whole(consumerWeightCap)})`,
       () =>
         engine.setParameters(
           halfWeight,
           weightCap,
+          consumerWeightCap,
           decayHalfLife,
           livenessHaircutBps,
           verificationHaircutBps
@@ -428,6 +444,20 @@ async function main() {
     wiring.push([`teeAdapter.setNotary(${n})`, () => teeAdapter.setNotary(n, true)]);
   }
 
+  // Last, and it has to be last: `finalizeBootstrap` puts `setRouter`, `setWriter`, `setAdapter`
+  // and `setInputAttestor` behind a 21-day notice period, so anything above that has not landed
+  // yet becomes a three-week round trip. It is one-way on each contract.
+  //
+  // A deployment that never reaches these three calls has no timelock at all — which is why the
+  // manifest records what `bootstrapped()` actually returns rather than what this script intended.
+  for (const [label, c] of [
+    ["engine", engine],
+    ["registry", registry],
+    ["router", router],
+  ]) {
+    wiring.push([`${label}.finalizeBootstrap()`, () => c.finalizeBootstrap()]);
+  }
+
   console.log("\nwiring");
   const pending = [];
   for (const [label, call] of wiring) {
@@ -438,6 +468,25 @@ async function main() {
     }
     await (await call()).wait();
     console.log(`  + ${label}`);
+  }
+
+  // Read back rather than assumed. `bootstrapped()` false on a contract that is otherwise live
+  // means its trust-redirecting setters still execute in one block, which is the whole finding
+  // the timelock exists to close.
+  const [engineLive, registryLive, routerLive] = await Promise.all([
+    engine.bootstrapped(),
+    registry.bootstrapped(),
+    router.bootstrapped(),
+  ]);
+  const timelockDelay = Number(await router.TIMELOCK_DELAY());
+  console.log("\ntimelock");
+  console.log(`  delay              ${timelockDelay / 86_400} days`);
+  for (const [label, live] of [
+    ["ReputationEngine", engineLive],
+    ["AgentRegistry", registryLive],
+    ["ExecutionRouter", routerLive],
+  ]) {
+    console.log(`  ${live ? "+" : "!"} ${label.padEnd(16)} ${live ? "armed" : "NOT ARMED"}`);
   }
 
   // ------------------------------------------------------------------ manifest
@@ -455,9 +504,18 @@ async function main() {
     parameters: {
       halfWeight: halfWeight.toString(),
       weightCap: weightCap.toString(),
+      consumerWeightCap: consumerWeightCap.toString(),
       minBond: minBond.toString(),
       globalNotionalCap: globalNotionalCap.toString(),
       challengeBondAmount: challengeBond.toString(),
+    },
+    timelock: {
+      delaySeconds: timelockDelay,
+      bootstrapped: {
+        ReputationEngine: engineLive,
+        AgentRegistry: registryLive,
+        ExecutionRouter: routerLive,
+      },
     },
     contracts: {
       bondToken,
@@ -504,6 +562,18 @@ async function main() {
           "    Neither failure reverts. The exact arguments are in the manifest."
       );
     }
+    console.log(
+      "    Execute them in the order listed: the three finalizeBootstrap() calls are last " +
+        "because\n    everything above them is instant until they land and a 21-day round trip " +
+        "afterwards."
+    );
+  }
+  if (!(engineLive && registryLive && routerLive)) {
+    console.log(
+      "\n! The admin timelock is not armed everywhere. Until finalizeBootstrap() has been called " +
+        "on all\n  three contracts, the owner key can redirect the router, the reputation " +
+        "writers, a verification\n  adapter or the input attestor in a single block."
+    );
   }
   console.log();
 }

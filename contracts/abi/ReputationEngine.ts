@@ -15,6 +15,11 @@ export const reputationEngineAbi = [
   },
   {
     "inputs": [],
+    "name": "AlreadyBootstrapped",
+    "type": "error"
+  },
+  {
+    "inputs": [],
     "name": "AlreadyInitialized",
     "type": "error"
   },
@@ -35,8 +40,55 @@ export const reputationEngineAbi = [
   },
   {
     "inputs": [],
+    "name": "NotQueued",
+    "type": "error"
+  },
+  {
+    "inputs": [],
     "name": "NotWriter",
     "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "Premature",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "Stale",
+    "type": "error"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "bytes32",
+        "name": "action",
+        "type": "bytes32"
+      }
+    ],
+    "name": "ActionCancelled",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "bytes32",
+        "name": "action",
+        "type": "bytes32"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint64",
+        "name": "eta",
+        "type": "uint64"
+      }
+    ],
+    "name": "ActionQueued",
+    "type": "event"
   },
   {
     "anonymous": false,
@@ -55,6 +107,12 @@ export const reputationEngineAbi = [
       }
     ],
     "name": "AgentInitialized",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [],
+    "name": "Bootstrapped",
     "type": "event"
   },
   {
@@ -96,6 +154,12 @@ export const reputationEngineAbi = [
         "internalType": "uint256",
         "name": "agentId",
         "type": "uint256"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "consumer",
+        "type": "address"
       },
       {
         "indexed": false,
@@ -177,6 +241,31 @@ export const reputationEngineAbi = [
         "internalType": "bool",
         "name": "allowed",
         "type": "bool"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint64",
+        "name": "eta",
+        "type": "uint64"
+      }
+    ],
+    "name": "WriterQueued",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "writer",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "bool",
+        "name": "allowed",
+        "type": "bool"
       }
     ],
     "name": "WriterSet",
@@ -184,9 +273,74 @@ export const reputationEngineAbi = [
   },
   {
     "inputs": [],
+    "name": "TIMELOCK_DELAY",
+    "outputs": [
+      {
+        "internalType": "uint64",
+        "name": "",
+        "type": "uint64"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "TIMELOCK_GRACE",
+    "outputs": [
+      {
+        "internalType": "uint64",
+        "name": "",
+        "type": "uint64"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
     "name": "acceptOwnership",
     "outputs": [],
     "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "bootstrapped",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "action",
+        "type": "bytes32"
+      }
+    ],
+    "name": "cancel",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "consumerWeightCap",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
     "type": "function"
   },
   {
@@ -200,6 +354,13 @@ export const reputationEngineAbi = [
       }
     ],
     "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "finalizeBootstrap",
+    "outputs": [],
+    "stateMutability": "nonpayable",
     "type": "function"
   },
   {
@@ -323,6 +484,24 @@ export const reputationEngineAbi = [
   {
     "inputs": [
       {
+        "internalType": "address",
+        "name": "writer",
+        "type": "address"
+      },
+      {
+        "internalType": "bool",
+        "name": "allowed",
+        "type": "bool"
+      }
+    ],
+    "name": "queueWriter",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
         "internalType": "uint256",
         "name": "agentId",
         "type": "uint256"
@@ -344,6 +523,11 @@ export const reputationEngineAbi = [
         "internalType": "uint256",
         "name": "agentId",
         "type": "uint256"
+      },
+      {
+        "internalType": "address",
+        "name": "consumer",
+        "type": "address"
       },
       {
         "components": [
@@ -387,12 +571,41 @@ export const reputationEngineAbi = [
     "inputs": [
       {
         "internalType": "uint256",
+        "name": "agentId",
+        "type": "uint256"
+      },
+      {
+        "internalType": "address",
+        "name": "consumer",
+        "type": "address"
+      }
+    ],
+    "name": "remainingWeight",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
         "name": "halfWeight_",
         "type": "uint256"
       },
       {
         "internalType": "uint256",
         "name": "weightCap_",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "consumerWeightCap_",
         "type": "uint256"
       },
       {
@@ -437,6 +650,25 @@ export const reputationEngineAbi = [
   {
     "inputs": [
       {
+        "internalType": "bytes32",
+        "name": "",
+        "type": "bytes32"
+      }
+    ],
+    "name": "timelockEta",
+    "outputs": [
+      {
+        "internalType": "uint64",
+        "name": "",
+        "type": "uint64"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
         "internalType": "address",
         "name": "newOwner",
         "type": "address"
@@ -471,6 +703,30 @@ export const reputationEngineAbi = [
       }
     ],
     "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "writer",
+        "type": "address"
+      },
+      {
+        "internalType": "bool",
+        "name": "allowed",
+        "type": "bool"
+      }
+    ],
+    "name": "writerAction",
+    "outputs": [
+      {
+        "internalType": "bytes32",
+        "name": "",
+        "type": "bytes32"
+      }
+    ],
+    "stateMutability": "pure",
     "type": "function"
   },
   {

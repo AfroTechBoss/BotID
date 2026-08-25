@@ -4,7 +4,7 @@ const { log, sleep, retry } = require("./util");
 
 const Status = {
   None: 0, Pending: 1, Delivered: 2, Challenged: 3,
-  Finalized: 4, Settled: 5, Expired: 6, Faulted: 7,
+  Finalized: 4, Settled: 5, Expired: 6, Faulted: 7, Rejected: 8,
 };
 
 /**
@@ -53,8 +53,13 @@ async function run() {
         const r = await contracts.router.getRequest(requestId);
         const status = Number(r.status);
 
-        // Terminal states need no further attention.
-        if ([Status.None, Status.Settled, Status.Expired, Status.Faulted].includes(status)) {
+        // Terminal states need no further attention. `Rejected` is terminal too — the operator
+        // declined at order time, exposure is already released and there is nothing to enforce.
+        if (
+          [Status.None, Status.Settled, Status.Expired, Status.Faulted, Status.Rejected].includes(
+            status
+          )
+        ) {
           tracked.delete(requestId);
           continue;
         }

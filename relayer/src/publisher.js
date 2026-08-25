@@ -1,5 +1,7 @@
 const fs = require("fs");
 const path = require("path");
+const net = require("net");
+const dns = require("dns").promises;
 const { ethers } = require("ethers");
 const config = require("./config");
 const {
@@ -75,29 +77,158 @@ function newSalt() {
   return ethers.hexlify(ethers.randomBytes(32));
 }
 
+/** The most bundle JSON we will ever read. Comfortably above a real bundle, far below a disk. */
+const MAX_BUNDLE_BYTES = 4 << 20; // 4 MiB
+const FETCH_TIMEOUT_MS = 10_000;
+
+/**
+ * Is this address one the agent's own host can reach but the public internet cannot?
+ *
+ * The list is the usual private space plus the ones people forget: loopback, link-local (which
+ * covers 169.254.169.254, the cloud metadata endpoint that hands out credentials), carrier-grade
+ * NAT, IPv6 unique-local and the v4-mapped forms an attacker can hide a v4 target inside.
+ */
+function isPrivateAddress(ip) {
+  const v = net.isIP(ip);
+  if (v === 4) {
+    const [a, b] = ip.split(".").map(Number);
+    return (
+      a === 0 || a === 10 || a === 127 ||
+      (a === 169 && b === 254) ||          // link-local, incl. cloud metadata
+      (a === 172 && b >= 16 && b <= 31) ||
+      (a === 192 && b === 168) ||
+      (a === 100 && b >= 64 && b <= 127) || // CGNAT
+      a >= 224                              // multicast + reserved
+    );
+  }
+  if (v === 6) {
+    const ip6 = ip.toLowerCase().split("%")[0];
+    if (ip6 === "::" || ip6 === "::1") return true;
+    if (/^f[cd]/.test(ip6)) return true;   // unique-local
+    if (ip6.startsWith("fe80")) return true; // link-local
+    if (ip6.startsWith("ff")) return true;   // multicast
+    // ::ffff:10.0.0.1 and friends — a v4 target wearing a v6 hat.
+    const mapped = ip6.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/);
+    if (mapped) return isPrivateAddress(mapped[1]);
+    return false;
+  }
+  return true; // unparseable is not something we dial
+}
+
 /**
  * Fetch the bundle a request's `inputURI` points at.
  *
  * The URI is emitted by the consumer and is completely untrusted — it is a locator, not an
- * authority. `verify` below is what makes that safe.
+ * authority. `verify` below is what makes the *contents* safe: whatever comes back, the agent
+ * only ever runs on data that hashes to the commitment already on chain.
+ *
+ * What `verify` cannot make safe is the act of fetching. That happens before any hash is checked,
+ * and it happens from inside the operator's own network, using the operator's own credentials at
+ * the network layer. `requestExecution` is permissionless, so anyone can hand this function a
+ * string for the price of gas. Three things follow, and all three are enforced here rather than
+ * trusted to the caller:
+ *
+ *   file://       is not accepted at all. It was an arbitrary local-file read — `.env`, the
+ *                 operator key, an SSH key — dressed as a locator. The local demo never needed
+ *                 it: a bare name already resolves inside BUNDLE_DIR, which is the same
+ *                 convenience confined to a directory.
+ *   bare names    must look like names. Anything with a separator or a `..` is rejected before
+ *                 it reaches the filesystem, and the resolved path is confirmed to still be
+ *                 inside BUNDLE_DIR afterwards — belt and braces, because path.join happily
+ *                 walks upward when asked.
+ *   http(s)://    must resolve to a public address. Every address the hostname resolves to is
+ *                 checked, not just the first, and redirects stay off so a public URL cannot
+ *                 bounce us somewhere private on the second hop.
+ *
+ * The residual gap is DNS rebinding: a name that passes the check here could answer differently
+ * for the socket a moment later. Closing that properly means dialling the checked IP directly and
+ * carrying the Host header through TLS, which is a bigger change than this warrants at the volume
+ * involved. It is recorded rather than papered over — and `ALLOW_PRIVATE_INPUT_URI` exists for
+ * anyone deliberately pointing an agent at a bundle server on their own network.
  */
 async function fetchBundle(uri) {
   if (!uri) throw new Error("request carries no inputURI");
+  if (typeof uri !== "string") throw new Error("inputURI is not a string");
 
   if (uri.startsWith("file://")) {
-    const file = uri.slice("file://".length);
-    return JSON.parse(fs.readFileSync(file, "utf8"));
+    throw new Error(
+      "inputURI uses file://, which is not accepted — it is an arbitrary read of the operator's " +
+        "own disk. Serve the bundle over https, or drop it in BUNDLE_DIR and reference it by name."
+    );
   }
-  if (uri.startsWith("http://") || uri.startsWith("https://")) {
-    const res = await fetch(uri, { redirect: "error" });
-    if (!res.ok) throw new Error(`inputURI fetch failed: ${res.status}`);
-    return res.json();
+
+  if (/^https?:\/\//i.test(uri)) return fetchOverHttp(uri);
+
+  // A bare name resolves inside BUNDLE_DIR — how the local demo passes bundles around. It is a
+  // name, not a path: no separators, no traversal, nothing exotic enough to mean something to
+  // the filesystem.
+  if (!/^[A-Za-z0-9._-]{1,128}$/.test(uri) || uri.includes("..")) {
+    throw new Error(`unsupported inputURI: ${uri.slice(0, 120)}`);
   }
-  // A bare name resolves inside BUNDLE_DIR — how the local demo passes bundles around.
-  const file = path.join(config.bundleDir, `${uri}.json`);
+  const dir = path.resolve(config.bundleDir);
+  const file = path.resolve(dir, `${uri}.json`);
+  if (file !== path.join(dir, `${uri}.json`) || !file.startsWith(dir + path.sep)) {
+    throw new Error(`inputURI escapes the bundle directory: ${uri.slice(0, 120)}`);
+  }
   if (fs.existsSync(file)) return JSON.parse(fs.readFileSync(file, "utf8"));
 
-  throw new Error(`unsupported inputURI scheme: ${uri}`);
+  throw new Error(`no bundle named ${uri} in ${config.bundleDir}`);
+}
+
+async function fetchOverHttp(uri) {
+  let url;
+  try {
+    url = new URL(uri);
+  } catch {
+    throw new Error(`inputURI is not a valid URL: ${uri.slice(0, 120)}`);
+  }
+  if (url.protocol !== "http:" && url.protocol !== "https:") {
+    throw new Error(`unsupported inputURI scheme: ${url.protocol}`);
+  }
+  // Credentials in a locator are never legitimate here and would be sent to whatever answers.
+  if (url.username || url.password) throw new Error("inputURI must not carry credentials");
+
+  if (!config.allowPrivateInputURI) {
+    const host = url.hostname.replace(/^\[|\]$/g, "");
+    // A literal IP needs no resolver; a name gets every address it answers with checked, because
+    // picking one and dialling another is how this class of check is usually defeated.
+    const addresses = net.isIP(host)
+      ? [host]
+      : (await dns.lookup(host, { all: true, verbatim: true })).map((a) => a.address);
+    if (addresses.length === 0) throw new Error(`inputURI host does not resolve: ${host}`);
+    for (const address of addresses) {
+      if (isPrivateAddress(address)) {
+        throw new Error(
+          `inputURI resolves to the private address ${address} — refusing to fetch. Set ` +
+            "ALLOW_PRIVATE_INPUT_URI=true only if you are deliberately serving bundles from " +
+            "inside this network."
+        );
+      }
+    }
+  }
+
+  const res = await fetch(url, {
+    redirect: "error",
+    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+    headers: { accept: "application/json" },
+  });
+  if (!res.ok) throw new Error(`inputURI fetch failed: ${res.status}`);
+
+  const declared = Number(res.headers.get("content-length"));
+  if (Number.isFinite(declared) && declared > MAX_BUNDLE_BYTES) {
+    throw new Error(`inputURI response is ${declared} bytes, over the ${MAX_BUNDLE_BYTES} cap`);
+  }
+
+  // Read against a budget rather than trusting content-length, which a hostile server can omit
+  // or lie about. `res.json()` would happily buffer a stream that never ends.
+  const chunks = [];
+  let total = 0;
+  for await (const chunk of res.body) {
+    total += chunk.length;
+    if (total > MAX_BUNDLE_BYTES) throw new Error("inputURI response exceeded the size cap");
+    chunks.push(chunk);
+  }
+  return JSON.parse(Buffer.concat(chunks).toString("utf8"));
 }
 
 /**

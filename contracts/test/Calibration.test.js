@@ -24,12 +24,23 @@ describe("parameter calibration", () => {
   /** deploy.js's CAPITAL_DEFAULTS, in whole tokens. Kept in step with it by hand. */
   const DEFAULTS = { halfWeight: 1_000, weightCap: 10_000, minBond: 100, globalCap: 5_000_000 };
 
-  async function calibrated(env, { halfWeight = DEFAULTS.halfWeight } = {}) {
+  /**
+   * A distinct counterparty per delivery. `consumerWeightCap` bounds how much any one of them can
+   * move a score, so an agent's ramp is a question about a market rather than about a single
+   * customer — which is what these tests are measuring. Addresses only; nothing is signed.
+   */
+  const counterparty = (i) => ethers.getAddress(`0x${(i + 1).toString(16).padStart(40, "0")}`);
+
+  async function calibrated(
+    env,
+    { halfWeight = DEFAULTS.halfWeight, consumerWeightCap = halfWeight / 2 } = {}
+  ) {
     const whole = (n) => ethers.parseUnits(String(n), env.decimals);
     await (
       await env.engine.setParameters(
         whole(halfWeight),
         whole(DEFAULTS.weightCap),
+        whole(consumerWeightCap),
         await env.engine.decayHalfLife(),
         await env.engine.livenessHaircutBps(),
         await env.engine.verificationHaircutBps()
@@ -60,10 +71,13 @@ describe("parameter calibration", () => {
     await (await env.engine.setWriter(env.owner.address, true)).wait();
     await (await env.engine.initAgent(1)).wait();
 
-    // Executions at the agent's full $50 ceiling, each one clean and in spec.
+    // Executions at the agent's full $50 ceiling, each one clean and in spec, each for a different
+    // customer.
     let n = 0;
     while ((await env.engine.getScore(1)) < 7_000n && n < 100) {
-      await (await env.engine.recordOutcome(1, CLEAN, env.units(50), 500)).wait();
+      await (
+        await env.engine.recordOutcome(1, counterparty(n), CLEAN, env.units(50), 500)
+      ).wait();
       n += 1;
     }
 
@@ -82,7 +96,9 @@ describe("parameter calibration", () => {
 
     // The same fifty clean deliveries, against the parameter as it was before this repricing.
     for (let i = 0; i < 50; i += 1) {
-      await (await env.engine.recordOutcome(1, CLEAN, env.units(50), 500)).wait();
+      await (
+        await env.engine.recordOutcome(1, counterparty(i), CLEAN, env.units(50), 500)
+      ).wait();
     }
 
     // A weight of 50/100050 per delivery — about 0.05%. Fifty flawless executions move the score
@@ -96,17 +112,51 @@ describe("parameter calibration", () => {
 
   it("caps a single execution below a total overwrite of history", async () => {
     const env = await deployProtocol({ decimals: 6 });
-    await calibrated(env);
+    // The per-consumer budget is lifted clear here so that WEIGHT_CAP is the only thing binding —
+    // this test is about that parameter alone. The test below is about the other one.
+    await calibrated(env, { consumerWeightCap: 1_000_000 });
     await (await env.engine.setWriter(env.owner.address, true)).wait();
     await (await env.engine.initAgent(1)).wait();
 
     // An execution far above WEIGHT_CAP, so the weight is the cap rather than the notional:
     // 10,000/11,000, or 91% of the distance. Large, deliberately — capital-weighted reputation
     // means a big well-executed delivery should count for more — but not the whole story.
-    await (await env.engine.recordOutcome(1, CLEAN, env.units(5_000_000), 500)).wait();
+    await (
+      await env.engine.recordOutcome(1, counterparty(0), CLEAN, env.units(5_000_000), 500)
+    ).wait();
 
     const score = await env.engine.getScore(1);
     expect(score).to.be.greaterThan(9_500n);
     expect(score).to.be.lessThan(10_000n);
+  });
+
+  it("caps a single counterparty below a total overwrite of history", async () => {
+    const env = await deployProtocol({ decimals: 6 });
+    await calibrated(env);
+    await (await env.engine.setWriter(env.owner.address, true)).wait();
+    await (await env.engine.initAgent(1)).wait();
+
+    // The same execution, at the calibrated per-consumer budget of 500 rather than a lifted one.
+    // WEIGHT_CAP would let this weigh 10,000; the budget lets it weigh 500, or a third of the
+    // distance. The same arithmetic runs in reverse for a *false* report, which is the reason the
+    // parameter exists: `settle` takes the consumer's word for the outcome, and the damage of a
+    // lie scales with a notional the liar picks while the cost is a fraction of it.
+    await (
+      await env.engine.recordOutcome(1, counterparty(0), CLEAN, env.units(5_000_000), 500)
+    ).wait();
+    expect(await env.engine.getScore(1)).to.equal(6_666n);
+
+    // And a second report from the same counterparty, however large, is now almost mute: the
+    // budget is spent and refills only on the 90-day half-life.
+    await (
+      await env.engine.recordOutcome(1, counterparty(0), CLEAN, env.units(5_000_000), 500)
+    ).wait();
+    expect(await env.engine.getScore(1)).to.equal(6_666n);
+    expect(await env.engine.remainingWeight(1, counterparty(0))).to.equal(0n);
+
+    // A different customer still has its full voice — reputation aggregates across counterparties.
+    expect(await env.engine.remainingWeight(1, counterparty(1))).to.equal(
+      ethers.parseUnits("500", env.decimals)
+    );
   });
 });

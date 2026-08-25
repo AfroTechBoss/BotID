@@ -2,52 +2,110 @@ const { ethers } = require("ethers");
 
 const coder = ethers.AbiCoder.defaultAbiCoder();
 
-// These two constants must stay byte-identical to Digest.sol and InputAttestor.sol. Every
-// signature this process produces is worthless — or worse, valid for the wrong thing — if they
-// drift, so they are asserted against the deployed contracts on startup (see chain.js).
+// Everything a signature in this protocol commits to, in one place.
+//
+// Both digests are EIP-712: `keccak256(0x1901 || domainSeparator || structHash)`. That envelope
+// is what lets a hardware wallet render a delivery or a price reading instead of asking an
+// operator to approve 32 opaque bytes, and it is why the field lists below are declared as types
+// rather than transcribed as hashes — `ethers.TypedDataEncoder` derives the typehash from them,
+// so a drift in a field list changes the digest instead of being invisible.
+//
+// The domain name and version are part of the separator, so changing either invalidates every
+// signature issued under the old pair. `chain.js` reads `DOMAIN_SEPARATOR()` off the deployed
+// attestor at startup and refuses to run on a mismatch.
+const DOMAIN_NAME = "BotID";
+const DOMAIN_VERSION = "1";
+
+/** The EIP-712 domain for a verifying contract. Mirror of `Digest.domainSeparator`. */
+function domain(chainId, verifyingContract) {
+  return { name: DOMAIN_NAME, version: DOMAIN_VERSION, chainId, verifyingContract };
+}
+
+const EXECUTION_TYPES = {
+  Execution: [
+    { name: "requestId", type: "bytes32" },
+    { name: "agentId", type: "uint256" },
+    { name: "modelCommitment", type: "bytes32" },
+    { name: "inputCommitment", type: "bytes32" },
+    { name: "outputCommitment", type: "bytes32" },
+    { name: "deliverBy", type: "uint64" },
+  ],
+};
+
+const FEED_TYPES = {
+  FeedReading: [
+    { name: "feedId", type: "bytes32" },
+    { name: "valueHash", type: "bytes32" },
+    { name: "timestamp", type: "uint64" },
+  ],
+};
+
+// Kept, and now *derived* rather than transcribed: these are what `chain.js` compares against
+// the deployed contracts, and deriving them from the type lists above means the check is testing
+// the same thing the signing path uses. A hand-written copy could agree with the chain while
+// disagreeing with the signature this process actually produces.
 const EXECUTION_TYPEHASH = ethers.keccak256(
-  ethers.toUtf8Bytes(
-    "Execution(bytes32 requestId,uint256 agentId,bytes32 modelCommitment,bytes32 inputCommitment,bytes32 outputCommitment,uint64 deliverBy)"
-  )
+  ethers.toUtf8Bytes(ethers.TypedDataEncoder.from(EXECUTION_TYPES).encodeType("Execution"))
 );
 const FEED_TYPEHASH = ethers.keccak256(
-  ethers.toUtf8Bytes("FeedReading(bytes32 feedId,bytes32 valueHash,uint64 timestamp)")
+  ethers.toUtf8Bytes(ethers.TypedDataEncoder.from(FEED_TYPES).encodeType("FeedReading"))
 );
 
 const BUNDLE_TYPE = "tuple(bytes32,bytes32,uint64,bytes[])[]";
 
-/** Mirror of Digest.execution(). `verifier` is the adapter address, and binding it is what
- *  stops a Bronze signature from being replayed at the TEE or ZK adapter. */
+/** Mirror of Digest.execution(). `verifier` is the adapter address, and binding it — now as the
+ *  domain's `verifyingContract` — is what stops a Bronze signature being replayed at the TEE or
+ *  ZK adapter. */
 function executionDigest(chainId, verifier, ctx) {
-  return ethers.keccak256(
-    coder.encode(
-      [
-        "bytes32", "uint256", "address", "bytes32",
-        "uint256", "bytes32", "bytes32", "bytes32", "uint64",
-      ],
-      [
-        EXECUTION_TYPEHASH,
-        chainId,
-        verifier,
-        ctx.requestId,
-        ctx.agentId,
-        ctx.modelCommitment,
-        ctx.inputCommitment,
-        ctx.outputCommitment,
-        ctx.deliverBy,
-      ]
-    )
-  );
+  return ethers.TypedDataEncoder.hash(domain(chainId, verifier), EXECUTION_TYPES, {
+    requestId: ctx.requestId,
+    agentId: ctx.agentId,
+    modelCommitment: ctx.modelCommitment,
+    inputCommitment: ctx.inputCommitment,
+    outputCommitment: ctx.outputCommitment,
+    deliverBy: ctx.deliverBy,
+  });
 }
 
 /** Mirror of InputAttestor.feedDigest(). */
 function feedDigest(chainId, attestor, feed) {
-  return ethers.keccak256(
-    coder.encode(
-      ["bytes32", "uint256", "address", "bytes32", "bytes32", "uint64"],
-      [FEED_TYPEHASH, chainId, attestor, feed.feedId, feed.valueHash, feed.timestamp]
-    )
-  );
+  return ethers.TypedDataEncoder.hash(domain(chainId, attestor), FEED_TYPES, {
+    feedId: feed.feedId,
+    valueHash: feed.valueHash,
+    timestamp: feed.timestamp,
+  });
+}
+
+/**
+ * The typed-data payload for a delivery, for a signer that can render it.
+ *
+ * `signDigest` below still works and produces identical bytes, but it asks a key to sign a hash.
+ * This is what to hand a hardware wallet or a remote signing service: `signer.signTypedData(
+ * ...executionTypedData(chainId, adapter, ctx))` shows the request id, the agent and the deadline
+ * as text before anything is signed.
+ */
+function executionTypedData(chainId, verifier, ctx) {
+  return [
+    domain(chainId, verifier),
+    EXECUTION_TYPES,
+    {
+      requestId: ctx.requestId,
+      agentId: ctx.agentId,
+      modelCommitment: ctx.modelCommitment,
+      inputCommitment: ctx.inputCommitment,
+      outputCommitment: ctx.outputCommitment,
+      deliverBy: ctx.deliverBy,
+    },
+  ];
+}
+
+/** The same, for one feed reading. See `executionTypedData`. */
+function feedTypedData(chainId, attestor, feed) {
+  return [
+    domain(chainId, attestor),
+    FEED_TYPES,
+    { feedId: feed.feedId, valueHash: feed.valueHash, timestamp: feed.timestamp },
+  ];
 }
 
 /** Mirror of InputAttestor's commitment: keccak over the ordered leaf digests. */
@@ -140,17 +198,32 @@ function encodeZkAttestation(proof, instances, reveals) {
   );
 }
 
-/** Sign a raw 32-byte digest. No EIP-191 prefix: the contracts ecrecover the digest itself. */
+/**
+ * Sign an already-computed 32-byte digest.
+ *
+ * No prefix is applied here and none is needed: the digests above already carry the `\x19\x01`
+ * envelope, so this produces the same bytes as `signTypedData` over the same message. Use it when
+ * the key is a local hot wallet and there is nobody to show the message to. When there *is* —
+ * a hardware wallet, an operator approving a delivery — prefer `executionTypedData` and
+ * `feedTypedData`, which is the entire reason the envelope exists.
+ */
 function signDigest(wallet, digest) {
   return new ethers.SigningKey(wallet.privateKey).sign(digest).serialized;
 }
 
 module.exports = {
   coder,
+  DOMAIN_NAME,
+  DOMAIN_VERSION,
+  domain,
+  EXECUTION_TYPES,
+  FEED_TYPES,
   EXECUTION_TYPEHASH,
   FEED_TYPEHASH,
   executionDigest,
   feedDigest,
+  executionTypedData,
+  feedTypedData,
   bundleCommitment,
   encodeBundle,
   decodeBundle,

@@ -2,7 +2,7 @@
 pragma solidity ^0.8.24;
 
 import {Tier, VerificationContext} from "../libraries/Types.sol";
-import {Digest} from "../libraries/Digest.sol";
+import {Digest, ExecutionVerifier} from "../libraries/Digest.sol";
 import {IVerificationAdapter} from "../interfaces/IVerificationAdapter.sol";
 
 /// @title SignatureAdapter — Bronze tier
@@ -12,7 +12,7 @@ import {IVerificationAdapter} from "../interfaces/IVerificationAdapter.sol";
 ///      works for any model including LLM agents, and is only honest because the operator is
 ///      staking a slashable bond on a claim anyone can escalate to a Gold proof. An agent that
 ///      cannot answer a challenge loses far more than it gains by lying.
-contract SignatureAdapter is IVerificationAdapter {
+contract SignatureAdapter is IVerificationAdapter, ExecutionVerifier {
     function tier() external pure returns (Tier) {
         return Tier.Bronze;
     }

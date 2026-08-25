@@ -2,7 +2,7 @@
 pragma solidity ^0.8.24;
 
 import {Policy, Profile, Tier} from "./libraries/Types.sol";
-import {IERC20, Ownable, SafeTransfer} from "./libraries/Utils.sol";
+import {IERC20, Ownable, SafeTransfer, Timelocked} from "./libraries/Utils.sol";
 import {IReputationEngine} from "./interfaces/IReputationEngine.sol";
 import {IReputationOracle} from "./interfaces/IReputationOracle.sol";
 
@@ -15,7 +15,7 @@ import {IReputationOracle} from "./interfaces/IReputationOracle.sol";
 ///      Reputation is a *multiplier on posted capital*, never a substitute for it. This bounds
 ///      what any identity — including a farm of cheap Sybil identities — can extract, because
 ///      extraction capacity scales with capital the attacker has actually locked and can lose.
-contract AgentRegistry is IReputationOracle, Ownable {
+contract AgentRegistry is IReputationOracle, Timelocked {
     using SafeTransfer for IERC20;
 
     struct Agent {
@@ -36,6 +36,10 @@ contract AgentRegistry is IReputationOracle, Ownable {
 
     /// @notice Withdrawal delay. Must exceed the longest settlement window so an agent cannot
     ///         exit ahead of the settlement of its own outstanding executions.
+    /// @dev Also the floor on `TIMELOCK_DELAY`, and the two are not independent: the timelock is
+    ///      only meaningful if an agent that objects to a rewiring can complete an exit inside the
+    ///      notice period. Both are constants, so the check below is folded away at compile time
+    ///      and exists to make shortening either one a build failure rather than a quiet loss.
     uint64 public constant UNBONDING_PERIOD = 21 days;
 
     uint256 public minBond = 500e18;
@@ -83,10 +87,16 @@ contract AgentRegistry is IReputationOracle, Ownable {
     event ExposureChanged(uint256 indexed agentId, uint256 openNotional);
     event ActiveSet(uint256 indexed agentId, bool active);
     event RouterSet(address indexed router);
+    /// @dev `setTreasury` used to change where every slash and protocol fee is paid and emit
+    ///      nothing at all, so the only way to notice was to poll the getter.
+    event TreasurySet(address indexed treasury);
+    event RouterQueued(address indexed router, uint64 eta);
+    event TreasuryQueued(address indexed treasury, uint64 eta);
 
     constructor(address initialOwner, IERC20 bondToken_, IReputationEngine engine_, address treasury_)
         Ownable(initialOwner)
     {
+        if (TIMELOCK_DELAY < UNBONDING_PERIOD) revert InvalidParameter();
         bondToken = bondToken_;
         engine = engine_;
         treasury = treasury_;
@@ -104,13 +114,51 @@ contract AgentRegistry is IReputationOracle, Ownable {
 
     // ---------------------------------------------------------------- admin
 
+    /// @dev The router is the only address allowed to move exposure and to slash. Repointing it
+    ///      is repointing who may take an agent's bond, so it waits out `TIMELOCK_DELAY` — which
+    ///      is `UNBONDING_PERIOD`, so an agent that objects can be gone before it lands.
+    function queueRouter(address router_) external {
+        emit RouterQueued(router_, _queue(_routerAction(router_)));
+    }
+
     function setRouter(address router_) external onlyOwner {
+        _consume(_routerAction(router_));
         router = router_;
         emit RouterSet(router_);
     }
 
+    /// @dev Slashes and protocol fees are paid here. Nothing is held at this address between
+    ///      transactions, so a change cannot retroactively take anything — but it redirects every
+    ///      future payment, which is worth announcing.
+    function queueTreasury(address treasury_) external {
+        emit TreasuryQueued(treasury_, _queue(_treasuryAction(treasury_)));
+    }
+
     function setTreasury(address treasury_) external onlyOwner {
+        _consume(_treasuryAction(treasury_));
         treasury = treasury_;
+        emit TreasurySet(treasury_);
+    }
+
+    /// @notice The action id `queueRouter(router_)` produces, and `cancel` expects.
+    /// @dev Exposed rather than left for a caller to reconstruct. `cancel` takes a raw id, and an
+    ///      id derived by hand off a slightly different encoding cancels nothing while looking
+    ///      exactly like it worked — the call succeeds, and the change lands three weeks later.
+    function routerAction(address router_) external pure returns (bytes32) {
+        return _routerAction(router_);
+    }
+
+    /// @notice The action id `queueTreasury(treasury_)` produces. See `routerAction`.
+    function treasuryAction(address treasury_) external pure returns (bytes32) {
+        return _treasuryAction(treasury_);
+    }
+
+    function _routerAction(address router_) private pure returns (bytes32) {
+        return keccak256(abi.encode(this.setRouter.selector, router_));
+    }
+
+    function _treasuryAction(address treasury_) private pure returns (bytes32) {
+        return keccak256(abi.encode(this.setTreasury.selector, treasury_));
     }
 
     function setLimits(uint256 minBond_, uint256 globalNotionalCap_) external onlyOwner {

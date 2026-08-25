@@ -14,12 +14,18 @@ interface IReputationEngine {
     function initAgent(uint256 agentId) external;
 
     /// @notice Fold a settled execution into the agent's score, weighted by capital at risk.
+    /// @param consumer Who reported this outcome. The weight is drawn from that counterparty's
+    ///        budget, so no single one can define an agent's score — see `consumerWeightCap`.
     function recordOutcome(
         uint256 agentId,
+        address consumer,
         Outcome calldata outcome,
         uint256 notional,
         uint32 lossToleranceBps
     ) external;
+
+    /// @notice Weight `consumer` may still spend on `agentId`'s score.
+    function remainingWeight(uint256 agentId, address consumer) external view returns (uint256);
 
     /// @notice Record a fault. Faults apply a direct haircut and are counted separately, so a
     ///         high volume of routine successes cannot smooth them away.

@@ -23,6 +23,31 @@ describe("AgentRegistry", function () {
       expect(p.active).to.equal(true);
     });
 
+    it("refuses to hold a bond in a token that does not exist", async function () {
+      // A low-level call to a codeless address succeeds and returns nothing, which is exactly what
+      // a well-behaved non-standard ERC20 returns on a real transfer. Without a code check the
+      // registry cannot tell the two apart: the bond appears locked, `getProfile` reports it, and
+      // the tokens were never anywhere. The mistake is a wrong constructor argument, so the revert
+      // has to land on the first deposit — there is no later point at which anything complains.
+      const codeless = env.other.address;
+      expect(await ethers.provider.getCode(codeless)).to.equal("0x");
+
+      const registry = await (
+        await ethers.getContractFactory("AgentRegistry")
+      ).deploy(env.owner.address, codeless, env.engine.target, env.treasury.address);
+      await env.engine.setWriter(registry.target, true);
+
+      const op = await fundedWallet(env.owner, "1");
+      await expect(
+        registry
+          .connect(env.agentOwner)
+          .registerAgent(op.address, ethers.id("m"), Tier.Bronze, 500, E18(1000))
+      ).to.be.revertedWithCustomError(registry, "NotAContract");
+
+      // And nothing was recorded on the way to that revert.
+      expect(await registry.agentIdByOperator(op.address)).to.equal(0n);
+    });
+
     it("rejects a bond below the minimum", async function () {
       const op = await fundedWallet(env.owner, "1");
       await expect(
@@ -375,6 +400,33 @@ describe("AgentRegistry", function () {
       };
       expect(await env.registry.meetsPolicy(agentId, policy)).to.equal(true);
       await increaseTime(2 * DAY);
+      expect(await env.registry.meetsPolicy(agentId, policy)).to.equal(false);
+    });
+
+    // BOTID-04. `recordFault` used to stamp `lastActiveAt` alongside the score haircut, which
+    // made the staleness screen answer the wrong question: a fault is evidence the agent did not
+    // do its job, and it was being counted as evidence that it had. The liveness case closed the
+    // loop — an agent that had gone dark earns a Liveness fault the moment anyone calls
+    // `markExpired`, so the report of its failure was what restored it to eligibility, and
+    // `markExpired` is permissionless and pays a bounty. Freshness must survive a fault unchanged.
+    it("does not let a fault pass for activity", async function () {
+      const { agentId } = await registerAgent(env, { tier: Tier.Silver });
+      const policy = {
+        minScore: 0,
+        minTier: Tier.Bronze,
+        maxFaults: 100, // faults themselves are not what this test is about
+        minBond: 0,
+        maxStalenessSeconds: DAY,
+      };
+
+      await increaseTime(2 * DAY);
+      expect(await env.registry.meetsPolicy(agentId, policy)).to.equal(false);
+
+      const before = (await env.engine.getStats(agentId)).lastActiveAt;
+      await env.engine.setWriter(env.owner.address, true);
+      await env.engine.recordFault(agentId, 0); // FaultKind.Liveness
+
+      expect((await env.engine.getStats(agentId)).lastActiveAt).to.equal(before);
       expect(await env.registry.meetsPolicy(agentId, policy)).to.equal(false);
     });
 

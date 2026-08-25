@@ -17,7 +17,8 @@ enum Status {
     Finalized, // verification is settled; awaiting economic settlement
     Settled, //   terminal, outcome recorded
     Expired, //   terminal, never delivered — liveness fault
-    Faulted //    terminal, lost a challenge — verification fault
+    Faulted, //   terminal, lost a challenge — verification fault
+    Rejected //   terminal, declined at order time — no fault, no slash
 }
 
 /// @notice Canonical binding passed to every verification adapter.

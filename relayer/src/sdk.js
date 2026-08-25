@@ -23,6 +23,7 @@ const Status = {
   Settled: 5,
   Expired: 6,
   Faulted: 7,
+  Rejected: 8,
 };
 
 /**

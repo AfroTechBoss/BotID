@@ -7,7 +7,7 @@ import { formatToken, applyBps } from '@/lib/token';
 import { useNetwork } from '@/lib/network';
 import { useWallet, shortAddress } from '@/lib/wallet';
 import { useTx } from '@/lib/tx';
-import { CHAINS, explorerLink } from '@/lib/chain';
+import { CHAINS, explorerLink, publicClient } from '@/lib/chain';
 import { addressOf } from '@/lib/contracts';
 import {
   agentIdsOf,
@@ -262,6 +262,98 @@ export default function Portal() {
     return ok;
   };
 
+  // ── operator key and availability ─────────────────────────────────────────────────────────
+  const [newOperator, setNewOperator] = useState('');
+
+  /**
+   * Is the candidate key already spoken for?
+   *
+   * `agentIdByOperator` is a public mapping, so the question rotateOperator reverts on —
+   * OperatorInUse — is one read away. Asking it here does not make the contract's guard less
+   * authoritative; it moves the answer to before the signature instead of after the gas.
+   *
+   * An unreadable answer does *not* disable the button. A key rotation is what an operator reaches
+   * for when a key has leaked, and a UI that refuses to let you change the locks because a node
+   * timed out has failed at the one moment it existed for. The contract still guards it; a wasted
+   * transaction is a far smaller cost than a rotation that could not be attempted.
+   */
+  type OperatorCheck =
+    | { kind: 'idle' }
+    | { kind: 'checking' }
+    | { kind: 'free' }
+    | { kind: 'taken'; agentId: bigint }
+    | { kind: 'unreadable' };
+
+  const [operatorCheck, setOperatorCheck] = useState<OperatorCheck>({ kind: 'idle' });
+
+  useEffect(() => {
+    const candidate = newOperator.trim();
+    if (!registry || !isAddress(candidate)) {
+      setOperatorCheck({ kind: 'idle' });
+      return;
+    }
+    let live = true;
+    setOperatorCheck({ kind: 'checking' });
+    // Debounced: the field is 42 characters and a read per keystroke is 42 reads for one answer.
+    const timer = setTimeout(() => {
+      publicClient(network.id)
+        .readContract({
+          address: registry,
+          abi: agentRegistryAbi,
+          functionName: 'agentIdByOperator',
+          args: [candidate as Address],
+        })
+        .then((taken) => live && setOperatorCheck(taken === 0n ? { kind: 'free' } : { kind: 'taken', agentId: taken }))
+        .catch(() => live && setOperatorCheck({ kind: 'unreadable' }));
+    }, 300);
+    return () => {
+      live = false;
+      clearTimeout(timer);
+    };
+  }, [newOperator, network.id, registry]);
+
+  const rotateProblem = (() => {
+    const candidate = newOperator.trim();
+    if (!candidate) return undefined; // nothing typed yet is not an error, just not ready
+    if (!isAddress(candidate)) return 'That is not an address.';
+    if (candidate === '0x0000000000000000000000000000000000000000') return 'The zero address is rejected by the contract.';
+    if (selected && candidate.toLowerCase() === selected.operator.toLowerCase()) return 'Already the operator for this agent.';
+    if (operatorCheck.kind === 'taken') return `Already the operator for agent #${operatorCheck.agentId}. One key, one agent.`;
+    return undefined;
+  })();
+
+  const canRotate = Boolean(selected && isAddress(newOperator.trim()) && !rotateProblem && operatorCheck.kind !== 'checking');
+
+  const rotate = async () => {
+    if (!walletClient || !address || !registry || !selected) return;
+    const ok = await registryWrite('Rotate operator', () =>
+      walletClient.writeContract({
+        address: registry,
+        abi: agentRegistryAbi,
+        functionName: 'rotateOperator',
+        args: [selected.agentId, newOperator.trim() as Address],
+        account: address,
+        chain: CHAINS[network.id],
+      }) as Promise<Hash>
+    );
+    if (ok) setNewOperator('');
+  };
+
+  const toggleActive = () => {
+    if (!walletClient || !address || !registry || !selected) return;
+    const next = !selected.active;
+    void registryWrite(next ? 'Reactivate agent' : 'Deactivate agent', () =>
+      walletClient.writeContract({
+        address: registry,
+        abi: agentRegistryAbi,
+        functionName: 'setActive',
+        args: [selected.agentId, next],
+        account: address,
+        chain: CHAINS[network.id],
+      }) as Promise<Hash>
+    );
+  };
+
   const now = BigInt(Math.floor(Date.now() / 1000));
   const withdrawable = selected !== undefined && selected.unbondingAmount > 0n && selected.unbondingAt <= now;
 
@@ -503,6 +595,85 @@ export default function Portal() {
                     : withdrawable
                       ? `${money(selected.unbondingAmount)} is withdrawable now.`
                       : `${money(selected.unbondingAmount)} unlocks in ${untilText(selected.unbondingAt - now)}.`}
+                </p>
+              </div>
+
+              {/* Two controls that had no home until now, on the page that already knows which
+                  agents this wallet owns. Both are onlyAgentOwner, neither moves money, and
+                  neither needs an approval in front of it — the only reason they were missing is
+                  that this section is named after the bond and these are not about the bond.
+                  That is a filing decision, and it left key rotation reachable only by hand-filling
+                  an ABI form on a block explorer. A fire extinguisher mounted in the neighbour's
+                  building does not count as having one. */}
+              <div style={{ marginTop: 'var(--space-4)', border: '1px solid var(--color-divider)', padding: 'var(--space-3)' }}>
+                <div className="text-muted" style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6 }}>
+                  Operator key and availability
+                </div>
+
+                <div className="field">
+                  <label htmlFor="new-operator">Rotate operator</label>
+                  <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
+                    <input
+                      id="new-operator"
+                      className="input"
+                      placeholder="0x…"
+                      value={newOperator}
+                      onChange={(e) => setNewOperator(e.target.value)}
+                      spellCheck={false}
+                      style={{ flex: 1 }}
+                    />
+                    <button className="btn btn-secondary" disabled={!canWrite || busy || !canRotate} onClick={rotate}>
+                      {operatorCheck.kind === 'checking' ? 'Checking…' : 'Rotate'}
+                    </button>
+                  </div>
+                  {/* Printed in full rather than shortened. Everywhere else on this page an address
+                      is a label and 0x1234…abcd is enough; here it is the thing being replaced, and
+                      a truncation hides exactly the middle bytes a swapped address would differ in. */}
+                  <span className="text-muted" style={{ fontSize: 11, fontFamily: 'var(--font-mono)', wordBreak: 'break-all' }}>
+                    now: {selected ? selected.operator : '—'}
+                  </span>
+                  {rotateProblem && (
+                    <span style={{ fontSize: 11, color: 'var(--score-critical)' }}>{rotateProblem}</span>
+                  )}
+                  {operatorCheck.kind === 'unreadable' && !rotateProblem && (
+                    <span style={{ fontSize: 11, color: 'var(--state-pending)' }}>
+                      Could not check whether this key is already in use — the contract will still reject it if it is.
+                    </span>
+                  )}
+                </div>
+
+                <p style={{ fontSize: 12, marginTop: 'var(--space-2)', marginBottom: 0 }}>
+                  There is no overlap window. The router reads the operator at the moment a call lands, so the old key
+                  stops working the instant this confirms — including for a <code>deliver</code> or{' '}
+                  <code>resolveChallenge</code> the old key already signed and broadcast but that has not been mined yet.
+                  Those revert. If you are rotating because a key leaked that is the correct behaviour; if you are
+                  rotating on a schedule, do it when nothing is in flight.
+                </p>
+
+                <div className="hr" style={{ marginBlock: 'var(--space-3)' }} />
+
+                <div style={{ display: 'flex', gap: 'var(--space-3)', alignItems: 'center', flexWrap: 'wrap' }}>
+                  <button className="btn btn-secondary" disabled={!canWrite || busy || !selected} onClick={toggleActive}>
+                    {selected?.active ? 'Deactivate agent' : 'Reactivate agent'}
+                  </button>
+                  <span style={{ fontSize: 12 }}>
+                    Currently{' '}
+                    <strong style={{ color: selected?.active ? 'var(--score-good)' : 'var(--state-pending)' }}>
+                      {selected?.active ? 'active' : 'inactive'}
+                    </strong>
+                    .
+                  </span>
+                </div>
+                <p style={{ fontSize: 12, marginTop: 'var(--space-2)', marginBottom: 0 }}>
+                  Deactivating turns away <em>new</em> work: the registry refuses to reserve exposure for an inactive
+                  agent, and <code>meetsPolicy</code> returns false, so consumers stop selecting you. It changes nothing
+                  about work you already took on — open exposure stays open, the bond stays posted, the unbonding clock
+                  does not start, and an undelivered request still earns a liveness fault when it expires. This is a
+                  closed sign on the door, not a way out of the lease.
+                </p>
+                <p style={{ fontSize: 12, marginTop: 'var(--space-2)', marginBottom: 0 }} className="text-muted">
+                  While inactive the credit line above reads zero. That is <code>_maxOpenNotional</code> short-circuiting
+                  on the flag, not a slash — reactivating restores it to whatever the score and bond say it should be.
                 </p>
               </div>
             </>

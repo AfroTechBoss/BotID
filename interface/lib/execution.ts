@@ -101,6 +101,59 @@ export async function readRequest(network: NetworkId, requestId: string): Promis
   };
 }
 
+/** The router's economic parameters, as the deployed router actually holds them. */
+export interface RouterTerms {
+  router: `0x${string}`;
+  /** Base units of the bond token. See the note on readRouterTerms. */
+  challengeBondAmount: bigint;
+  /** Seconds. How long the operator has to answer a challenge with a Gold proof. */
+  escalationWindow: bigint;
+  /** Seconds. How long after finalization the consumer keeps the right to report an outcome. */
+  settlementWindow: bigint;
+  /** Of the agent's remaining bond, slashed when a challenge goes unanswered. */
+  faultSlashBps: number;
+  /** Of the slashed amount, paid to whoever posted the challenge. */
+  challengerBountyBps: number;
+}
+
+/**
+ * The terms of the bet, read from the chain rather than transcribed from the source.
+ *
+ * Every one of these is a public setter away from being something else — `setParameters` can move
+ * all five in one transaction — so a UI that hardcoded ExecutionRouter.sol's defaults would be
+ * quoting the odds from last year's rulebook.
+ *
+ * challengeBondAmount is the one to be careful with. Its default is `100e18`, which is a hundred
+ * tokens if the bond token has eighteen decimals and a hundred trillion if it has six — and this
+ * protocol's bond token is USDT, which has six. Mocks.sol names it as one of exactly two parameters
+ * that "break silently" under a decimals mismatch. It is returned as base units and must be
+ * rendered through the token's own decimals(), never through a constant.
+ */
+export async function readRouterTerms(network: NetworkId): Promise<RouterTerms | undefined> {
+  const router = addressOf(network, 'ExecutionRouter');
+  if (!router) return undefined;
+  const client = publicClient(network);
+  const contract = { address: router, abi: executionRouterAbi } as const;
+
+  const [challengeBondAmount, escalationWindow, settlementWindow, faultSlashBps, challengerBountyBps] =
+    await Promise.all([
+      client.readContract({ ...contract, functionName: 'challengeBondAmount' }),
+      client.readContract({ ...contract, functionName: 'escalationWindow' }),
+      client.readContract({ ...contract, functionName: 'settlementWindow' }),
+      client.readContract({ ...contract, functionName: 'faultSlashBps' }),
+      client.readContract({ ...contract, functionName: 'challengerBountyBps' }),
+    ]);
+
+  return {
+    router,
+    challengeBondAmount,
+    escalationWindow: BigInt(escalationWindow),
+    settlementWindow: BigInt(settlementWindow),
+    faultSlashBps: Number(faultSlashBps),
+    challengerBountyBps: Number(challengerBountyBps),
+  };
+}
+
 export interface Step {
   verb: Verb;
   block: bigint;

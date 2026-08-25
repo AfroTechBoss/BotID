@@ -9,6 +9,7 @@ import { TIER_META, shortHash, formatNum } from '@/lib/format';
 import { formatToken } from '@/lib/token';
 import type { NetworkId } from '@/lib/network';
 import RecomputeCommitment from './RecomputeCommitment';
+import ExecutionActions from './ExecutionActions';
 
 // A server component, and the reason the interface is Next rather than a SPA. The receipt is the
 // artifact people paste into a Discord thread when an agent is accused of something; it has to
@@ -252,6 +253,21 @@ export default async function ExecutionDetail(
           </>
         )}
       </section>
+
+      {/* The one client island besides RecomputeCommitment, and it sits here on purpose: after the
+          reader has seen the claim, the evidence and the outcome, and before the timeline that is
+          only a record. Everything above is what happened; this is what can still be done about it.
+          bigints go across as strings — a server component cannot hand one to a client one. */}
+      <ExecutionActions
+        network={network}
+        requestId={request.requestId}
+        status={request.status}
+        consumer={request.consumer}
+        agentId={request.agentId.toString()}
+        finalizeAt={request.finalizeAt.toString()}
+        settleBy={request.settleBy.toString()}
+        escalationDeadline={request.escalationDeadline.toString()}
+      />
 
       <section>
         <h6 style={{ color: 'var(--text-muted)', marginBottom: 'var(--space-2)' }}>Timeline</h6>

@@ -210,8 +210,14 @@ export async function readLimits(network: NetworkId) {
  * the comment on it says as much; here the number decides how a user's typed "100" is scaled into
  * a transaction, and being wrong by 10^12 is the exact failure the deploy script guards against.
  * Read it from the token that is actually there.
+ *
+ * `spender` defaults to the registry because every caller until the challenge panel was approving
+ * the registry. An allowance is not a property of a token, it is a property of a *pair* — the
+ * registry's permission to pull a bond says nothing about the router's permission to pull a
+ * challenge bond, and a panel that read one and acted on the other would skip the approve step and
+ * then revert on the call it skipped it for.
  */
-export async function readBondToken(network: NetworkId, owner: Address) {
+export async function readBondToken(network: NetworkId, owner: Address, spender?: Address) {
   const token = addressOf(network, 'bondToken');
   const registry = registryAddress(network);
   if (!token || !registry) return undefined;
@@ -220,7 +226,7 @@ export async function readBondToken(network: NetworkId, owner: Address) {
 
   const [balance, allowance, decimals, symbol] = await Promise.all([
     client.readContract({ ...contract, functionName: 'balanceOf', args: [owner] }),
-    client.readContract({ ...contract, functionName: 'allowance', args: [owner, registry] }),
+    client.readContract({ ...contract, functionName: 'allowance', args: [owner, spender ?? registry] }),
     client.readContract({ ...contract, functionName: 'decimals' }),
     client.readContract({ ...contract, functionName: 'symbol' }),
   ]);

@@ -44,3 +44,4 @@ Thumbs.db
 # Working documents. `*.local.md` is scratch space for briefs and design notes that belong to
 # whoever is holding the work, not to the protocol repo's history.
 *.local.md
+redeployed.md

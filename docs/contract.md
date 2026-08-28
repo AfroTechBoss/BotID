@@ -965,33 +965,57 @@ Known limits, stated plainly:
 
 ## 8. Where they live
 
-Bohr testnet, chain 968, deployed 2026-08-25. Bond token has 6 decimals.
+Bohr testnet, chain 968, deployed 2026-08-28, first block 21,458,922. Bond token has 6 decimals.
 
 | Contract | Address |
 |---|---|
-| ReputationEngine | `0xDF0E2D20E1Da72AcfaE834595631Fc0AF92C7bD4` |
-| AgentRegistry | `0x0bC0F2dd3337004d7Adef8364Fd9Ff33B3959142` |
-| InputAttestor | `0x1F3EEbA18DD9D0FD84a5456E1D6F7394E4d07dc0` |
-| ExecutionRouter | `0xd5AdD347ac5498199A3cdAaeb31d0fFD9Fc2b717` |
-| SignatureAdapter (Bronze) | `0xf4dFcFb1cAE608b40F5a1F88CdEA0DAAdfF615AA` |
-| TeeAdapter (Silver) | `0xde2F8d5002c6d9f5249C393a10e27A3d8a8bFfD5` |
-| ZkAdapter (Gold) | `0x83Aa1c78bAdDdCF9Deb960fC3Cf7c1c3b946d1E3` |
-| Halo2Verifier | `0x4A29F6F49Ef8c7ff6CbC8879659b5C79ADa154b7` |
+| ReputationEngine | `0xBa49Ff343086E966B3172a29742ea5056553E7D1` |
+| AgentRegistry | `0x39FF930E6974b22a07bdfAd8aDC9f3EE7172aA83` |
+| InputAttestor | `0x9afF2B7D5C8BA5D18F1906efafe1cEeccfe465B9` |
+| ExecutionRouter | `0x987A177BB44fAc7F51580134a7B06A327313E099` |
+| SignatureAdapter (Bronze) | `0x5E0E99F76f7f77e345312d092E342Fee35eF112a` |
+| TeeAdapter (Silver) | `0x7dBC738d03f86893101b2Ce9D670C0542bb7cbE6` |
+| ZkAdapter (Gold) | `0x896BcAaE8DDbF69a9155D8c8f8BcC482F980FF1d` |
+| Halo2Verifier | `0x8E2635D6d45D1D92b9Ab29d831918a52F111beb1` |
 | Bond token (test) | `0x75edC9335175Fc0552D51D48439F229c10420fe3` |
 
-All eight are source-verified on the explorer: `https://scan.bohr.life`.
+All eight are source-verified on the explorer: `https://scan.bohr.life`. Four were submitted by
+`scripts/verify.js`; `ReputationEngine`, `InputAttestor`, `SignatureAdapter` and `Halo2Verifier`
+came back already verified, because Blockscout matches on bytecode rather than on address and had
+seen theirs before. Do not read that split as telling you which contracts changed — `TeeAdapter`
+and `ZkAdapter` are byte-identical to their predecessors too, and were submitted anyway.
 
-**This replaced the deployment dated 2026-08-11.** The security remediation changed the bytecode of
-six of the eight contracts, and nothing here is upgradeable — `registry`, `engine` and `bondToken`
-are `immutable`, so one contract cannot be swapped while the rest stay. `Halo2Verifier` is the
-single address carried over, because its bytecode was untouched and reuse keeps the Gold model
-binding identical.
+What did change is narrower than a redeploy usually implies. Comparing runtime bytecode against the
+2026-08-25 set, six of the eight are **byte-identical**, and the two that differ — `AgentRegistry`
+and `ExecutionRouter` — differ only in embedded `immutable` values, at the same code length. That is
+the `immutable` claim above showing up in the bytecode: each holds its siblings' addresses in code
+rather than in storage, so pointing at a new engine or router necessarily produces new bytecode. No
+Solidity source changed between the two deployments.
 
-The old addresses are not merely superseded, they are incompatible: the EIP-712 domain now includes
-the verifying contract, so an attestation signed for the old Bronze adapter does not verify at the
-new one. There is no window in which both sets work. The timelock also arms only on
-`finalizeBootstrap()`, which the old deployment predates entirely; this one reports
-`bootstrapped() == true` on all three contracts, read back off chain rather than assumed.
+**This replaced the deployment dated 2026-08-25, which had replaced the one dated 2026-08-11.**
+Nothing here is upgradeable — `registry`, `engine` and `bondToken` are `immutable`, so one contract
+cannot be swapped while the rest stay, and every redeploy is therefore the whole set. Unlike the
+previous redeploy, which carried `Halo2Verifier` over because its bytecode was untouched, this one
+deployed a fresh verifier: `EZKL_VERIFIER` was unset, so `deploy.js` built one from
+`circuits/build/Verifier.sol` and bound the model to it. The binding was read back — `modelFor`
+returns the new verifier at `inputScaleBits` 8, matching the manifest — so the Gold tier is live
+rather than merely named.
+
+Superseded addresses are not merely old, they are incompatible: the EIP-712 domain includes the
+verifying contract, so an attestation signed for a previous Bronze adapter does not verify at the
+current one. There is no window in which two sets work. Agents registered against an earlier
+registry are not visible here at all; their bonds and scores remain on chain at the old addresses
+and nothing reads them.
+
+The wiring below was read back off chain rather than assumed, after the deploy script reported it:
+`registry.router()` and `registry.engine()` point at this set's router and engine, `adapters(1..3)`
+resolve to the three adapters, `engine.writers()` is true for both the registry and the router, and
+`bootstrapped()` returns true on all three timelocked contracts — so the 21-day notice period is
+armed and the trust-redirecting setters are behind it.
+
+The protocol owner and deployer for this set is `0x08c8108383b69052C04B898676a08Bbbb9ca69F4`, which
+is **not** the key that deployed the previous two (`0x3Ae2AfdeF2391E2AC78e1eb901aF4092E5cb6731`).
+Treasury is unchanged at `0x27F2b72256bAAFF93dCfD50addBFd63F45e2e091`.
 
 ### The tunable numbers
 

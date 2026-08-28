@@ -37,13 +37,23 @@ export interface Contract {
  * adapter is bound, and the Gold verifier is the one the manifest names. A manifest records what
  * the deploy *sent*; these are what stuck.
  *
- * These are the SECOND set. The 2026-08-11 deployment was replaced on 2026-08-25 because the
- * security remediation changed the bytecode of six of the eight contracts, and none of them is
- * upgradeable — `registry`, `engine` and `bondToken` are immutable, so there was no way to swap
- * one contract and keep the rest. The old addresses are not deprecated so much as incompatible:
- * the signing domain changed with the EIP-712 envelope, so nothing signed for the old adapters
- * verifies against the new ones. Anything still pointing at the 0x7E1A…6914 set is talking to a
- * different protocol that happens to share a name.
+ * These are the THIRD set, deployed 2026-08-28. They replace the 2026-08-25 set, which had itself
+ * replaced the 2026-08-11 one — and the reason to spell that out here rather than just swap the
+ * strings is that each replacement is total. None of these contracts is upgradeable: `registry`,
+ * `engine` and `bondToken` are immutable, so a redeploy is always the whole set and every address
+ * on this page changes together. Nothing was carried over this time, not even `Halo2Verifier`,
+ * which the previous redeploy had reused.
+ *
+ * Superseded addresses are not deprecated so much as incompatible. The EIP-712 domain includes the
+ * verifying contract, so an attestation signed for a previous adapter does not verify at the
+ * current one, and there is no window in which two sets both work. Anything still pointing at the
+ * 0x0bC0…9142 set — or the 0x7E1A…6914 one before it — is talking to a different protocol that
+ * happens to share a name.
+ *
+ * The practical consequence, and the reason this comment keeps growing rather than being trimmed:
+ * agents registered against the old registry do not exist here. Their bonds, scores and execution
+ * history are still on chain at the old addresses, and this interface will never show them again.
+ * Testnet, so nobody is out of pocket — but the leaderboard starting empty is correct, not broken.
  *
  * Mainnet remains empty, and that is the current truth rather than an oversight. Nothing of ours
  * is deployed to BOT Chain.
@@ -84,14 +94,14 @@ export interface Contract {
  */
 export const ADDRESSES = {
   testnet: {
-    AgentRegistry: '0x0bC0F2dd3337004d7Adef8364Fd9Ff33B3959142',
-    ExecutionRouter: '0xd5AdD347ac5498199A3cdAaeb31d0fFD9Fc2b717',
-    ReputationEngine: '0xDF0E2D20E1Da72AcfaE834595631Fc0AF92C7bD4',
-    InputAttestor: '0x1F3EEbA18DD9D0FD84a5456E1D6F7394E4d07dc0',
-    SignatureAdapter: '0xf4dFcFb1cAE608b40F5a1F88CdEA0DAAdfF615AA',
-    TeeAdapter: '0xde2F8d5002c6d9f5249C393a10e27A3d8a8bFfD5',
-    ZkAdapter: '0x83Aa1c78bAdDdCF9Deb960fC3Cf7c1c3b946d1E3',
-    Halo2Verifier: '0x4A29F6F49Ef8c7ff6CbC8879659b5C79ADa154b7',
+    AgentRegistry: '0x39FF930E6974b22a07bdfAd8aDC9f3EE7172aA83',
+    ExecutionRouter: '0x987A177BB44fAc7F51580134a7B06A327313E099',
+    ReputationEngine: '0xBa49Ff343086E966B3172a29742ea5056553E7D1',
+    InputAttestor: '0x9afF2B7D5C8BA5D18F1906efafe1cEeccfe465B9',
+    SignatureAdapter: '0x5E0E99F76f7f77e345312d092E342Fee35eF112a',
+    TeeAdapter: '0x7dBC738d03f86893101b2Ce9D670C0542bb7cbE6',
+    ZkAdapter: '0x896BcAaE8DDbF69a9155D8c8f8BcC482F980FF1d',
+    Halo2Verifier: '0x8E2635D6d45D1D92b9Ab29d831918a52F111beb1',
     bondToken: '0x75edC9335175Fc0552D51D48439F229c10420fe3',
   },
   mainnet: {
@@ -110,7 +120,13 @@ export const ADDRESSES = {
 export const DEPLOY_BLOCK: Partial<Record<NetworkId, bigint>> = {
   // First block in which AgentRegistry has code, found by bisecting eth_getCode rather than
   // copied from a receipt — the manifest does not record creation transactions.
-  testnet: 21_141_227n,
+  //
+  // It must not be later than the first block of any contract whose logs are read here, and today
+  // that is ExecutionRouter alone (activity.ts). The router landed at 21,458,941, nineteen blocks
+  // after the registry, so the registry's block covers it. Moving this forward past a queried
+  // contract would silently truncate its history rather than fail — the feed would just look
+  // emptier than the chain is.
+  testnet: 21_458_928n,
 };
 
 export type ContractName =

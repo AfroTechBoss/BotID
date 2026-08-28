@@ -55,6 +55,15 @@ contract TeeAdapter is IVerificationAdapter, Ownable, ExecutionVerifier {
         return Tier.Silver;
     }
 
+    /// @inheritdoc IVerificationAdapter
+    /// @dev Unconditionally true. Enrolment is keyed by enclave key rather than by model, so
+    ///      capability here is a property of the signer and not of the commitment — and the
+    ///      signer is not knowable until the attestation arrives. Answering per-model would
+    ///      require a registry this adapter deliberately does not keep.
+    function canVerify(bytes32) external pure returns (bool) {
+        return true;
+    }
+
     function setNotary(address notary, bool allowed) external onlyOwner {
         notaries[notary] = allowed;
         emit NotarySet(notary, allowed);

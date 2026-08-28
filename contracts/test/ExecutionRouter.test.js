@@ -558,7 +558,11 @@ describe("ExecutionRouter", function () {
 
       const p = await env.registry.getProfile(agent.agentId);
       expect(p.openNotional).to.equal(0);
-      expect(p.score).to.be.greaterThan(5000);
+      // Exposure released, fee paid, score untouched. This assertion used to read
+      // `greaterThan(5000)` and was describing a bug rather than a requirement: nobody reported
+      // anything here, so there is nothing for the score to have learned. See
+      // SilentSettleGrief.test.js for what that reward was worth to an attacker.
+      expect(p.score).to.equal(5000);
     });
 
     it("refuses a late settle from the consumer", async function () {

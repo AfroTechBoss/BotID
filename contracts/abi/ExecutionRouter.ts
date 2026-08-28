@@ -95,6 +95,11 @@ export const executionRouterAbi = [
   },
   {
     "inputs": [],
+    "name": "NotEscalatable",
+    "type": "error"
+  },
+  {
+    "inputs": [],
     "name": "NotOperator",
     "type": "error"
   },
@@ -642,6 +647,25 @@ export const executionRouterAbi = [
   {
     "inputs": [],
     "name": "bootstrapped",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "agentId",
+        "type": "uint256"
+      }
+    ],
+    "name": "canEscalate",
     "outputs": [
       {
         "internalType": "bool",

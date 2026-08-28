@@ -117,6 +117,25 @@ export const zkAdapterAbi = [
         "internalType": "bytes32",
         "name": "modelCommitment",
         "type": "bytes32"
+      }
+    ],
+    "name": "canVerify",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "modelCommitment",
+        "type": "bytes32"
       },
       {
         "components": [

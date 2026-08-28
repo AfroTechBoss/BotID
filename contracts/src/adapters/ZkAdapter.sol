@@ -129,6 +129,16 @@ contract ZkAdapter is IVerificationAdapter, Ownable {
         return Tier.Gold;
     }
 
+    /// @inheritdoc IVerificationAdapter
+    /// @dev Mirrors the first check in `verify`: with no registered circuit there is no verifying
+    ///      key to check a proof against, so every proof for this model fails regardless of how
+    ///      it was produced. That distinction — "wrong proof" versus "no possible proof" — is
+    ///      invisible in `verify`'s boolean, and the router needs it to tell a real challenge
+    ///      from an unanswerable one.
+    function canVerify(bytes32 modelCommitment) external view returns (bool) {
+        return address(modelFor[modelCommitment].verifier) != address(0);
+    }
+
     /// @param inputScaleBits The circuit's `input_scale`. Read it from the model's
     ///        `settings.json`; guessing it makes every proof for this model fail closed.
     function setVerifier(bytes32 modelCommitment, IEzklVerifier verifier, uint8 inputScaleBits)

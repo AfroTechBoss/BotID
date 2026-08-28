@@ -639,11 +639,31 @@ Either way the settlement clock starts: 7 days.
 
 ### Step 5 — the challenge window (Bronze and Silver only)
 
-Anyone may call `challenge`, posting a deposit. The status becomes `Challenged` and the agent has
-6 hours to answer.
+Anyone may call `challenge`, posting a deposit — but only against an agent that could actually
+answer. The status becomes `Challenged` and the agent has 6 hours to produce a Gold proof.
 
 **Analogy:** demanding an inspection. It costs you something to demand it, so you don't do it
 idly — but if you're right, you're paid.
+
+**Who can be challenged.** Registering the circuit a Gold proof is checked against is
+`ZkAdapter.setVerifier`, which is owner-only — so whether an agent *can* escalate is not the
+agent's decision. Against an agent with no registered circuit the inspection has a predetermined
+result: it cannot pass, whatever it did. The sequence was post the deposit, wait 6 hours, take a
+bounty out of the bond, and get the deposit back — because the deposit is only forfeited on the
+branch where the agent *does* resolve. Free, repeatable, and it establishes nothing.
+
+So `challenge` asks `canEscalate(agentId)` first and reverts with `NotEscalatable` if the answer
+is no. It is read live rather than snapshotted at delivery, which fails safe both ways: an agent
+whose circuit is de-registered mid-flight stops being challengeable instead of becoming free to
+slash, and one that registers a circuit becomes challengeable exactly when it can answer.
+
+**The cost of this is real and worth stating: an agent with no registered circuit has deliveries
+nobody can dispute.** Its Bronze signature is backed by the bond and by `markExpired` alone.
+`canEscalate` is public precisely so a customer can check that before hiring — the honest answer
+is that the recourse was never there, not that it was taken away.
+
+**Analogy:** you cannot fine a contractor for failing an inspection you never licensed anyone to
+perform. What you can do is check, before you hire them, whether an inspection is available.
 
 Three ways out:
 
@@ -688,6 +708,19 @@ zero P&L, no breaches. The agent gets paid and its exposure is freed.
 
 Without this, a customer could hold an agent's fee and credit line hostage forever by simply
 saying nothing. **Analogy:** the invoice is deemed accepted if nobody disputes it in a month.
+
+**"At par" is about the money only. The score does not move here.** This is the one place the two
+meanings of settlement come apart, and it matters because they are not symmetric. A zeroed outcome
+is not a neutral grade: `quality()` starts at a perfect 10,000 and only ever subtracts, so no loss
+and no breaches reads as *flawless* rather than as *unknown*. Recorded at full weight, silence
+would have been the strongest compliment the protocol can pay — and an agent could manufacture it
+by ordering its own work through a second address that then says nothing, paying only the 5%
+protocol cut on a fee that returns to its other pocket. So the observation is recorded at **zero
+weight**, which `observe()` already treats as "leave the score alone". The execution still counts
+as activity and still pays; nobody vouched for it, so nobody's word is entered.
+
+**Analogy:** the invoice being deemed accepted means you get paid. It does not go in the file as a
+five-star review, because the customer never wrote one.
 
 ### Bad ending — `markExpired`
 
@@ -743,9 +776,10 @@ a much bigger one.**
                  │                        bounty to challenger,
                  │                        fee refunded
       settle  ───┤  or settleDefault after 7 days
-                 ▼
-             SETTLED  (terminal)
-             release credit, record outcome → SCORE MOVES,
+                 ▼                (same money, no score:
+             SETTLED  (terminal)   the outcome is recorded
+             release credit,       at zero weight)
+             record outcome → SCORE MOVES,
              fee paid: 95% agent, 5% treasury
 ```
 
@@ -2093,12 +2127,13 @@ locked while you're inside.
 |---|---|---|
 | `requestExecution(agentId, inputCommitment, notional, fee, deliverBy, inputURI)` | **anyone — the customer** | Order. Reserves credit, escrows the fee, returns the request id. Rejects a zero notional, a fee under the floor, and a deadline inside `minDeliveryWindow` |
 | `deliver(requestId, outputCommitment, inputBundle, attestation)` | **operator only** | Deliver. Checks inputs, checks evidence, sets the clocks |
-| `challenge(requestId)` | **anyone** | Demand escalation, posting a deposit |
+| `challenge(requestId)` | **anyone** | Demand escalation, posting a deposit. Only against an agent `canEscalate` answers true for |
 | `resolveChallenge(requestId, zkProof)` | **operator only** | Answer with a Gold proof. **The deposit goes to the agent owner** |
 | `slashUnresolvedChallenge(requestId)` | **anyone** | No proof in time. Slash, pay the challenger, refund the customer |
 | `finalize(requestId)` | **anyone** | Close an unchallenged window. The only lifecycle function with **no** reentrancy guard, because it moves no money |
 | `settle(requestId, outcome)` | **customer only** | Report the result. **The score moves here** |
-| `settleDefault(requestId)` | **anyone** | After the window, settle at par so a silent customer can't hold the agent hostage |
+| `settleDefault(requestId)` | **anyone** | After the window, settle at par so a silent customer can't hold the agent hostage. **The score does not move** — the outcome is recorded at zero weight |
+| `canEscalate(agentId)` | **view** | Whether the agent could answer a challenge with a Gold proof today. False means its deliveries are undisputable |
 | `reject(requestId)` | **operator only** | Decline an order, within `rejectionWindow` of it being placed. Releases the credit and refunds the fee. **No fault, no slash** |
 | `markExpired(requestId)` | **anyone** | Never delivered. Slash, record a liveness fault, refund the customer |
 

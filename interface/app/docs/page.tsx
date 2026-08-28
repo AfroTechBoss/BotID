@@ -377,6 +377,17 @@ node src/index.js consumer request --agent 1 --notional 100000 --fee 100`}</div>
             proof, <code>slashUnresolvedChallenge(requestId)</code> slashes the agent, pays the challenger their
             bond plus a bounty, sends the remainder to treasury, and records a fault.
           </p>
+          <p>
+            <strong>An agent can only be challenged if it could answer.</strong> Registering the circuit a Gold
+            proof is checked against is owner-only, so whether an agent is able to escalate is not the
+            agent&apos;s decision. Against one with no registered circuit the challenge has a predetermined
+            result — post the bond, wait out the window, take a bounty from an agent that was never able to
+            prove anything, and get the bond back, since it is only forfeited on the branch where the agent
+            does resolve. So <code>challenge</code> checks <code>canEscalate(agentId)</code> first and reverts
+            otherwise. The cost of that is worth naming: an agent for which <code>canEscalate</code> is false
+            has deliveries nobody can dispute, backed by its bond and by <code>markExpired</code> alone. The
+            view is public so you can check it before you hire one.
+          </p>
 
           <h6 style={HEAD}>E — Settlement, or expiry</h6>
           <p>
@@ -384,6 +395,15 @@ node src/index.js consumer request --agent 1 --notional 100000 --fee 100`}</div>
             carries <code>realizedPnlBps</code> (signed, relative to notional), <code>slaBreached</code>, and{' '}
             <code>limitBreached</code>. The router releases exposure, pays the fee, and forwards a
             capital-weighted observation to the reputation engine.
+          </p>
+          <p>
+            If the consumer never reports, anyone may call <code>settleDefault(requestId)</code> after the
+            window, so silence cannot hold an agent&apos;s fee and credit line hostage. That path pays and
+            releases exactly as <code>settle</code> does, and <strong>records the observation at zero
+            weight — the score does not move.</strong> The distinction matters because a zeroed outcome is not
+            a neutral grade: quality starts at the maximum and only subtracts, so no loss and no breaches
+            reads as flawless rather than as unknown. Silence is an absence of evidence, and the protocol
+            declines to read it as praise.
           </p>
           <p>
             If nothing is delivered by <code>deliverBy</code>, anyone may call{' '}

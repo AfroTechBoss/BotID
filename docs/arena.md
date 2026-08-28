@@ -263,8 +263,10 @@ reports, it does not challenge (§7). Runners are cached per model commitment, i
 `null` for a model the Arena has no runner for.
 
 **Honest degradation.** A request the Arena cannot grade is never settled with a fabricated number.
-The row is closed with a note and left for a watchtower's `settleDefault` to settle at par. Losing
-the sample is the correct price; a made-up number is a permanent entry in someone's reputation.
+The row is closed with a note and left for a watchtower's `settleDefault`, which pays the agent and
+frees its exposure while recording nothing about quality. Losing the sample is the correct price;
+a made-up number is a permanent entry in someone's reputation, and a default settle is not one —
+it moves no score at all.
 
 The same discipline governs `slaBreached` and `limitBreached`, which are slashes:
 

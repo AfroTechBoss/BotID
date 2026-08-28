@@ -89,6 +89,7 @@ contract ExecutionRouter is Timelocked {
     error FeeBelowFloor();
     error DeliveryWindowTooShort();
     error ZeroNotional();
+    error NotEscalatable();
 
     event ExecutionRequested(
         bytes32 indexed requestId,
@@ -401,11 +402,35 @@ contract ExecutionRouter is Timelocked {
 
     // ---------------------------------------------------------------- phase D: challenge
 
+    /// @notice Whether `agentId` could answer a challenge with a Gold proof today.
+    /// @dev Read this before challenging, and before hiring: an agent that answers false has
+    ///      deliveries nobody can dispute, which is a real thing to know about it either way.
+    ///      False when no Gold adapter is set at all, since then no delivery is escalatable.
+    function canEscalate(uint256 agentId) public view returns (bool) {
+        IVerificationAdapter gold = adapters[Tier.Gold];
+        if (address(gold) == address(0)) return false;
+        return gold.canVerify(registry.getAgent(agentId).modelCommitment);
+    }
+
     /// @notice Challenge a Bronze/Silver delivery. The agent must escalate to a Gold proof.
+    /// @dev Permissionless and deliberately so — a challenge anyone can raise is what makes a
+    ///      Bronze signature worth anything. But that only holds where escalation is possible.
+    ///      Against an agent with no registered circuit the sequence is: pay
+    ///      `challengeBondAmount`, wait out `escalationWindow`, collect `challengerBountyBps` of
+    ///      a `faultSlashBps` slash and get the bond back — profitable, repeatable, and it
+    ///      establishes nothing about the delivery, because the agent's failure to produce a
+    ///      proof was structural rather than evidence of a lie. So the gate below is not a
+    ///      convenience for agents; without it `challenge` is a paid weapon rather than a check.
+    ///
+    ///      Read live rather than snapshotted at delivery, which errs the safe way in both
+    ///      directions: an agent whose circuit is de-registered after delivering stops being
+    ///      challengeable rather than becoming free to slash, and one that registers a circuit
+    ///      afterwards becomes challengeable exactly when it can answer.
     function challenge(bytes32 requestId) external nonReentrant {
         Request storage r = _load(requestId);
         if (r.status != Status.Delivered) revert BadStatus();
         if (block.timestamp >= r.finalizeAt) revert DeadlinePassed();
+        if (!canEscalate(r.agentId)) revert NotEscalatable();
 
         r.status = Status.Challenged;
         r.challenger = msg.sender;
@@ -482,26 +507,50 @@ contract ExecutionRouter is Timelocked {
         if (r.status != Status.Finalized) revert BadStatus();
         if (msg.sender != r.consumer) revert NotConsumer();
         if (block.timestamp > r.settleBy) revert DeadlinePassed();
-        _settle(requestId, r, outcome);
+        // A reported outcome is evidence, weighted by the capital that was at risk behind it.
+        _settle(requestId, r, outcome, r.notional);
     }
 
     /// @notice Settle at par once the window lapses, so a silent consumer cannot hold an
     ///         agent's exposure and fee hostage indefinitely.
+    /// @dev Releases exposure and pays the fee exactly as `settle` does, but records the
+    ///      observation at zero weight — the score comes out of this untouched.
+    ///
+    ///      The distinction matters because a zeroed `Outcome` is not neutral input to
+    ///      `ScoreMath.quality`: it starts at MAX_SCORE and only ever subtracts, so no loss, no
+    ///      SLA breach and no limit breach scores a flat 10,000. Feeding that in at full
+    ///      `notional` weight made a consumer's silence the strongest positive signal the
+    ///      protocol can emit, and an agent could manufacture it at will by commissioning its
+    ///      own work through an address that then never settles. Reputation was buyable for the
+    ///      fee and the wait.
+    ///
+    ///      Zero weight is the honest encoding rather than a patch: `ScoreMath.observe` already
+    ///      returns the score unchanged when weight is zero, so this reuses a designed path, and
+    ///      "the counterparty never reported" is an absence of evidence rather than evidence of
+    ///      quality. The work still happened and was verified, so it still counts as activity —
+    ///      `settledExecutions` increments and `lastActiveAt` is stamped as usual.
     function settleDefault(bytes32 requestId) external nonReentrant {
         Request storage r = _load(requestId);
         if (r.status != Status.Finalized) revert BadStatus();
         if (block.timestamp <= r.settleBy) revert DeadlineNotPassed();
         _settle(
-            requestId, r, Outcome({realizedPnlBps: 0, slaBreached: false, limitBreached: false})
+            requestId, r, Outcome({realizedPnlBps: 0, slaBreached: false, limitBreached: false}), 0
         );
     }
 
-    function _settle(bytes32 requestId, Request storage r, Outcome memory outcome) private {
+    /// @param scoreWeight Capital to weight the reputation observation by. Normally `r.notional`;
+    ///        zero on paths where `outcome` is a placeholder nobody attested to.
+    function _settle(
+        bytes32 requestId,
+        Request storage r,
+        Outcome memory outcome,
+        uint256 scoreWeight
+    ) private {
         r.status = Status.Settled;
 
         AgentRegistry.Agent memory agent = registry.getAgent(r.agentId);
         registry.release(r.agentId, r.notional);
-        engine.recordOutcome(r.agentId, r.consumer, outcome, r.notional, agent.lossToleranceBps);
+        engine.recordOutcome(r.agentId, r.consumer, outcome, scoreWeight, agent.lossToleranceBps);
 
         uint256 fee = r.fee;
         if (fee != 0) {

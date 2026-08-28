@@ -16,6 +16,11 @@ interface IReputationEngine {
     /// @notice Fold a settled execution into the agent's score, weighted by capital at risk.
     /// @param consumer Who reported this outcome. The weight is drawn from that counterparty's
     ///        budget, so no single one can define an agent's score — see `consumerWeightCap`.
+    /// @param notional How much to weight the observation by, which is the request's notional
+    ///        on every path where a counterparty actually reported. Callers must pass zero when
+    ///        `outcome` is a placeholder rather than a report — see `ExecutionRouter
+    ///        .settleDefault`. At zero the execution still counts and still pays; it just does
+    ///        not move the score, because nobody said anything about how it went.
     function recordOutcome(
         uint256 agentId,
         address consumer,

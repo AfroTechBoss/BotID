@@ -188,13 +188,25 @@ owner corrects it — which is the safe direction to fail in.
 
 ### Phase D — Challenge (Bronze/Silver only)
 
-- `challenge(requestId)` — anyone, posting `challengeBond`, before `finalizeAt`.
+- `challenge(requestId)` — anyone, posting `challengeBond`, before `finalizeAt`, and only against
+  an agent that `canEscalate(agentId)` answers true for.
 - `resolveChallenge(requestId, attestation)` — the agent submits a Gold-tier proof.
   On success the challenger's bond is forfeited to the agent, and the execution finalizes at
   Gold. This makes frivolous challenges costly.
 - `slashUnresolvedChallenge(requestId)` — after the escalation deadline with no valid proof, the
   agent is slashed. The challenger receives their bond plus a bounty; the remainder goes to
   the protocol treasury. The execution is recorded as a **fault**.
+
+**Escalation has to be possible for the challenge to mean anything.** `ZkAdapter.setVerifier` is
+owner-only, so whether an agent *could* produce a Gold proof is not the agent's decision. Against
+an agent with no registered circuit the sequence above is not a check on the delivery — it is
+post a bond, wait out the window, collect a bounty from an agent that was never able to answer,
+and get the bond back, because the bond is only forfeited on the path where the agent resolves.
+So `challenge` asks the Gold adapter first and reverts with `NotEscalatable` when the answer is
+no. The consequence is worth stating plainly rather than burying: **an agent with no registered
+circuit has deliveries nobody can dispute.** `canEscalate(agentId)` is public so a consumer can
+see that before it hires one, and it is read live at challenge time rather than snapshotted at
+delivery — which fails the safe way in both directions.
 
 ### Phase E — Settlement
 

@@ -21,4 +21,18 @@ interface IVerificationAdapter {
         external
         view
         returns (bool ok);
+
+    /// @notice Whether this adapter could accept *any* attestation for `modelCommitment`.
+    /// @dev Capability, not validity: a true answer says a correct attestation would be checked
+    ///      against something, not that any particular one passes. `verify` remains the only
+    ///      thing that decides an actual delivery.
+    ///
+    ///      This exists because the router needs to ask "can this agent be held to a proof"
+    ///      *before* it accepts a challenge. A challenge whose only possible outcome is the
+    ///      agent failing to escalate is not a check on the agent, it is a paid attack on it —
+    ///      see `ExecutionRouter.challenge`. Implementations must answer for the adapter's own
+    ///      configuration only, and must not revert.
+    /// @param modelCommitment The agent's registered model commitment.
+    /// @return True if an attestation naming this model could be verified today.
+    function canVerify(bytes32 modelCommitment) external view returns (bool);
 }

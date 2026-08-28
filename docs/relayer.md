@@ -430,7 +430,7 @@ Four buttons:
 | `markExpired` | An agent that took work and vanished is not faulted until called. **Pays a bounty, so this one funds itself** |
 | `slashUnresolvedChallenge` | An unanswered challenge does nothing on its own. Anyone may call it — but the bounty goes to the challenger, not the caller |
 | `finalize` | Moves a delivery out of its challenge window so it can settle |
-| `settleDefault` | Stops a silent consumer holding an agent's exposure hostage |
+| `settleDefault` | Stops a silent consumer holding an agent's exposure hostage. Pays and releases; records the outcome at zero weight, so it moves no score |
 
 Note the asymmetry: only one of the four pays the caller. The other three are run because whoever
 runs a watchtower wants the protocol to work — an agent operator has every reason to keep one

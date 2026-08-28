@@ -67,8 +67,7 @@ const TERMINAL = new Set([Status.None, Status.Settled, Status.Expired, Status.Fa
  * Every one of these is something that otherwise surfaces hours later as an unexplained revert
  * or, worse, as a settled number nobody should have trusted. The windows are read from the
  * deployed router rather than assumed: they are owner-settable, and a hold that has drifted
- * outside them is the difference between grading an agent and letting `settleDefault` grade it
- * at par on the Arena's behalf.
+ * outside them is the difference between grading an agent and never grading it at all.
  */
 async function preflight(contracts) {
   const a = config.arena;
@@ -86,8 +85,9 @@ async function preflight(contracts) {
   if (holdSec >= settlementWindow) {
     throw new Error(
       `ARENA_HOLD_HOURS=${a.holdHours} exceeds the router's ${settlementWindow}s settlement ` +
-        "window — a watchtower would settleDefault at par before the hold expired, which is " +
-        "reporting zero with extra steps"
+        "window — a watchtower would settleDefault before the hold expired, which releases the " +
+        "exposure and pays the fee but records the outcome at zero weight, so the Arena would " +
+        "run every position and move no score at all"
     );
   }
   if (a.deliverWindowSec <= 0) throw new Error("ARENA_DELIVER_WINDOW_SEC must be positive");

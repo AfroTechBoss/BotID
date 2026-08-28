@@ -17,6 +17,14 @@ contract SignatureAdapter is IVerificationAdapter, ExecutionVerifier {
         return Tier.Bronze;
     }
 
+    /// @inheritdoc IVerificationAdapter
+    /// @dev Unconditionally true. An operator key is bound per-execution through `ctx.operator`
+    ///      and needs no per-model registration, so there is no model this adapter is unable to
+    ///      check a signature for.
+    function canVerify(bytes32) external pure returns (bool) {
+        return true;
+    }
+
     function verify(VerificationContext calldata ctx, bytes calldata attestation)
         external
         view

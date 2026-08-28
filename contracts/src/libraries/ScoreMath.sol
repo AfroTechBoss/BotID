@@ -33,6 +33,24 @@ library ScoreMath {
         return above ? uint32(NEUTRAL + delta) : uint32(NEUTRAL - delta);
     }
 
+    /// @notice Decay an arbitrary magnitude toward zero with a fixed half-life.
+    /// @dev `decay` pulls a score toward NEUTRAL because a score is an opinion that goes stale.
+    ///      This pulls toward zero, for quantities that are a *spent budget* rather than an
+    ///      opinion — see `ReputationEngine.consumerWeightCap`. Same integer-halvings shape.
+    function fade(uint256 value, uint256 elapsed, uint256 halfLife) internal pure returns (uint256) {
+        if (value == 0 || elapsed == 0 || halfLife == 0) return value;
+
+        uint256 halvings = elapsed / halfLife;
+        if (halvings >= 128) return 0;
+        value >>= halvings;
+
+        uint256 remainder = elapsed % halfLife;
+        if (remainder != 0) {
+            value -= (value * remainder) / (2 * halfLife);
+        }
+        return value;
+    }
+
     /// @notice Fold one observation into the score, weighted by capital at risk.
     /// @param score Current (already decayed) score.
     /// @param observedQuality Quality of this execution, 0..MAX_SCORE.

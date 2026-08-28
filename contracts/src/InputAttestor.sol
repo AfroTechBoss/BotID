@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.24;
 
+import {Digest, EIP712Domain} from "./libraries/Digest.sol";
 import {Ownable} from "./libraries/Utils.sol";
 import {IInputAttestor} from "./interfaces/IInputAttestor.sol";
 
@@ -15,7 +16,7 @@ import {IInputAttestor} from "./interfaces/IInputAttestor.sol";
 ///      a quorum of registered publishers and each fresh relative to the execution deadline.
 ///      The same commitment is bound into the verification artifact by the adapter, so the
 ///      inputs the agent proved over are provably the inputs the consumer commissioned.
-contract InputAttestor is IInputAttestor, Ownable {
+contract InputAttestor is IInputAttestor, Ownable, EIP712Domain {
     bytes32 public constant FEED_TYPEHASH =
         keccak256("FeedReading(bytes32 feedId,bytes32 valueHash,uint64 timestamp)");
 
@@ -45,17 +46,17 @@ contract InputAttestor is IInputAttestor, Ownable {
         emit QuorumSet(quorum_, maxAge_);
     }
 
-    /// @notice Domain-separated digest a publisher signs for a single feed reading.
+    /// @notice The EIP-712 digest a publisher signs for a single feed reading.
+    /// @dev The chain id and this address moved out of the struct hash and into the domain, so
+    ///      `FEED_TYPEHASH` is unchanged and still describes exactly the three fields signed.
+    ///      Both values still bind the signature; they are one level up.
     function feedDigest(bytes32 feedId, bytes32 valueHash, uint64 timestamp)
         public
         view
         returns (bytes32)
     {
-        return keccak256(
-            abi.encode(
-                FEED_TYPEHASH, block.chainid, address(this), feedId, valueHash, timestamp
-            )
-        );
+        bytes32 structHash = keccak256(abi.encode(FEED_TYPEHASH, feedId, valueHash, timestamp));
+        return Digest.toTypedDataHash(address(this), structHash);
     }
 
     /// @notice Canonical commitment over an ordered bundle of feed readings.

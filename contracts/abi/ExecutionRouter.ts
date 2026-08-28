@@ -40,6 +40,11 @@ export const executionRouterAbi = [
   },
   {
     "inputs": [],
+    "name": "AlreadyBootstrapped",
+    "type": "error"
+  },
+  {
+    "inputs": [],
     "name": "BadStatus",
     "type": "error"
   },
@@ -51,6 +56,11 @@ export const executionRouterAbi = [
   {
     "inputs": [],
     "name": "DeadlinePassed",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "DeliveryWindowTooShort",
     "type": "error"
   },
   {
@@ -75,6 +85,11 @@ export const executionRouterAbi = [
   },
   {
     "inputs": [],
+    "name": "NotAContract",
+    "type": "error"
+  },
+  {
+    "inputs": [],
     "name": "NotConsumer",
     "type": "error"
   },
@@ -90,7 +105,22 @@ export const executionRouterAbi = [
   },
   {
     "inputs": [],
+    "name": "NotQueued",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "Premature",
+    "type": "error"
+  },
+  {
+    "inputs": [],
     "name": "Reentrancy",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "Stale",
     "type": "error"
   },
   {
@@ -109,6 +139,68 @@ export const executionRouterAbi = [
     "type": "error"
   },
   {
+    "inputs": [],
+    "name": "ZeroNotional",
+    "type": "error"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "bytes32",
+        "name": "action",
+        "type": "bytes32"
+      }
+    ],
+    "name": "ActionCancelled",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "bytes32",
+        "name": "action",
+        "type": "bytes32"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint64",
+        "name": "eta",
+        "type": "uint64"
+      }
+    ],
+    "name": "ActionQueued",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "enum Tier",
+        "name": "tier",
+        "type": "uint8"
+      },
+      {
+        "indexed": false,
+        "internalType": "address",
+        "name": "adapter",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint64",
+        "name": "eta",
+        "type": "uint64"
+      }
+    ],
+    "name": "AdapterQueued",
+    "type": "event"
+  },
+  {
     "anonymous": false,
     "inputs": [
       {
@@ -125,6 +217,12 @@ export const executionRouterAbi = [
       }
     ],
     "name": "AdapterSet",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [],
+    "name": "Bootstrapped",
     "type": "event"
   },
   {
@@ -291,6 +389,31 @@ export const executionRouterAbi = [
         "internalType": "address",
         "name": "consumer",
         "type": "address"
+      }
+    ],
+    "name": "ExecutionRejected",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "bytes32",
+        "name": "requestId",
+        "type": "bytes32"
+      },
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "agentId",
+        "type": "uint256"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "consumer",
+        "type": "address"
       },
       {
         "indexed": false,
@@ -357,6 +480,38 @@ export const executionRouterAbi = [
       {
         "indexed": true,
         "internalType": "address",
+        "name": "attestor",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint64",
+        "name": "eta",
+        "type": "uint64"
+      }
+    ],
+    "name": "InputAttestorQueued",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "attestor",
+        "type": "address"
+      }
+    ],
+    "name": "InputAttestorSet",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
         "name": "from",
         "type": "address"
       },
@@ -397,9 +552,59 @@ export const executionRouterAbi = [
   },
   {
     "inputs": [],
+    "name": "TIMELOCK_DELAY",
+    "outputs": [
+      {
+        "internalType": "uint64",
+        "name": "",
+        "type": "uint64"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "TIMELOCK_GRACE",
+    "outputs": [
+      {
+        "internalType": "uint64",
+        "name": "",
+        "type": "uint64"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
     "name": "acceptOwnership",
     "outputs": [],
     "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "enum Tier",
+        "name": "tier",
+        "type": "uint8"
+      },
+      {
+        "internalType": "contract IVerificationAdapter",
+        "name": "adapter",
+        "type": "address"
+      }
+    ],
+    "name": "adapterAction",
+    "outputs": [
+      {
+        "internalType": "bytes32",
+        "name": "",
+        "type": "bytes32"
+      }
+    ],
+    "stateMutability": "pure",
     "type": "function"
   },
   {
@@ -432,6 +637,32 @@ export const executionRouterAbi = [
       }
     ],
     "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "bootstrapped",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "action",
+        "type": "bytes32"
+      }
+    ],
+    "name": "cancel",
+    "outputs": [],
+    "stateMutability": "nonpayable",
     "type": "function"
   },
   {
@@ -567,6 +798,13 @@ export const executionRouterAbi = [
     "type": "function"
   },
   {
+    "inputs": [],
+    "name": "finalizeBootstrap",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
     "inputs": [
       {
         "internalType": "bytes32",
@@ -676,6 +914,25 @@ export const executionRouterAbi = [
     "type": "function"
   },
   {
+    "inputs": [
+      {
+        "internalType": "contract IInputAttestor",
+        "name": "attestor",
+        "type": "address"
+      }
+    ],
+    "name": "inputAttestorAction",
+    "outputs": [
+      {
+        "internalType": "bytes32",
+        "name": "",
+        "type": "bytes32"
+      }
+    ],
+    "stateMutability": "pure",
+    "type": "function"
+  },
+  {
     "inputs": [],
     "name": "livenessSlashBps",
     "outputs": [
@@ -699,6 +956,19 @@ export const executionRouterAbi = [
     "name": "markExpired",
     "outputs": [],
     "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "minDeliveryWindow",
+    "outputs": [
+      {
+        "internalType": "uint64",
+        "name": "",
+        "type": "uint64"
+      }
+    ],
+    "stateMutability": "view",
     "type": "function"
   },
   {
@@ -754,6 +1024,37 @@ export const executionRouterAbi = [
     "type": "function"
   },
   {
+    "inputs": [
+      {
+        "internalType": "enum Tier",
+        "name": "tier",
+        "type": "uint8"
+      },
+      {
+        "internalType": "contract IVerificationAdapter",
+        "name": "adapter",
+        "type": "address"
+      }
+    ],
+    "name": "queueAdapter",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "contract IInputAttestor",
+        "name": "attestor",
+        "type": "address"
+      }
+    ],
+    "name": "queueInputAttestor",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
     "inputs": [],
     "name": "registry",
     "outputs": [
@@ -761,6 +1062,32 @@ export const executionRouterAbi = [
         "internalType": "contract AgentRegistry",
         "name": "",
         "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "requestId",
+        "type": "bytes32"
+      }
+    ],
+    "name": "reject",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "rejectionWindow",
+    "outputs": [
+      {
+        "internalType": "uint64",
+        "name": "",
+        "type": "uint64"
       }
     ],
     "stateMutability": "view",
@@ -842,6 +1169,24 @@ export const executionRouterAbi = [
       }
     ],
     "name": "setAdapter",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint64",
+        "name": "minDeliveryWindow_",
+        "type": "uint64"
+      },
+      {
+        "internalType": "uint64",
+        "name": "rejectionWindow_",
+        "type": "uint64"
+      }
+    ],
+    "name": "setDeliveryWindows",
     "outputs": [],
     "stateMutability": "nonpayable",
     "type": "function"
@@ -992,6 +1337,25 @@ export const executionRouterAbi = [
     "name": "slashUnresolvedChallenge",
     "outputs": [],
     "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "",
+        "type": "bytes32"
+      }
+    ],
+    "name": "timelockEta",
+    "outputs": [
+      {
+        "internalType": "uint64",
+        "name": "",
+        "type": "uint64"
+      }
+    ],
+    "stateMutability": "view",
     "type": "function"
   },
   {

@@ -2,7 +2,7 @@
 pragma solidity ^0.8.24;
 
 import {Outcome, Request, Status, Tier, VerificationContext} from "./libraries/Types.sol";
-import {IERC20, Ownable, SafeTransfer} from "./libraries/Utils.sol";
+import {IERC20, Ownable, SafeTransfer, Timelocked} from "./libraries/Utils.sol";
 import {AgentRegistry} from "./AgentRegistry.sol";
 import {FaultKind, IReputationEngine} from "./interfaces/IReputationEngine.sol";
 import {IInputAttestor} from "./interfaces/IInputAttestor.sol";
@@ -20,12 +20,15 @@ import {IVerificationAdapter} from "./interfaces/IVerificationAdapter.sol";
 ///      2. Non-delivery is a first-class fault. In the v0 design the only negative signal was
 ///         a failed proof, which never lands on chain because it reverts. Here the negative
 ///         signal is a request that was accepted and not honoured, which is what actually
-///         happens when an agent fails.
+///         happens when an agent fails. Acceptance has to be real for that to be fair, so an
+///         operator may decline a request at order time (`reject`) and every request must allow
+///         a deliverable window (`minDeliveryWindow`) — otherwise "did not honour it" collapses
+///         into "was named in it", and the fault becomes a weapon anyone can point at any agent.
 ///
 ///      3. Cheap tiers are made honest by escalation, not by trust. A Bronze or Silver delivery
 ///         can be challenged, and the agent must then produce a Gold-tier proof of the same
 ///         execution or be slashed.
-contract ExecutionRouter is Ownable {
+contract ExecutionRouter is Timelocked {
     using SafeTransfer for IERC20;
 
     IERC20 public immutable bondToken;
@@ -38,6 +41,18 @@ contract ExecutionRouter is Ownable {
     uint64 public challengeWindow = 1 hours;
     uint64 public escalationWindow = 6 hours;
     uint64 public settlementWindow = 7 days;
+
+    /// @notice Shortest delivery window a request may specify, measured from its own creation.
+    /// @dev Without a floor here `deliverBy` may be the very next block, and *every* request is
+    ///      undeliverable by construction — the agent is slashed for a deadline no operator
+    ///      could have met. That is true even of a request that is honest in every other
+    ///      respect, so no amount of validation on `inputCommitment` substitutes for it.
+    uint64 public minDeliveryWindow = 15 minutes;
+
+    /// @notice How long after creation an operator may decline a request. See `reject`.
+    /// @dev Must stay strictly below `minDeliveryWindow`, so the right to decline always
+    ///      expires before the earliest deadline a request could carry.
+    uint64 public rejectionWindow = 5 minutes;
     uint256 public challengeBondAmount = 100e18;
     uint32 public faultSlashBps = 2_000; // of remaining bond, on a lost challenge
     uint32 public livenessSlashBps = 200; // of remaining bond, on non-delivery
@@ -72,6 +87,8 @@ contract ExecutionRouter is Ownable {
     error NoAdapter();
     error InvalidParameter();
     error FeeBelowFloor();
+    error DeliveryWindowTooShort();
+    error ZeroNotional();
 
     event ExecutionRequested(
         bytes32 indexed requestId,
@@ -92,7 +109,13 @@ contract ExecutionRouter is Ownable {
     event ExecutionFinalized(bytes32 indexed requestId, Tier tier);
     event ExecutionSettled(bytes32 indexed requestId, uint256 indexed agentId, int256 realizedPnlBps);
     event ExecutionExpired(bytes32 indexed requestId, uint256 indexed agentId, uint256 slashed);
+    event ExecutionRejected(
+        bytes32 indexed requestId, uint256 indexed agentId, address indexed consumer
+    );
     event AdapterSet(Tier indexed tier, address adapter);
+    event InputAttestorSet(address indexed attestor);
+    event AdapterQueued(Tier indexed tier, address adapter, uint64 eta);
+    event InputAttestorQueued(address indexed attestor, uint64 eta);
     event ParametersUpdated();
 
     constructor(
@@ -119,15 +142,54 @@ contract ExecutionRouter is Ownable {
 
     // ---------------------------------------------------------------- admin
 
+    /// @dev An adapter *is* the verification. Swapping the Bronze adapter for one whose `verify`
+    ///      returns true unconditionally does not look like theft in any event this contract
+    ///      emits — every delivery afterwards is simply accepted, and every challenge against one
+    ///      loses. This is the single most valuable thing the owner key can do, so it is the one
+    ///      the notice period exists for.
+    function queueAdapter(Tier tier, IVerificationAdapter adapter) external {
+        emit AdapterQueued(tier, address(adapter), _queue(_adapterAction(tier, adapter)));
+    }
+
     function setAdapter(Tier tier, IVerificationAdapter adapter) external onlyOwner {
+        _consume(_adapterAction(tier, adapter));
         if (tier == Tier.None) revert InvalidParameter();
         if (address(adapter) != address(0) && adapter.tier() != tier) revert InvalidParameter();
         adapters[tier] = adapter;
         emit AdapterSet(tier, address(adapter));
     }
 
+    /// @dev The attestor decides whether the inputs an execution claims were really published.
+    ///      An attestor that accepts anything lets an agent pick its inputs after the fact, which
+    ///      is the stale-input attack the commitment scheme exists to prevent.
+    function queueInputAttestor(IInputAttestor attestor) external {
+        emit InputAttestorQueued(address(attestor), _queue(_attestorAction(attestor)));
+    }
+
+    /// @dev Emitted now. This setter previously changed where every input bundle is checked and
+    ///      left no trace but the getter.
     function setInputAttestor(IInputAttestor attestor) external onlyOwner {
+        _consume(_attestorAction(attestor));
         inputAttestor = attestor;
+        emit InputAttestorSet(address(attestor));
+    }
+
+    /// @notice The action id `queueAdapter(tier, adapter)` produces, and `cancel` expects.
+    function adapterAction(Tier tier, IVerificationAdapter adapter) external pure returns (bytes32) {
+        return _adapterAction(tier, adapter);
+    }
+
+    /// @notice The action id `queueInputAttestor(attestor)` produces. See `adapterAction`.
+    function inputAttestorAction(IInputAttestor attestor) external pure returns (bytes32) {
+        return _attestorAction(attestor);
+    }
+
+    function _adapterAction(Tier tier, IVerificationAdapter adapter) private pure returns (bytes32) {
+        return keccak256(abi.encode(this.setAdapter.selector, tier, address(adapter)));
+    }
+
+    function _attestorAction(IInputAttestor attestor) private pure returns (bytes32) {
+        return keccak256(abi.encode(this.setInputAttestor.selector, address(attestor)));
     }
 
     /// @notice Set the fee floor, in bps of notional. Zero disables it.
@@ -139,6 +201,28 @@ contract ExecutionRouter is Ownable {
     function setMinFeeBps(uint32 minFeeBps_) external onlyOwner {
         if (minFeeBps_ > 1_000) revert InvalidParameter();
         minFeeBps = minFeeBps_;
+        emit ParametersUpdated();
+    }
+
+    /// @notice Set the floor on a request's delivery window, and the operator's window to decline.
+    /// @dev Kept off `setParameters` for the reason given on `setMinFeeBps`, and because these
+    ///      two are the only parameters with an invariant *between* them: `rejectionWindow_`
+    ///      must be strictly shorter than `minDeliveryWindow_`. Setting them in one call is what
+    ///      makes that invariant checkable at all — as two separate setters there would be an
+    ///      ordering in which governance passes through a state that violates it.
+    ///
+    ///      Both must be non-zero. A zero `minDeliveryWindow_` restores the next-block deadline
+    ///      that made every request undeliverable; a zero `rejectionWindow_` leaves the agent
+    ///      with no way to decline. Either one alone reopens the griefing vector, so neither is
+    ///      offered as a way to switch the mechanism off.
+    function setDeliveryWindows(uint64 minDeliveryWindow_, uint64 rejectionWindow_)
+        external
+        onlyOwner
+    {
+        if (minDeliveryWindow_ == 0 || rejectionWindow_ == 0) revert InvalidParameter();
+        if (rejectionWindow_ >= minDeliveryWindow_) revert InvalidParameter();
+        minDeliveryWindow = minDeliveryWindow_;
+        rejectionWindow = rejectionWindow_;
         emit ParametersUpdated();
     }
 
@@ -161,6 +245,13 @@ contract ExecutionRouter is Ownable {
         if (settlementWindow_ + escalationWindow_ >= registry.UNBONDING_PERIOD()) {
             revert InvalidParameter();
         }
+        // `challenge` collects the full uint256 but records `uint128(challengeBondAmount)`, and
+        // every refund path pays out the recorded field. Above 2^128 those two disagree and the
+        // difference is gone — not refunded, not recoverable, and not visible in any event,
+        // because a truncating cast is silent by construction. The bound is enforced here rather
+        // than at the cast so the failure lands on the governance call that is wrong, where it
+        // can still be corrected, instead of on the first challenger to post a bond.
+        if (challengeBondAmount_ > type(uint128).max) revert InvalidParameter();
         challengeWindow = challengeWindow_;
         escalationWindow = escalationWindow_;
         settlementWindow = settlementWindow_;
@@ -192,7 +283,18 @@ contract ExecutionRouter is Ownable {
         uint64 deliverBy,
         string calldata inputURI
     ) external nonReentrant returns (bytes32 requestId) {
-        if (deliverBy <= block.timestamp) revert DeadlinePassed();
+        // Not merely "in the future" — far enough into it that an operator could actually have
+        // delivered. See `minDeliveryWindow`.
+        if (deliverBy < block.timestamp + minDeliveryWindow) revert DeliveryWindowTooShort();
+
+        // A request with nothing at risk still opens a live, still-slashable obligation, but
+        // `reserve(agentId, 0)` adds nothing to `openNotional` — and `openNotional == 0` is the
+        // whole of the outstanding-liability gate on `AgentRegistry.withdrawEarly`. A consumer
+        // could therefore park a zero-notional request against an agent, watch it walk out with
+        // its bond, and leave `_slash` computing a percentage of nothing. The gate reads
+        // `openNotional` as a proxy for "no open requests", so this is what makes the proxy
+        // faithful: every live request now contributes to the number the gate looks at.
+        if (notional == 0) revert ZeroNotional();
 
         // Price the work against notional, not against a number the counterparties agree on
         // privately. See `minFeeBps`.
@@ -307,6 +409,8 @@ contract ExecutionRouter is Ownable {
 
         r.status = Status.Challenged;
         r.challenger = msg.sender;
+        // Safe: `setParameters` holds `challengeBondAmount` inside uint128, which is what makes
+        // the amount collected below and the amount refunded later the same number.
         r.challengeBond = uint128(challengeBondAmount);
         r.escalationDeadline = uint64(block.timestamp) + escalationWindow;
 
@@ -397,7 +501,7 @@ contract ExecutionRouter is Ownable {
 
         AgentRegistry.Agent memory agent = registry.getAgent(r.agentId);
         registry.release(r.agentId, r.notional);
-        engine.recordOutcome(r.agentId, outcome, r.notional, agent.lossToleranceBps);
+        engine.recordOutcome(r.agentId, r.consumer, outcome, r.notional, agent.lossToleranceBps);
 
         uint256 fee = r.fee;
         if (fee != 0) {
@@ -409,8 +513,54 @@ contract ExecutionRouter is Ownable {
         emit ExecutionSettled(requestId, r.agentId, outcome.realizedPnlBps);
     }
 
+    /// @notice The operator declines a request it will not serve. No fault, no slash.
+    /// @dev `requestExecution` is permissionless and takes `inputCommitment` on trust — it is a
+    ///      bare bytes32, and nothing on chain can tell a commitment to a real publisher-signed
+    ///      bundle from a number someone invented. A request built on an invented commitment can
+    ///      never satisfy `deliver`'s attestation check, so before this function existed such a
+    ///      request was undeliverable by construction, and the agent named in it had no answer:
+    ///      it could not deliver, and it could not decline. Anyone could therefore mint a
+    ///      liveness fault against any active agent for the price of gas, collect
+    ///      `challengerBountyBps` of the resulting slash by calling `markExpired` themselves,
+    ///      and repeat. The fault was recorded against the agent for a failure that was not the
+    ///      agent's, and `ReputationEngine` deliberately does not let volume dilute a fault, so
+    ///      there was no recovering from it either.
+    ///
+    ///      The defence is the right to decline, and it has to be time-boxed to be honest.
+    ///      Rejection is open only for `rejectionWindow` after creation — a decision made at
+    ///      *order* time, before the agent has learned anything about how the run would have
+    ///      gone. An unbounded right to decline would be a different thing entirely: an agent
+    ///      would sit on a request until it could see it was going to miss, then reject at
+    ///      `deliverBy - 1`, and `markExpired` would never fire again.
+    ///
+    ///      Analogy: a market maker may decline to quote, but may not withdraw a quote it has
+    ///      already filled. Declining is free; reneging is what the liveness fault is for.
+    ///
+    ///      The `deliverBy` bound is redundant while `rejectionWindow < minDeliveryWindow`, which
+    ///      `setDeliveryWindows` enforces. It is here anyway because that invariant binds the
+    ///      parameters at the time they are set, not the requests already in flight: widening
+    ///      `rejectionWindow` would otherwise hand every open request a retroactive escape from a
+    ///      deadline it had already blown.
+    function reject(bytes32 requestId) external nonReentrant {
+        Request storage r = _load(requestId);
+        if (r.status != Status.Pending) revert BadStatus();
+        if (msg.sender != registry.getAgent(r.agentId).operator) revert NotOperator();
+        if (block.timestamp > r.createdAt + rejectionWindow) revert DeadlinePassed();
+        if (block.timestamp > r.deliverBy) revert DeadlinePassed();
+
+        r.status = Status.Rejected;
+        registry.release(r.agentId, r.notional);
+
+        if (r.fee != 0) bondToken.safeTransfer(r.consumer, r.fee);
+
+        emit ExecutionRejected(requestId, r.agentId, r.consumer);
+    }
+
     /// @notice The agent accepted a request and never delivered. Permissionless to call.
     /// @dev This is the fault the v0 design had no way to observe.
+    ///
+    ///      "Accepted" now means something it did not before: the operator had `rejectionWindow`
+    ///      to decline this request and did not take it. See `reject`.
     function markExpired(bytes32 requestId) external nonReentrant {
         Request storage r = _load(requestId);
         if (r.status != Status.Pending) revert BadStatus();

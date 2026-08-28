@@ -124,10 +124,23 @@ The router:
    model, a different request, or stale inputs cannot validate.
 4. Sets `finalizeAt = now + challengeWindow` for Bronze/Silver; Gold finalizes immediately.
 
-**How each tier binds the context.** Bronze and Silver bind it by signing it: the digest is
-`keccak256(typehash ‖ chainId ‖ adapter ‖ requestId ‖ agentId ‖ modelCommitment ‖
-inputCommitment ‖ outputCommitment ‖ deliverBy)`, and the adapter address is in there so a
-Bronze signature cannot be replayed at the Silver or Gold adapter.
+**How each tier binds the context.** Bronze and Silver bind it by signing it, as EIP-712 typed
+data:
+
+```
+structHash = keccak256(EXECUTION_TYPEHASH ‖ requestId ‖ agentId ‖ modelCommitment
+                       ‖ inputCommitment ‖ outputCommitment ‖ deliverBy)
+digest     = keccak256(0x19 0x01 ‖ domainSeparator ‖ structHash)
+```
+
+with the domain `{name: "BotID", version: "1", chainId, verifyingContract}`. The chain id and the
+adapter address are in the domain rather than the struct — which is where EIP-712 puts them, and
+which is why they still bind exactly as tightly as before: a Bronze signature cannot be replayed at
+the Silver adapter, or on another chain. The `\x19\x01` envelope buys two further things. A signer
+can *render* what it is agreeing to, so an operator approving a delivery sees a request id and a
+deadline instead of one opaque word. And a key that signs bare 32-byte hashes has given up the
+guarantee that its signatures cannot also be transactions; the `\x19` prefixes exist to keep those
+two signable spaces disjoint.
 
 Gold binds it **on chain rather than in the circuit**, which is a correction to the original
 design. The obvious construction puts `inputCommitment` and `outputCommitment` in the proof's
@@ -200,6 +213,19 @@ refunded, exposure released, and a **liveness fault** is recorded against the ag
 the signal the v0 design was missing entirely — non-delivery, not invalid proofs, is how
 agents actually fail.
 
+For that fault to mean "the agent broke its word" rather than "the agent was named in a request",
+acceptance has to be something the agent actually did. Two rules make it so. `requestExecution`
+enforces `minDeliveryWindow` (15 min), so a deadline is never one no operator could meet. And the
+operator may call `reject(requestId)` within `rejectionWindow` (5 min) of the order, closing it
+with no fault and no slash.
+
+Both are needed because `inputCommitment` is unverifiable at request time — it is a bare hash, and
+`requestExecution` is permissionless. Without the right to decline, anyone could commission
+impossible work from any active agent, call the permissionless `markExpired` themselves, and take
+`challengerBountyBps` of the slash for the price of gas. The rejection window is deliberately much
+shorter than the delivery window: declining is a decision made at order time, not an escape hatch
+an agent can reach for once it can see the job going badly.
+
 ---
 
 ## 5. Scoring
@@ -207,12 +233,12 @@ agents actually fail.
 Score is a **capital-weighted EWMA over settled outcomes**, decayed toward neutral over time.
 
 ```
-w      = min(notional, weightCap)                  // capital at risk, capped
-q      = quality(outcome) ∈ [0, 10000]             // per-execution quality
+w      = min(notional, weightCap, budget(agent, consumer))  // capital at risk, twice capped
+q      = quality(outcome) ∈ [0, 10000]                      // per-execution quality
 score' = decay(score, Δt) + (q − decay(score, Δt)) · w / (w + K)
 ```
 
-Three properties fall out of this, all of them deliberate:
+Four properties fall out of this, all of them deliberate:
 
 1. **A $100k execution moves the score far more than a $10 one.** `K` is the "half-weight"
    constant — the notional at which a single observation moves the score halfway to `q`.
@@ -223,6 +249,15 @@ Three properties fall out of this, all of them deliberate:
 3. **Faults are not smoothed.** A liveness fault or a lost challenge applies a direct
    multiplicative haircut *and* increments a permanent fault counter that consumers can read
    independently of the score.
+4. **No single counterparty can define a score.** `settle` is unilateral — the consumer reports
+   the outcome — and the consumer also chooses the `notional` that outcome is weighted by. So the
+   damage of a false report scales with a number the liar picks, while the cost is `minFeeBps` of
+   it; raising the fee floor cannot close a gap the attacker scales both sides of. Instead each
+   consumer draws from a per-agent weight budget, `consumerWeightCap`, defaulting to half of `K`:
+   one counterparty moves a score at most a third of the way toward its claimed quality, and the
+   budget refills on the same half-life the score decays on. Both earning a reputation and
+   destroying one therefore take several independent counterparties rather than one determined
+   one — which is what a reputation was always supposed to mean.
 
 `quality()` is a pure function of the outcome — full marks for clean delivery within limits,
 graded penalties for SLA breach, limit breach, and losses beyond the agent's declared

@@ -26,6 +26,25 @@ const CLEAN = { realizedPnlBps: 0, slaBreached: false, limitBreached: false };
 
 let feedNonce = 0;
 
+/**
+ * Lift `consumerWeightCap` out of the way, leaving every other engine parameter as it was.
+ *
+ * A handful of tests below are about how a *single* execution is weighted, or about faults versus
+ * volume. Those run one consumer through several settlements, which the per-consumer budget is
+ * specifically designed to discount — so they set it aside to isolate what they are measuring.
+ * The budget has its own test.
+ */
+async function liftConsumerCap(env) {
+  await env.engine.setParameters(
+    await env.engine.halfWeight(),
+    await env.engine.weightCap(),
+    (1n << 128n) - 1n, // the largest the engine will accept — budgets are stored in 128 bits
+    await env.engine.decayHalfLife(),
+    await env.engine.livenessHaircutBps(),
+    await env.engine.verificationHaircutBps()
+  );
+}
+
 /** A consumer protocol commissions an execution, fixing the input data itself. */
 async function commission(env, agentId, opts = {}) {
   const ts = await now();
@@ -128,11 +147,13 @@ describe("ExecutionRouter", function () {
       );
     });
 
+    // A deadline in the past is now caught by the same floor that catches a deadline merely too
+    // soon — `minDeliveryWindow`. See LivenessGrief.test.js for why that floor exists.
     it("refuses a deadline in the past", async function () {
       const ts = await now();
       await expect(
         env.router.connect(env.consumer).requestExecution(agent.agentId, ethers.ZeroHash, 0, 0, ts, "")
-      ).to.be.revertedWithCustomError(env.router, "DeadlinePassed");
+      ).to.be.revertedWithCustomError(env.router, "DeliveryWindowTooShort");
     });
 
     // The protocol's take is a cut of `fee`, and `fee` is set by the consumer. Without a floor,
@@ -163,10 +184,26 @@ describe("ExecutionRouter", function () {
       await commission(env, agent.agentId, { notional: E18(400_000), fee: E18(400) });
     });
 
-    it("permits zero-notional requests to be free", async function () {
-      // Nothing is at risk, so there is nothing to price against.
-      const req = await commission(env, agent.agentId, { notional: 0, fee: 0 });
-      expect((await env.router.getRequest(req.requestId)).status).to.equal(Status.Pending);
+    it("refuses a request with nothing at risk", async function () {
+      // A zero-notional request used to be allowed on the reading that there is nothing to price
+      // against. But it is still a live, still-slashable obligation, and `reserve(agentId, 0)`
+      // adds nothing to `openNotional` — which is the whole of `withdrawEarly`'s liability gate.
+      // A consumer could park one against an agent, watch it walk out with its bond, and leave
+      // `_slash` computing a percentage of nothing. See ZeroNotional in ExecutionRouter.
+      await expect(
+        commission(env, agent.agentId, { notional: 0, fee: 0 })
+      ).to.be.revertedWithCustomError(env.router, "ZeroNotional");
+    });
+
+    it("keeps a live request visible to the liability gate", async function () {
+      // The property the check above exists to protect: while any request is open, the agent's
+      // recorded exposure is non-zero, so the early-exit gate can see it and refuses.
+      await env.registry.connect(env.agentOwner).startUnbonding(agent.agentId, E18(1_000));
+      await commission(env, agent.agentId, { notional: E18(1_000) });
+      expect((await env.registry.getAgent(agent.agentId)).openNotional).to.be.greaterThan(0n);
+      await expect(
+        env.registry.connect(env.agentOwner).withdrawEarly(agent.agentId)
+      ).to.be.revertedWithCustomError(env.registry, "OutstandingLiability");
     });
 
     it("lets the owner disable the floor for bootstrapping", async function () {
@@ -403,6 +440,7 @@ describe("ExecutionRouter", function () {
     });
 
     it("weights the score update by capital at risk", async function () {
+      await liftConsumerCap(env);
       const small = await registerAgent(env, { bond: E18(1_000_000), model: ethers.id("m-small") });
       const large = await registerAgent(env, { bond: E18(1_000_000), model: ethers.id("m-large") });
 
@@ -436,6 +474,44 @@ describe("ExecutionRouter", function () {
         .settle(req.requestId, { realizedPnlBps: -3000, slaBreached: true, limitBreached: true });
 
       expect((await env.registry.getProfile(agent.agentId)).score).to.be.lessThan(5000);
+    });
+
+    it("does not let one counterparty destroy a score with one report", async function () {
+      // `settle` takes the consumer's word for the outcome, and the consumer also chooses the
+      // notional the outcome is weighted by — so the damage of a false report scales with a number
+      // the liar picks, while the cost is `minFeeBps` of it. Raising the fee floor cannot close
+      // that gap; `consumerWeightCap` does, by denying any single counterparty the ability to
+      // define an agent's reputation. See ReputationEngine.consumerWeightCap.
+      const RUINOUS = { realizedPnlBps: -3000, slaBreached: true, limitBreached: true };
+
+      const settleAs = async (outcome, notional) => {
+        const req = await commission(env, agent.agentId, { notional });
+        await deliverBronze(env, agent, req, ethers.id(`grief-${req.requestId}`));
+        await increaseTime(2 * HOUR);
+        await env.router.finalize(req.requestId);
+        await env.router.connect(env.consumer).settle(req.requestId, outcome);
+        return Number((await env.registry.getProfile(agent.agentId)).score);
+      };
+
+      // The outcome is as bad as one can be reported: quality zero. Uncapped, a 400,000 notional
+      // weighs 400,000 against a halfWeight of 100,000 — 80% of the distance to zero, taking a
+      // neutral 5,000 down to about 1,000. Budgeted at 50,000 it weighs a third instead.
+      const after = await settleAs(RUINOUS, E18(400_000));
+      expect(after).to.be.greaterThan(3_000);
+      expect(after).to.be.lessThan(3_500);
+
+      // And a second report buys almost nothing: the budget is spent, and refills only on the
+      // 90-day half-life the score itself decays on. Two hours of that is worth a rounding error,
+      // not a second bite. Smaller, because the first report already cut the agent's credit line —
+      // and the budget would clamp the weight to the same rounding error at any size.
+      expect(await settleAs(RUINOUS, E18(50_000))).to.be.greaterThan(3_000);
+      const cap = await env.engine.consumerWeightCap();
+      expect(await env.engine.remainingWeight(agent.agentId, env.consumer.address)).to.be.lessThan(
+        cap / 100n
+      );
+
+      // A different counterparty is unaffected — reputation aggregates across them.
+      expect(await env.engine.remainingWeight(agent.agentId, env.other.address)).to.equal(cap);
     });
 
     it("only the commissioning consumer may settle", async function () {
@@ -538,6 +614,7 @@ describe("ExecutionRouter", function () {
     });
 
     it("is not diluted by a large volume of clean executions", async function () {
+      await liftConsumerCap(env);
       for (let i = 0; i < 3; i++) {
         const r = await commission(env, agent.agentId, { notional: E18(400_000) });
         await deliverBronze(env, agent, r, ethers.id(`out-${i}`));
@@ -666,6 +743,36 @@ describe("ExecutionRouter", function () {
       await expect(
         env.router.setParameters(HOUR, 6 * HOUR, 25 * DAY, E18(100), 2000, 200, 5000, 500)
       ).to.be.revertedWithCustomError(env.router, "InvalidParameter");
+    });
+
+    it("refuses a challenge bond larger than the field that has to hold it", async function () {
+      // The bond is collected as a uint256 and recorded as a uint128, and the refund pays out the
+      // recorded field. Above 2^128 those two are different numbers and the gap is unrecoverable,
+      // so the value is refused at the governance call rather than truncated at the challenge.
+      await expect(
+        env.router.setParameters(HOUR, 6 * HOUR, DAY, 1n << 128n, 2000, 200, 5000, 500)
+      ).to.be.revertedWithCustomError(env.router, "InvalidParameter");
+
+      // One below the boundary is legal, so the bound is a ceiling and not an off-by-one.
+      await env.router.setParameters(
+        HOUR, 6 * HOUR, DAY, (1n << 128n) - 1n, 2000, 200, 5000, 500
+      );
+      expect(await env.router.challengeBondAmount()).to.equal((1n << 128n) - 1n);
+    });
+
+    it("pays a challenger back exactly what it posted", async function () {
+      // The property the bound above exists to protect, asserted directly rather than inferred.
+      const bond = await env.router.challengeBondAmount();
+      const req = await commission(env, agent.agentId);
+      await deliverBronze(env, agent, req);
+
+      const before = await env.token.balanceOf(env.challenger.address);
+      await env.router.connect(env.challenger).challenge(req.requestId);
+      expect(before - (await env.token.balanceOf(env.challenger.address))).to.equal(bond);
+
+      await increaseTime(Number(await env.router.escalationWindow()) + 1);
+      await env.router.slashUnresolvedChallenge(req.requestId);
+      expect(await env.token.balanceOf(env.challenger.address)).to.be.at.least(before);
     });
 
     it("refuses an adapter registered under the wrong tier", async function () {

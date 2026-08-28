@@ -10,6 +10,7 @@ const Status = {
   Settled: 5,
   Expired: 6,
   Faulted: 7,
+  Rejected: 8,
 };
 
 const E18 = (n) => ethers.parseEther(String(n));
@@ -41,41 +42,80 @@ async function fundedWallet(funder, eth = "10") {
   return w;
 }
 
-/** Sign a raw 32-byte digest (no EIP-191 prefix — the contracts ecrecover the digest itself). */
+/**
+ * Sign an already-computed 32-byte digest.
+ *
+ * Still raw, and still correct: an EIP-712 digest *is* the thing a key signs, and neither the
+ * `\x19\x01` envelope nor the domain is applied a second time here. What changed is what gets
+ * passed in — the digests below are now enveloped, so a signature produced this way and one
+ * produced by `wallet.signTypedData(...)` are the same bytes. `eip712.test.js` asserts exactly
+ * that, which is the only real evidence that the envelope is correct.
+ */
 function signDigest(wallet, digest) {
   return new ethers.SigningKey(wallet.privateKey).sign(digest).serialized;
 }
 
 // --------------------------------------------------------------- digests
 
-/** Mirror of Digest.execution(). */
-function executionDigest(chainId, verifier, ctx) {
-  return ethers.keccak256(
-    coder.encode(
-      ["bytes32", "uint256", "address", "bytes32", "uint256", "bytes32", "bytes32", "bytes32", "uint64"],
-      [
-        EXECUTION_TYPEHASH,
-        chainId,
-        verifier,
-        ctx.requestId,
-        ctx.agentId,
-        ctx.modelCommitment,
-        ctx.inputCommitment,
-        ctx.outputCommitment,
-        ctx.deliverBy,
-      ]
-    )
-  );
+const DOMAIN_NAME = "BotID";
+const DOMAIN_VERSION = "1";
+
+/** Mirror of Digest.domainSeparator()'s inputs. */
+function domain(chainId, verifyingContract) {
+  return { name: DOMAIN_NAME, version: DOMAIN_VERSION, chainId, verifyingContract };
 }
 
-/** Mirror of InputAttestor.feedDigest(). */
+/**
+ * Field lists, in order. `ethers.TypedDataEncoder` derives the typehash from these, so the
+ * strings in `Digest.sol` and `InputAttestor.sol` are no longer transcribed here by hand —
+ * a drift in either field list shows up as a failing signature rather than as a comment nobody
+ * re-read. `eip712.test.js` also asserts the derived type strings directly.
+ */
+const EXECUTION_TYPES = {
+  Execution: [
+    { name: "requestId", type: "bytes32" },
+    { name: "agentId", type: "uint256" },
+    { name: "modelCommitment", type: "bytes32" },
+    { name: "inputCommitment", type: "bytes32" },
+    { name: "outputCommitment", type: "bytes32" },
+    { name: "deliverBy", type: "uint64" },
+  ],
+};
+
+const FEED_TYPES = {
+  FeedReading: [
+    { name: "feedId", type: "bytes32" },
+    { name: "valueHash", type: "bytes32" },
+    { name: "timestamp", type: "uint64" },
+  ],
+};
+
+/**
+ * Mirror of Digest.execution().
+ *
+ * Deliberately *not* a hand-rolled reimplementation of the same abi.encode: it goes through
+ * ethers' own EIP-712 encoder. A mirror that repeats the contract's arithmetic agrees with the
+ * contract even when both are wrong; an independent implementation of the published standard
+ * disagrees, which is the whole point of having one.
+ */
+function executionDigest(chainId, verifier, ctx) {
+  return ethers.TypedDataEncoder.hash(domain(chainId, verifier), EXECUTION_TYPES, {
+    requestId: ctx.requestId,
+    agentId: ctx.agentId,
+    modelCommitment: ctx.modelCommitment,
+    inputCommitment: ctx.inputCommitment,
+    outputCommitment: ctx.outputCommitment,
+    deliverBy: ctx.deliverBy,
+  });
+}
+
+/** Mirror of InputAttestor.feedDigest(). Same reasoning as above. */
 function feedDigest(chainId, attestor, feed) {
-  return ethers.keccak256(
-    coder.encode(
-      ["bytes32", "uint256", "address", "bytes32", "bytes32", "uint64"],
-      [FEED_TYPEHASH, chainId, attestor, feed.feedId, feed.valueHash, feed.timestamp]
-    )
-  );
+  return ethers.TypedDataEncoder.hash(domain(chainId, attestor), FEED_TYPES, {
+    feedId: feed.feedId,
+    valueHash: feed.valueHash,
+    timestamp: feed.timestamp,
+  });
 }
 
 /** Protocol convention for the preimage behind a signed `valueHash`. */
@@ -180,8 +220,16 @@ function teeAttestation(enclaveKey, signature) {
  * units. It does NOT retune the contracts' capital parameters — those keep their 18-decimal
  * initialisers, which is precisely the state a deploy lands in before deploy.js rescales them,
  * and the state Decimals.test.js exists to characterise.
+ *
+ * `bootstrapped` closes the deployment window, putting the wiring setters behind the 21-day
+ * timelock. It defaults to *false*, and that default is a deliberate compromise worth stating
+ * plainly: most of this suite uses `setRouter` and `setWriter` as fixtures — impersonating the
+ * router to reach a code path directly — and a three-week wait in front of each of them would
+ * turn those tests into tests of the timelock. Timelock.test.js passes `true` and exercises the
+ * real configuration; everywhere else, `bootstrapped()` is false and the setters run immediately,
+ * which is exactly the state a freshly deployed protocol is in.
  */
-async function deployProtocol({ decimals = 18 } = {}) {
+async function deployProtocol({ decimals = 18, bootstrapped = false } = {}) {
   const [owner, treasury, consumer, agentOwner, challenger, other] = await ethers.getSigners();
   const chainId = (await ethers.provider.getNetwork()).chainId;
 
@@ -217,6 +265,12 @@ async function deployProtocol({ decimals = 18 } = {}) {
   await router.setAdapter(Tier.Bronze, sigAdapter.target);
   await router.setAdapter(Tier.Silver, teeAdapter.target);
   await router.setAdapter(Tier.Gold, zkAdapter.target);
+
+  if (bootstrapped) {
+    await engine.finalizeBootstrap();
+    await registry.finalizeBootstrap();
+    await router.finalizeBootstrap();
+  }
 
   // One publisher, quorum of 1, is enough for most tests; multi-publisher cases override.
   const publisher = await fundedWallet(owner, "1");
@@ -279,6 +333,13 @@ module.exports = {
   increaseTime,
   fundedWallet,
   signDigest,
+  DOMAIN_NAME,
+  DOMAIN_VERSION,
+  domain,
+  EXECUTION_TYPEHASH,
+  FEED_TYPEHASH,
+  EXECUTION_TYPES,
+  FEED_TYPES,
   executionDigest,
   feedDigest,
   valueHash,

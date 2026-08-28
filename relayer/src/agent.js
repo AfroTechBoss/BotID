@@ -55,6 +55,38 @@ async function start(options) {
   // and a delivery that fails permanently is not retried forever.
   const backlog = new Backlog();
 
+  /**
+   * Decline a request this agent cannot serve, if there is still time.
+   *
+   * The window is short and measured from `createdAt`, not from when we noticed — a relayer that
+   * was restarting when the request landed may well have missed it. Missing it is survivable:
+   * the fallback is the liveness fault this was trying to avoid, which is strictly better than
+   * crashing the delivery loop over it, so this never throws.
+   */
+  async function declineRequest(requestId, r) {
+    try {
+      const window = Number(await contracts.router.rejectionWindow());
+      const closesAt = Number(r.createdAt) + window;
+      const nowSec = (await provider.getBlock("latest")).timestamp;
+      if (nowSec > closesAt) {
+        log.error(
+          `${requestId} cannot be declined - rejection window closed ${nowSec - closesAt}s ago; ` +
+            `this will expire as a liveness fault`
+        );
+        return;
+      }
+
+      const tx = await retry(() => contracts.router.reject(requestId), {
+        attempts: 3,
+        label: `reject ${requestId}`,
+      });
+      await tx.wait(config.confirmations);
+      log.info(`declined ${requestId} - no fault recorded`);
+    } catch (e) {
+      log.error(`${requestId} reject failed: ${e.shortMessage ?? e.message}`);
+    }
+  }
+
   async function handleRequest(ev) {
     const { requestId, agentId: forAgent, inputCommitment, deliverBy, inputURI } = ev.args;
     if (forAgent !== agentId) return;
@@ -71,14 +103,28 @@ async function start(options) {
 
       // 1. Fetch whatever the consumer says the inputs are, then prove to ourselves that it is
       //    what the chain committed to. Everything after this line is honest by construction.
-      const payload = await publisher.fetchBundle(inputURI);
-      const bundleHex = payload.bundle ?? payload;
-      const feeds = publisher.verify(chainId, manifest.contracts.InputAttestor, bundleHex, inputCommitment);
+      //
+      //    Failing here is not an ordinary error. `requestExecution` is permissionless and takes
+      //    `inputCommitment` on trust, so anyone may commission work against this agent over a
+      //    commitment they invented, which no bundle can ever satisfy. Retrying such a request
+      //    until `deliverBy` earns a liveness fault for a job that was never doable. So a bundle
+      //    we cannot obtain or cannot verify is answered by declining, while the rejection
+      //    window is still open. See ExecutionRouter.reject.
+      let payload, bundleHex, feeds, reveals;
+      try {
+        payload = await publisher.fetchBundle(inputURI);
+        bundleHex = payload.bundle ?? payload;
+        feeds = publisher.verify(chainId, manifest.contracts.InputAttestor, bundleHex, inputCommitment);
 
-      // The bundle commits to hashes; the model runs on numbers. `open` checks the numbers
-      // served alongside it against those hashes, one by one, so a URI that pairs a correct
-      // bundle with doctored values is caught here rather than proven false later.
-      const reveals = publisher.open(feeds, payload.readings);
+        // The bundle commits to hashes; the model runs on numbers. `open` checks the numbers
+        // served alongside it against those hashes, one by one, so a URI that pairs a correct
+        // bundle with doctored values is caught here rather than proven false later.
+        reveals = publisher.open(feeds, payload.readings);
+      } catch (e) {
+        log.warn(`${requestId} inputs unusable: ${e.shortMessage ?? e.message}`);
+        await declineRequest(requestId, r);
+        return;
+      }
 
       // 2. Run the model — the circuit itself, at every tier. See inference.js.
       const { outputs, outputCommitment } = await runner.run(feeds, reveals);

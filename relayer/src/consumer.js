@@ -25,7 +25,22 @@ async function request(args) {
 
   const agentId = BigInt(args.agent ?? config.required("AGENT_ID"));
   const notional = ethers.parseEther(String(args.notional ?? 100_000));
-  const window = Number(args.window ?? 900); // seconds the agent has to deliver
+  // The router refuses a zero-notional request: it would be a live obligation the registry's
+  // early-exit gate cannot see, since that gate reads `openNotional`. Caught here so the answer
+  // is a sentence rather than a bare custom error out of a revert.
+  if (notional === 0n) {
+    throw new Error("--notional must be greater than zero; a request with nothing at risk is refused");
+  }
+  // Seconds the agent has to deliver. The router enforces a floor — a deadline no operator
+  // could meet is how an agent gets slashed for a job it never had a chance at — so read it off
+  // the chain and clamp rather than hardcoding a number that a governance change would silently
+  // turn into a revert. The margin covers the seconds between reading `ts` and the tx mining.
+  const floor = Number(await contracts.router.minDeliveryWindow());
+  const requested = Number(args.window ?? 900);
+  const window = Math.max(requested, floor + 60);
+  if (window !== requested) {
+    log.warn(`window ${requested}s is below the router's ${floor}s floor - using ${window}s`);
+  }
 
   // The router enforces a floor of `minFeeBps` of notional, so a consumer that names no fee
   // pays exactly the minimum rather than reverting on a hardcoded default.
@@ -159,7 +174,7 @@ async function challenge(args) {
 async function watch(args) {
   const { contracts } = await connect();
   const requestId = args.request ?? config.required("REQUEST_ID");
-  const names = ["None", "Pending", "Delivered", "Challenged", "Finalized", "Settled", "Expired", "Faulted"];
+  const names = ["None", "Pending", "Delivered", "Challenged", "Finalized", "Settled", "Expired", "Faulted", "Rejected"];
   let last = null;
   for (;;) {
     const r = await contracts.router.getRequest(requestId);

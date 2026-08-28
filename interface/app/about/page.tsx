@@ -47,7 +47,7 @@ const DECISIONS: [string, string][] = [
   ],
   [
     'Why the score is weighted by capital, not by count',
-    'A count-weighted score is a farming target — thousands of trivial executions buy a number you then spend once, at size. Weighting by min(notional, weightCap) means a score can only be earned at roughly the size at which it will be used, and an execution with zero at risk moves nothing at all.',
+    'A count-weighted score is a farming target — thousands of trivial executions buy a number you then spend once, at size. Weighting by min(notional, weightCap, the reporting counterparty’s remaining budget) means a score can only be earned at roughly the size at which it will be used, and no single counterparty can supply the whole record. An execution with nothing at risk is refused outright.',
   ],
   [
     'Why scores decay toward neutral',

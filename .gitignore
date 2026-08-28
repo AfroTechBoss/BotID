@@ -7,6 +7,7 @@ cache/
 .env.*
 !.env.example
 **/deployments/localhost-*.json
+**/deployments/hardhat-*.json
 # Where execute-once.js remembers how far it got. Run progress, not a deployment record — one
 # machine's half-finished errand, and committing it would hand the next clone a requestId that
 # belongs to somebody else's chain.

@@ -290,23 +290,35 @@ async function main() {
       deliverBy,
       operator: operator.address,
     };
-    const execDigest = ethers.keccak256(
-      ethers.AbiCoder.defaultAbiCoder().encode(
-        ["bytes32", "uint256", "address", "bytes32", "uint256", "bytes32", "bytes32", "bytes32", "uint64"],
-        [
-          ethers.id(
-            "Execution(bytes32 requestId,uint256 agentId,bytes32 modelCommitment,bytes32 inputCommitment,bytes32 outputCommitment,uint64 deliverBy)"
-          ),
-          chainId,
-          m.contracts.SignatureAdapter,
-          ctx.requestId,
-          ctx.agentId,
-          ctx.modelCommitment,
-          ctx.inputCommitment,
-          ctx.outputCommitment,
-          ctx.deliverBy,
-        ]
-      )
+    // Signed as typed data, which is what a real operator key does now. The chain id and the
+    // adapter address are in the EIP-712 domain rather than inside the struct, so this binds
+    // exactly what the old hand-rolled hash bound — and a signer capable of rendering it shows
+    // the request id and the deadline as text instead of one opaque word.
+    const attestation = await operator.signTypedData(
+      {
+        name: "BotID",
+        version: "1",
+        chainId,
+        verifyingContract: m.contracts.SignatureAdapter,
+      },
+      {
+        Execution: [
+          { name: "requestId", type: "bytes32" },
+          { name: "agentId", type: "uint256" },
+          { name: "modelCommitment", type: "bytes32" },
+          { name: "inputCommitment", type: "bytes32" },
+          { name: "outputCommitment", type: "bytes32" },
+          { name: "deliverBy", type: "uint64" },
+        ],
+      },
+      {
+        requestId: ctx.requestId,
+        agentId: ctx.agentId,
+        modelCommitment: ctx.modelCommitment,
+        inputCommitment: ctx.inputCommitment,
+        outputCommitment: ctx.outputCommitment,
+        deliverBy: ctx.deliverBy,
+      }
     );
 
     // Sent from the operator, and signed by it. `deliver` checks msg.sender against the agent's
@@ -315,9 +327,7 @@ async function main() {
     // behalf even though it owns it.
     log(`delivering…`);
     await wait(
-      router
-        .connect(operator)
-        .deliver(state.requestId, outputCommitment, bundle, signDigest(operator, execDigest))
+      router.connect(operator).deliver(state.requestId, outputCommitment, bundle, attestation)
     );
     state.outputCommitment = outputCommitment;
     writeState(stateFile(chainId), state);
@@ -341,6 +351,7 @@ async function main() {
     Settled: 5,
     Expired: 6,
     Faulted: 7,
+    Rejected: 8,
   };
 
   if (Number(req.status) === Status.Delivered) {

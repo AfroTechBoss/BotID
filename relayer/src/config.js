@@ -83,6 +83,11 @@ const config = {
   // Where the demo consumer writes bundles and the relayer reads them from.
   bundleDir: process.env.BUNDLE_DIR ?? path.join(__dirname, "..", ".bundles"),
 
+  // An `inputURI` comes from whoever made the request, and fetching it happens from inside the
+  // operator's network before anything is verified. Off by default, private addresses are
+  // refused; see publisher.fetchBundle. Turn it on only to serve bundles from your own network.
+  allowPrivateInputURI: process.env.ALLOW_PRIVATE_INPUT_URI === "true",
+
   pollIntervalMs: Number(process.env.POLL_INTERVAL_MS ?? 5000),
   confirmations: Number(process.env.CONFIRMATIONS ?? 1),
   startBlock: process.env.START_BLOCK ? Number(process.env.START_BLOCK) : null,
@@ -146,8 +151,8 @@ const config = {
 const SETTABLE = new Set([
   "rpcUrl", "contracts", "chainId", "seeded", "artifactsDir", "agentId", "operatorKey",
   "enclaveKey", "measurement", "circuitsDir", "modelRunner", "runnerCmd", "runnerArgs",
-  "proverCmd", "proverArgs", "allowDevProof", "bundleDir", "pollIntervalMs", "confirmations",
-  "startBlock", "arena",
+  "proverCmd", "proverArgs", "allowDevProof", "bundleDir", "allowPrivateInputURI",
+  "pollIntervalMs", "confirmations", "startBlock", "arena",
 ]);
 
 let applied = null;

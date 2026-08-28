@@ -61,7 +61,7 @@ describe("bond token decimals", () => {
 
       // Three hundred thousand USDT is a large trade by any reading of the parameters. The EWMA
       // weights it as w/(w + halfWeight) — here 3e11 against 1e23, about one part in 10^12.
-      await (await env.engine.recordOutcome(1, BAD, env.units(300_000), 500)).wait();
+      await (await env.engine.recordOutcome(1, env.consumer.address, BAD, env.units(300_000), 500)).wait();
 
       expect(await env.engine.getScore(1)).to.equal(NEUTRAL);
       // And the execution was recorded, which is what makes this quiet rather than obvious: the
@@ -93,6 +93,7 @@ describe("bond token decimals", () => {
         await env.engine.setParameters(
           whole(1_000),
           whole(10_000),
+          whole(500),
           await env.engine.decayHalfLife(),
           await env.engine.livenessHaircutBps(),
           await env.engine.verificationHaircutBps()
@@ -132,12 +133,13 @@ describe("bond token decimals", () => {
       await (await env.engine.setWriter(env.owner.address, true)).wait();
       await (await env.engine.initAgent(1)).wait();
 
-      await (await env.engine.recordOutcome(1, BAD, env.units(300_000), 500)).wait();
+      await (await env.engine.recordOutcome(1, env.consumer.address, BAD, env.units(300_000), 500)).wait();
 
       // Same outcome, same notional, same contract — only the parameters changed. The notional is
-      // far above weightCap, so it weighs in at the cap: 10,000 against a halfWeight of 1,000, or
-      // 91% of the distance. A bad delivery of this size should take a large bite out of a
-      // neutral score rather than a twelve-decimal-places bite.
+      // far above weightCap, and this consumer's whole budget is 500, so it weighs in at the
+      // budget: 500 against a halfWeight of 1,000, or a third of the distance. A bad delivery of
+      // this size should take a large bite out of a neutral score rather than a
+      // twelve-decimal-places bite — and one counterparty's word should not take the whole thing.
       const score = await env.engine.getScore(1);
       expect(score).to.be.lessThan(NEUTRAL - 1_000n);
     });

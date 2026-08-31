@@ -29,7 +29,7 @@ const NETWORK_IDS = Object.keys(CHAINS) as NetworkId[];
  * and force the reader to decide what to do about scale, which is the same discipline the
  * interface follows internally.
  */
-export function json(data: unknown, init?: { status?: number; cache?: string }) {
+export function json(data: unknown, init?: { status?: number; cache?: string; methods?: string }) {
   const body = JSON.stringify(data, (_, v) => (typeof v === 'bigint' ? v.toString() : v), 2);
   return new Response(body, {
     status: init?.status ?? 200,
@@ -38,7 +38,7 @@ export function json(data: unknown, init?: { status?: number; cache?: string }) 
       // A public read of public chain state. Reads are free and always will be, and an API that
       // requires an origin allowlist is one no agent can call from wherever it happens to run.
       'access-control-allow-origin': '*',
-      'access-control-allow-methods': 'GET, OPTIONS',
+      'access-control-allow-methods': init?.methods ?? 'GET, OPTIONS',
       // Short, because reputation moves. Long enough that a bot polling every few seconds is
       // answered from the edge instead of from an RPC node that serialises its callers.
       'cache-control': init?.cache ?? 'public, s-maxage=10, stale-while-revalidate=30',
@@ -87,12 +87,13 @@ export function parseAgentId(raw: string): bigint | undefined {
   return id > 0n ? id : undefined;
 }
 
-export function preflight() {
+export function preflight(methods = 'GET, OPTIONS') {
   return new Response(null, {
     status: 204,
     headers: {
       'access-control-allow-origin': '*',
-      'access-control-allow-methods': 'GET, OPTIONS',
+      'access-control-allow-methods': methods,
+      'access-control-allow-headers': 'content-type',
       'access-control-max-age': '86400',
     },
   });

@@ -97,10 +97,10 @@ export default function Privacy() {
           <p>By default, nothing tied to an identity. Specifically:</p>
           <ul>
             <li><strong>No account data</strong> — there are no accounts.</li>
-            <li><strong>No wallet address collection.</strong> If you connect a wallet, the address stays in your browser and is used there to render your view. It is never sent to our server. That is now a design choice rather than an absence of opportunity — see the next bullet.</li>
+            <li><strong>No wallet address collection, with one exception you choose.</strong> If you connect a wallet, the address stays in your browser and is used there to render your view; it is not sent to our server. The exception is an alert: a subscription is filed under the address that signed for it, because that signature is what proves the alert is yours to create and to delete. Creating one is the only action on this site that sends your address to us, and you are asked to sign before it happens.</li>
             <li><strong>Server-rendered pages, and what that means.</strong> Some pages — an execution receipt, a proof inspector, an agent profile — are rendered on our host before they reach you, and the read API under <code>/api/</code> runs there too. So our host sees the URL you asked for, which for those pages contains the agent id or request id you are looking at, along with your IP address and the ordinary request headers. Our hosting provider keeps short-lived operational logs of that; we do not build profiles from them and we do not join them to anything.</li>
             <li><strong>No behavioural profiling, no ad targeting, no data sales.</strong> We do not sell, rent or share personal data with anyone for their own purposes, and we do not receive payment for anything of the sort.</li>
-            <li><strong>Alert configuration, if you create one.</strong> The webhook URL you supply, the threshold you set, and the agent id you are watching. Nothing else — no email unless the webhook you give us is an email relay, in which case you have chosen that.</li>
+            <li><strong>Alert configuration, if you create one.</strong> The webhook URL you supply, the kind of alert and any threshold you set, the agent id you are watching, the address that signed for it, and a secret we generate so your endpoint can tell a real alert from a forged one. Also, unavoidably, whether recent deliveries to that URL failed and why. Nothing else — no email unless the webhook you give us is an email relay, in which case you have chosen that.</li>
           </ul>
           <p>
             Do not put anything sensitive in a webhook URL. It is stored as you typed it and it is
@@ -179,10 +179,12 @@ export default function Privacy() {
 
           <h3 id="alerts">Alerts</h3>
           <p>
-            Score-threshold alerts are configured in the <a href="/portal">portal</a>, which states
-            whether they are client-side only or backed by a server in the current build. A
-            client-side alert never leaves your browser. A server-backed alert stores the three fields
-            listed above and calls your webhook; delete the alert and the record goes with it.
+            Alerts are configured in the <a href="/portal">portal</a> and are backed by a server: a
+            subscription is a row in a database, and a daemon we run reads the chain and calls your
+            webhook. It stores the fields listed above, and it retains the delivery attempts made
+            against your endpoint so a broken one can be stopped rather than retried forever. Remove
+            the alert and the record goes with it, delivery history included. Removing it takes a
+            signature from the same address that created it, which is also why nobody else can.
           </p>
 
           <h3 id="cookies">Cookies</h3>

@@ -12,6 +12,11 @@ botid relayer
       Run the permissionless keeper: markExpired, finalize, slashUnresolvedChallenge,
       settleDefault. Needs WATCHTOWER_KEY.
 
+  node src/index.js alerts
+      Run the alert daemon: follow faults, challenges and unbondings, sweep watched
+      scores for threshold crossings, and POST a signed webhook for each. Holds no
+      key. Needs DATABASE_URL (the direct string) and the pg package.
+
   node src/index.js arena [run|order|settle|once|status]
       Run the Arena: the first-party consumer. Discovers registered agents, orders work
       from them on a schedule with real market data, holds the allocation, then settles
@@ -49,6 +54,8 @@ async function main() {
       return require("./agent").run();
     case "watchtower":
       return require("./watchtower").run();
+    case "alerts":
+      return require("./alerts").run();
     case "arena": {
       const arena = require("./arena");
       if (sub === "status") return arena.status();

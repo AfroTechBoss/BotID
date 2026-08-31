@@ -145,6 +145,30 @@ const config = {
     // it cannot resolve is a delivery it cannot make.
     bundleBaseUrl: process.env.ARENA_BUNDLE_BASE_URL ?? null,
   },
+
+  // --- alerts --------------------------------------------------------------
+  // The alert daemon only. It is the one mode here that holds no key at all — it reads the
+  // chain, reads a table the interface writes, and makes outbound HTTP requests. Nothing it
+  // does can be signed, which is deliberate: it runs beside the watchtower and should not be
+  // able to spend anything if it is compromised.
+  alerts: {
+    databaseUrl: process.env.DATABASE_URL ?? null,
+
+    // Score decays continuously, so a threshold can be crossed with no transaction anywhere on
+    // chain. Following logs alone misses exactly the alert a consumer most wants.
+    sweepIntervalMs: Number(process.env.ALERT_SWEEP_INTERVAL_MS ?? 300_000),
+
+    // Consecutive failures before a subscription is disabled. A dead endpoint retried forever
+    // is a slow outbound scanner pointed at someone else's infrastructure.
+    maxFailures: Number(process.env.ALERT_MAX_FAILURES ?? 10),
+
+    // Same shape as the Arena's, for the same reason: a public RPC refuses an unbounded
+    // eth_getLogs, so a scan is a sequence of windows and "from genesis" is not an option.
+    fromBlock: process.env.ALERT_FROM_BLOCK ? Number(process.env.ALERT_FROM_BLOCK) : null,
+    logWindow: Number(process.env.ALERT_LOG_WINDOW ?? 9_000),
+
+    deliverTimeoutMs: Number(process.env.ALERT_DELIVER_TIMEOUT_MS ?? 10_000),
+  },
 };
 
 /** Keys `apply` accepts, so a typo is an error rather than a setting that silently does nothing. */
@@ -152,7 +176,7 @@ const SETTABLE = new Set([
   "rpcUrl", "contracts", "chainId", "seeded", "artifactsDir", "agentId", "operatorKey",
   "enclaveKey", "measurement", "circuitsDir", "modelRunner", "runnerCmd", "runnerArgs",
   "proverCmd", "proverArgs", "allowDevProof", "bundleDir", "allowPrivateInputURI",
-  "pollIntervalMs", "confirmations", "startBlock", "arena",
+  "pollIntervalMs", "confirmations", "startBlock", "arena", "alerts",
 ]);
 
 let applied = null;

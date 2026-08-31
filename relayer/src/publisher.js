@@ -303,4 +303,4 @@ function writeBundle(name, payload) {
   return file;
 }
 
-module.exports = { Publisher, buildBundle, newSalt, fetchBundle, verify, open, writeBundle };
+module.exports = { Publisher, buildBundle, newSalt, fetchBundle, verify, open, writeBundle, isPrivateAddress };

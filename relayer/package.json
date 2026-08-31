@@ -30,9 +30,13 @@
     "watchtower": "node src/index.js watchtower",
     "consumer": "node src/index.js consumer",
     "arena": "node src/index.js arena",
+    "alerts": "node src/index.js alerts",
     "test": "node --test test/arena.test.js"
   },
   "dependencies": {
     "ethers": "^6.17.0"
+  },
+  "optionalDependencies": {
+    "pg": "^8.13.0"
   }
 }

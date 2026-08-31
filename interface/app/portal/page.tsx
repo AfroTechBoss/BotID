@@ -22,6 +22,7 @@ import {
   type TierName,
 } from '@/lib/registry';
 import TxStatus from '@/components/TxStatus';
+import AlertsPanel from '@/components/AlertsPanel';
 
 // Mirrors AgentRegistry. This panel used to read `{ bronze: 2.5, silver: 4.2, gold: 6 }[tier]`,
 // which made leverage look like a property of the tier — it is not, and the error flattered the
@@ -735,27 +736,15 @@ export default function Portal() {
           </div>
         </section>
 
-        <section>
-          <h2 style={{ fontSize: 20 }}>Alerts</h2>
-          <p style={{ fontSize: 12 }} className="text-muted">
-            Not built. The form below is a sketch of the shape — nothing is stored and no alert fires. It is left
-            visible because the design question it answers (who watches a score you are not looking at?) is still open,
-            and the honest answer today is nobody.
-          </p>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)', marginTop: 'var(--space-3)' }}>
-            <div className="field">
-              <label>Webhook URL</label>
-              <input className="input" placeholder="https://…" disabled />
-            </div>
-            <div className="field">
-              <label>Score threshold</label>
-              <input className="input" type="number" defaultValue={5000} disabled />
-            </div>
-            <button className="btn btn-secondary btn-block" disabled>
-              Save alert
-            </button>
-          </div>
-        </section>
+        <AlertsPanel
+          network={network.id}
+          chainId={network.chainId}
+          registry={registry}
+          address={address}
+          walletClient={walletClient}
+          onSelectedChain={onSelectedChain}
+          defaultAgentId={selected?.agentId}
+        />
       </div>
     </main>
   );

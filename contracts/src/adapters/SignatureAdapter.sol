@@ -25,8 +25,21 @@ contract SignatureAdapter is IVerificationAdapter, ExecutionVerifier {
         return true;
     }
 
-    function verify(VerificationContext calldata ctx, bytes calldata attestation)
+    /// @inheritdoc IVerificationAdapter
+    /// @dev Always the delivering agent. A Bronze signature is over `ctx` and is checked against
+    ///      `ctx.operator`, so it is valid for exactly one agent on exactly one request — there is
+    ///      no version of it another agent could present. Attribution is already inside the
+    ///      artifact here, which is why only the Gold adapter has to keep a record.
+    function verifyAndAttribute(VerificationContext calldata ctx, bytes calldata attestation)
         external
+        view
+        returns (bool ok, uint256 originator)
+    {
+        return (verify(ctx, attestation), ctx.agentId);
+    }
+
+    function verify(VerificationContext calldata ctx, bytes calldata attestation)
+        public
         view
         returns (bool)
     {

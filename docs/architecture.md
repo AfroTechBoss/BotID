@@ -352,8 +352,17 @@ Bronze and Silver never had this dependency and ship regardless.
 |---|---|---|---|
 | 1 | `AgentRegistry`, `ExecutionRouter`, `SignatureAdapter`, `ReputationEngine`, `InputAttestor` | Bronze tier end to end, real bonds, real faults | built |
 | 2 | `TeeAdapter`, challenge/escalation resolution, `IReputationOracle` read API | Silver tier + one integration partner consuming scores | built, no partner |
-| 3 | `ZkAdapter` + `ezkl` pipeline, subgraph, dashboard | Gold tier and public leaderboard | circuit and adapter built; no subgraph, no dashboard |
+| 3 | `ZkAdapter` + `ezkl` pipeline, indexer, dashboard | Gold tier and public leaderboard | circuit and adapter built; dashboard live on direct reads; no indexer, so no leaderboard and no history |
 | 4 | Insurance vault | Only once there is a settled-outcome book to price | not started |
+
+Stage 3 said *subgraph* until the networks registry was actually checked. The Graph does not
+index BOT Chain — neither 677 nor 968 is in it — so that row was naming something nobody can
+build, and "no subgraph" read as work not yet started rather than a route that is closed. The
+replacement is a self-hosted indexer against the same RPC. It is not an optimisation the
+dashboard can defer either: at 0.75-second blocks, roughly 115,000 a day, `getLogs` history
+reaches back about ten hours before it stops being usable. Current state is a direct read and
+already works; anything ranked or over time — the leaderboard, the score chart, executions per
+day — does not exist until the indexer does.
 
 The gating question for stage 1 is not technical. It is whether a consumer protocol will
 actually call `getProfile` in production. If nothing reads the score, nothing else matters. That

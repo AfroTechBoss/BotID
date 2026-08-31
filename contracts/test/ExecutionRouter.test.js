@@ -27,12 +27,19 @@ const CLEAN = { realizedPnlBps: 0, slaBreached: false, limitBreached: false };
 let feedNonce = 0;
 
 /**
- * Lift `consumerWeightCap` out of the way, leaving every other engine parameter as it was.
+ * Lift both weight ceilings out of the way, leaving every other engine parameter as it was.
  *
  * A handful of tests below are about how a *single* execution is weighted, or about faults versus
  * volume. Those run one consumer through several settlements, which the per-consumer budget is
  * specifically designed to discount — so they set it aside to isolate what they are measuring.
  * The budget has its own test.
+ *
+ * `weightPerFeeUnit` goes to zero for the same reason and not for a different one. It is the
+ * second, independent ceiling `_spend` applies, and these tests settle at the fee floor, where the
+ * voice a consumer buys is only just enough — so leaving it armed would have the Sybil bound
+ * binding first in tests written to measure the EWMA. Zero disables it outright, which is cleaner
+ * here than picking a large multiplier and hoping it never binds. Its own behaviour is pinned in
+ * SybilVoice.test.js.
  */
 async function liftConsumerCap(env) {
   await env.engine.setParameters(
@@ -41,7 +48,8 @@ async function liftConsumerCap(env) {
     (1n << 128n) - 1n, // the largest the engine will accept — budgets are stored in 128 bits
     await env.engine.decayHalfLife(),
     await env.engine.livenessHaircutBps(),
-    await env.engine.verificationHaircutBps()
+    await env.engine.verificationHaircutBps(),
+    0n
   );
 }
 
@@ -510,8 +518,17 @@ describe("ExecutionRouter", function () {
         cap / 100n
       );
 
-      // A different counterparty is unaffected — reputation aggregates across them.
-      expect(await env.engine.remainingWeight(agent.agentId, env.other.address)).to.equal(cap);
+      // A different counterparty's *budget* is unaffected — the cap is keyed by address, so
+      // reputation still aggregates across counterparties and this griefing report has not spent
+      // anyone else's say. `remainingWeight` nonetheless reads zero for it, and the distinction is
+      // the whole of the Sybil fix: it reports the lesser of the two ceilings, and an address that
+      // has never paid a protocol fee has bought no voice with which to spend the budget it has.
+      // Before `weightPerFeeUnit` this line returned a full 50,000 to any address anyone cared to
+      // mint, which is what made the per-consumer cap a speed limit rather than a bound.
+      // SybilVoice.test.js pins both halves: that paying restores it, and that splitting the same
+      // payment across a thousand addresses does not.
+      expect(await env.engine.remainingWeight(agent.agentId, env.other.address)).to.equal(0n);
+      expect(cap).to.be.greaterThan(0n);
     });
 
     it("only the commissioning consumer may settle", async function () {

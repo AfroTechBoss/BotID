@@ -257,17 +257,17 @@ in `interface/` does.
 
 ## Status
 
-Stages 1–3 of the build order in `docs/architecture.md` §8, less the subgraph and the dashboard.
-The full lifecycle runs end to end on a local chain: request → deliver → challenge → escalate to
-Gold → settle, plus the watchtower's liveness fault path. The circuit compiles, proves and
-verifies against its own verifying key, and reproduces the integer reference exactly on every
-calibration sample.
+Stages 1–3 of the build order in `docs/architecture.md` §8, less the indexer — and so less the
+leaderboard and the history charts only an indexer can feed. The full lifecycle runs end to end
+on a local chain: request → deliver → challenge → escalate to Gold → settle, plus the
+watchtower's liveness fault path. The circuit compiles, proves and verifies against its own
+verifying key, and reproduces the integer reference exactly on every calibration sample.
 
 **Not audited, and not on mainnet.** The contracts are deployed to Bohr testnet (chain 968) and
 the interface reads them live — every number it renders is contract state or a router log, and
-there are no fixtures left in it. What is still missing is the part that matters: no subgraph, and
-no consumer protocol reading `meetsPolicy` in production, which is the one thing that would tell
-us whether any of this is worth having (§8).
+there are no fixtures left in it. What is still missing is the part that matters: no indexer, so
+nothing ranked or over time; and no consumer protocol reading `meetsPolicy` in production, which
+is the one thing that would tell us whether any of this is worth having (§8).
 
 The one open chain dependency is **resolved**: BOT Chain exposes the bn254 precompiles at `0x06`,
 `0x07` and `0x08` at Istanbul prices on both mainnet (chain 677) and testnet (chain 968), so the

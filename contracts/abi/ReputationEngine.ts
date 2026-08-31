@@ -233,6 +233,31 @@ export const reputationEngineAbi = [
       {
         "indexed": true,
         "internalType": "address",
+        "name": "consumer",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "bought",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "balance",
+        "type": "uint256"
+      }
+    ],
+    "name": "VoiceEarned",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
         "name": "writer",
         "type": "address"
       },
@@ -560,6 +585,11 @@ export const reputationEngineAbi = [
         "internalType": "uint32",
         "name": "lossToleranceBps",
         "type": "uint32"
+      },
+      {
+        "internalType": "uint256",
+        "name": "protocolFee",
+        "type": "uint256"
       }
     ],
     "name": "recordOutcome",
@@ -622,6 +652,11 @@ export const reputationEngineAbi = [
         "internalType": "uint32",
         "name": "verificationHaircutBps_",
         "type": "uint32"
+      },
+      {
+        "internalType": "uint256",
+        "name": "weightPerFeeUnit_",
+        "type": "uint256"
       }
     ],
     "name": "setParameters",
@@ -693,8 +728,40 @@ export const reputationEngineAbi = [
     "type": "function"
   },
   {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "name": "voice",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
     "inputs": [],
     "name": "weightCap",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "weightPerFeeUnit",
     "outputs": [
       {
         "internalType": "uint256",

@@ -335,6 +335,10 @@ async function main() {
   ];
   if (zkAdapter) {
     wiring.push(["router.setAdapter(Gold)", () => router.setAdapter(Tier.Gold, zkAdapter.getAddress())]);
+    // The adapter has to know the router for the same reason the registry does: it is the only
+    // caller allowed to write an attribution, and `provenBy` is permanent. Gold is inert without
+    // this — every `deliver` at Gold reverts `NotRouter` — which is the safe direction to fail in.
+    wiring.push(["zkAdapter.setRouter(router)", () => zkAdapter.setRouter(router.getAddress())]);
     wiring.push([
       `zkAdapter.setVerifier(${model.name}, scale ${model.inputScaleBits})`,
       () => zkAdapter.setVerifier(model.commitment, ezklVerifier, model.inputScaleBits),
@@ -344,11 +348,17 @@ async function main() {
   // Capital-denominated parameters. Both setters are all-or-nothing, so the fields that carry no
   // magnitude are read back off the contract and re-passed unchanged — duplicating their defaults
   // here would put a second copy of them in a file that has no way to notice when they drift.
-  const [decayHalfLife, livenessHaircutBps, verificationHaircutBps] = await Promise.all([
-    engine.decayHalfLife(),
-    engine.livenessHaircutBps(),
-    engine.verificationHaircutBps(),
-  ]);
+  // `weightPerFeeUnit` joins them rather than getting a CAPITAL_DEFAULTS entry, and the reason is
+  // that it is not a capital amount: it is a dimensionless multiplier from protocol fee to voice,
+  // so it must not be decimal-scaled. Scaling it by 10^6 would hand every consumer a million times
+  // the influence its fees paid for, which is the exact failure the Sybil bound exists to prevent.
+  const [decayHalfLife, livenessHaircutBps, verificationHaircutBps, weightPerFeeUnit] =
+    await Promise.all([
+      engine.decayHalfLife(),
+      engine.livenessHaircutBps(),
+      engine.verificationHaircutBps(),
+      engine.weightPerFeeUnit(),
+    ]);
   const [
     challengeWindow,
     escalationWindow,
@@ -448,13 +458,15 @@ async function main() {
   // and `setInputAttestor` behind a 21-day notice period, so anything above that has not landed
   // yet becomes a three-week round trip. It is one-way on each contract.
   //
-  // A deployment that never reaches these three calls has no timelock at all — which is why the
+  // A deployment that never reaches these calls has no timelock at all — which is why the
   // manifest records what `bootstrapped()` actually returns rather than what this script intended.
-  for (const [label, c] of [
+  const finalizable = [
     ["engine", engine],
     ["registry", registry],
     ["router", router],
-  ]) {
+  ];
+  if (zkAdapter) finalizable.push(["zkAdapter", zkAdapter]);
+  for (const [label, c] of finalizable) {
     wiring.push([`${label}.finalizeBootstrap()`, () => c.finalizeBootstrap()]);
   }
 
@@ -473,19 +485,22 @@ async function main() {
   // Read back rather than assumed. `bootstrapped()` false on a contract that is otherwise live
   // means its trust-redirecting setters still execute in one block, which is the whole finding
   // the timelock exists to close.
-  const [engineLive, registryLive, routerLive] = await Promise.all([
+  const [engineLive, registryLive, routerLive, zkLive] = await Promise.all([
     engine.bootstrapped(),
     registry.bootstrapped(),
     router.bootstrapped(),
+    zkAdapter ? zkAdapter.bootstrapped() : Promise.resolve(null),
   ]);
   const timelockDelay = Number(await router.TIMELOCK_DELAY());
   console.log("\ntimelock");
   console.log(`  delay              ${timelockDelay / 86_400} days`);
-  for (const [label, live] of [
+  const armed = [
     ["ReputationEngine", engineLive],
     ["AgentRegistry", registryLive],
     ["ExecutionRouter", routerLive],
-  ]) {
+  ];
+  if (zkAdapter) armed.push(["ZkAdapter", zkLive]);
+  for (const [label, live] of armed) {
     console.log(`  ${live ? "+" : "!"} ${label.padEnd(16)} ${live ? "armed" : "NOT ARMED"}`);
   }
 
@@ -515,6 +530,7 @@ async function main() {
         ReputationEngine: engineLive,
         AgentRegistry: registryLive,
         ExecutionRouter: routerLive,
+        ZkAdapter: zkLive,
       },
     },
     contracts: {
@@ -563,16 +579,16 @@ async function main() {
       );
     }
     console.log(
-      "    Execute them in the order listed: the three finalizeBootstrap() calls are last " +
-        "because\n    everything above them is instant until they land and a 21-day round trip " +
-        "afterwards."
+      "    Execute them in the order listed: the finalizeBootstrap() calls are last because\n" +
+        "    everything above them is instant until they land and a 21-day round trip afterwards."
     );
   }
-  if (!(engineLive && registryLive && routerLive)) {
+  if (!(engineLive && registryLive && routerLive && (zkAdapter ? zkLive : true))) {
     console.log(
       "\n! The admin timelock is not armed everywhere. Until finalizeBootstrap() has been called " +
-        "on all\n  three contracts, the owner key can redirect the router, the reputation " +
-        "writers, a verification\n  adapter or the input attestor in a single block."
+        "on every\n  contract listed above, the owner key can redirect the router, the reputation " +
+        "writers, a\n  verification adapter, the input attestor, or the address the Gold adapter " +
+        "accepts attribution\n  writes from — each in a single block."
     );
   }
   console.log();

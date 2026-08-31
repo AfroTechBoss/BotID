@@ -390,6 +390,25 @@
       "inputs": [
         {
           "indexed": true,
+          "internalType": "uint256",
+          "name": "agentId",
+          "type": "uint256"
+        },
+        {
+          "indexed": false,
+          "internalType": "enum Tier",
+          "name": "tier",
+          "type": "uint8"
+        }
+      ],
+      "name": "TierDemonstrated",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
           "internalType": "address",
           "name": "treasury",
           "type": "address"
@@ -623,6 +642,25 @@
       "type": "function"
     },
     {
+      "inputs": [
+        {
+          "internalType": "uint256",
+          "name": "agentId",
+          "type": "uint256"
+        }
+      ],
+      "name": "effectiveTier",
+      "outputs": [
+        {
+          "internalType": "enum Tier",
+          "name": "",
+          "type": "uint8"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
       "inputs": [],
       "name": "engine",
       "outputs": [
@@ -672,6 +710,11 @@
             {
               "internalType": "enum Tier",
               "name": "tier",
+              "type": "uint8"
+            },
+            {
+              "internalType": "enum Tier",
+              "name": "demonstratedTier",
               "type": "uint8"
             },
             {
@@ -733,6 +776,11 @@
             {
               "internalType": "enum Tier",
               "name": "tier",
+              "type": "uint8"
+            },
+            {
+              "internalType": "enum Tier",
+              "name": "demonstratedTier",
               "type": "uint8"
             },
             {
@@ -1013,6 +1061,24 @@
         }
       ],
       "name": "queueTreasury",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "uint256",
+          "name": "agentId",
+          "type": "uint256"
+        },
+        {
+          "internalType": "enum Tier",
+          "name": "tier",
+          "type": "uint8"
+        }
+      ],
+      "name": "recordDelivery",
       "outputs": [],
       "stateMutability": "nonpayable",
       "type": "function"
@@ -1510,6 +1576,11 @@
     {
       "inputs": [],
       "name": "Reentrancy",
+      "type": "error"
+    },
+    {
+      "inputs": [],
+      "name": "SelfDealing",
       "type": "error"
     },
     {
@@ -2290,6 +2361,11 @@
               "type": "uint8"
             },
             {
+              "internalType": "bool",
+              "name": "attributed",
+              "type": "bool"
+            },
+            {
               "internalType": "address",
               "name": "challenger",
               "type": "address"
@@ -3030,6 +3106,31 @@
         {
           "indexed": true,
           "internalType": "address",
+          "name": "consumer",
+          "type": "address"
+        },
+        {
+          "indexed": false,
+          "internalType": "uint256",
+          "name": "bought",
+          "type": "uint256"
+        },
+        {
+          "indexed": false,
+          "internalType": "uint256",
+          "name": "balance",
+          "type": "uint256"
+        }
+      ],
+      "name": "VoiceEarned",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "address",
           "name": "writer",
           "type": "address"
         },
@@ -3357,6 +3458,11 @@
           "internalType": "uint32",
           "name": "lossToleranceBps",
           "type": "uint32"
+        },
+        {
+          "internalType": "uint256",
+          "name": "protocolFee",
+          "type": "uint256"
         }
       ],
       "name": "recordOutcome",
@@ -3419,6 +3525,11 @@
           "internalType": "uint32",
           "name": "verificationHaircutBps_",
           "type": "uint32"
+        },
+        {
+          "internalType": "uint256",
+          "name": "weightPerFeeUnit_",
+          "type": "uint256"
         }
       ],
       "name": "setParameters",
@@ -3490,8 +3601,40 @@
       "type": "function"
     },
     {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "",
+          "type": "address"
+        }
+      ],
+      "name": "voice",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
       "inputs": [],
       "name": "weightCap",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "weightPerFeeUnit",
       "outputs": [
         {
           "internalType": "uint256",
@@ -4158,6 +4301,72 @@
       ],
       "stateMutability": "view",
       "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "components": [
+            {
+              "internalType": "bytes32",
+              "name": "requestId",
+              "type": "bytes32"
+            },
+            {
+              "internalType": "uint256",
+              "name": "agentId",
+              "type": "uint256"
+            },
+            {
+              "internalType": "bytes32",
+              "name": "modelCommitment",
+              "type": "bytes32"
+            },
+            {
+              "internalType": "bytes32",
+              "name": "inputCommitment",
+              "type": "bytes32"
+            },
+            {
+              "internalType": "bytes32",
+              "name": "outputCommitment",
+              "type": "bytes32"
+            },
+            {
+              "internalType": "uint64",
+              "name": "deliverBy",
+              "type": "uint64"
+            },
+            {
+              "internalType": "address",
+              "name": "operator",
+              "type": "address"
+            }
+          ],
+          "internalType": "struct VerificationContext",
+          "name": "ctx",
+          "type": "tuple"
+        },
+        {
+          "internalType": "bytes",
+          "name": "attestation",
+          "type": "bytes"
+        }
+      ],
+      "name": "verifyAndAttribute",
+      "outputs": [
+        {
+          "internalType": "bool",
+          "name": "ok",
+          "type": "bool"
+        },
+        {
+          "internalType": "uint256",
+          "name": "originator",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
     }
   ],
   "TeeAdapter": [
@@ -4698,6 +4907,72 @@
       ],
       "stateMutability": "view",
       "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "components": [
+            {
+              "internalType": "bytes32",
+              "name": "requestId",
+              "type": "bytes32"
+            },
+            {
+              "internalType": "uint256",
+              "name": "agentId",
+              "type": "uint256"
+            },
+            {
+              "internalType": "bytes32",
+              "name": "modelCommitment",
+              "type": "bytes32"
+            },
+            {
+              "internalType": "bytes32",
+              "name": "inputCommitment",
+              "type": "bytes32"
+            },
+            {
+              "internalType": "bytes32",
+              "name": "outputCommitment",
+              "type": "bytes32"
+            },
+            {
+              "internalType": "uint64",
+              "name": "deliverBy",
+              "type": "uint64"
+            },
+            {
+              "internalType": "address",
+              "name": "operator",
+              "type": "address"
+            }
+          ],
+          "internalType": "struct VerificationContext",
+          "name": "ctx",
+          "type": "tuple"
+        },
+        {
+          "internalType": "bytes",
+          "name": "attestation",
+          "type": "bytes"
+        }
+      ],
+      "name": "verifyAndAttribute",
+      "outputs": [
+        {
+          "internalType": "bool",
+          "name": "ok",
+          "type": "bool"
+        },
+        {
+          "internalType": "uint256",
+          "name": "originator",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
     }
   ],
   "ZkAdapter": [
@@ -4719,6 +4994,11 @@
     },
     {
       "inputs": [],
+      "name": "AlreadyBootstrapped",
+      "type": "error"
+    },
+    {
+      "inputs": [],
       "name": "InvalidParameter",
       "type": "error"
     },
@@ -4726,6 +5006,64 @@
       "inputs": [],
       "name": "NotOwner",
       "type": "error"
+    },
+    {
+      "inputs": [],
+      "name": "NotQueued",
+      "type": "error"
+    },
+    {
+      "inputs": [],
+      "name": "NotRouter",
+      "type": "error"
+    },
+    {
+      "inputs": [],
+      "name": "Premature",
+      "type": "error"
+    },
+    {
+      "inputs": [],
+      "name": "Stale",
+      "type": "error"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "bytes32",
+          "name": "action",
+          "type": "bytes32"
+        }
+      ],
+      "name": "ActionCancelled",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "bytes32",
+          "name": "action",
+          "type": "bytes32"
+        },
+        {
+          "indexed": false,
+          "internalType": "uint64",
+          "name": "eta",
+          "type": "uint64"
+        }
+      ],
+      "name": "ActionQueued",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [],
+      "name": "Bootstrapped",
+      "type": "event"
     },
     {
       "anonymous": false,
@@ -4783,6 +5121,38 @@
       "inputs": [
         {
           "indexed": true,
+          "internalType": "address",
+          "name": "router",
+          "type": "address"
+        },
+        {
+          "indexed": false,
+          "internalType": "uint64",
+          "name": "eta",
+          "type": "uint64"
+        }
+      ],
+      "name": "RouterQueued",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "router",
+          "type": "address"
+        }
+      ],
+      "name": "RouterSet",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
           "internalType": "bytes32",
           "name": "modelCommitment",
           "type": "bytes32"
@@ -4804,10 +5174,74 @@
       "type": "event"
     },
     {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "bytes32",
+          "name": "workKey",
+          "type": "bytes32"
+        },
+        {
+          "indexed": true,
+          "internalType": "uint256",
+          "name": "agentId",
+          "type": "uint256"
+        },
+        {
+          "indexed": true,
+          "internalType": "bytes32",
+          "name": "requestId",
+          "type": "bytes32"
+        }
+      ],
+      "name": "WorkAttributed",
+      "type": "event"
+    },
+    {
+      "inputs": [],
+      "name": "TIMELOCK_DELAY",
+      "outputs": [
+        {
+          "internalType": "uint64",
+          "name": "",
+          "type": "uint64"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "TIMELOCK_GRACE",
+      "outputs": [
+        {
+          "internalType": "uint64",
+          "name": "",
+          "type": "uint64"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
       "inputs": [],
       "name": "acceptOwnership",
       "outputs": [],
       "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "bootstrapped",
+      "outputs": [
+        {
+          "internalType": "bool",
+          "name": "",
+          "type": "bool"
+        }
+      ],
+      "stateMutability": "view",
       "type": "function"
     },
     {
@@ -4827,6 +5261,19 @@
         }
       ],
       "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "bytes32",
+          "name": "action",
+          "type": "bytes32"
+        }
+      ],
+      "name": "cancel",
+      "outputs": [],
+      "stateMutability": "nonpayable",
       "type": "function"
     },
     {
@@ -4873,6 +5320,13 @@
         }
       ],
       "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "finalizeBootstrap",
+      "outputs": [],
+      "stateMutability": "nonpayable",
       "type": "function"
     },
     {
@@ -5001,12 +5455,89 @@
     {
       "inputs": [
         {
+          "internalType": "bytes32",
+          "name": "",
+          "type": "bytes32"
+        }
+      ],
+      "name": "provenBy",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "router_",
+          "type": "address"
+        }
+      ],
+      "name": "queueRouter",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "router",
+      "outputs": [
+        {
+          "internalType": "address",
+          "name": "",
+          "type": "address"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "router_",
+          "type": "address"
+        }
+      ],
+      "name": "routerAction",
+      "outputs": [
+        {
+          "internalType": "bytes32",
+          "name": "",
+          "type": "bytes32"
+        }
+      ],
+      "stateMutability": "pure",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
           "internalType": "contract IInputAttestor",
           "name": "attestor",
           "type": "address"
         }
       ],
       "name": "setInputAttestor",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "router_",
+          "type": "address"
+        }
+      ],
+      "name": "setRouter",
       "outputs": [],
       "stateMutability": "nonpayable",
       "type": "function"
@@ -5045,6 +5576,25 @@
         }
       ],
       "stateMutability": "pure",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "bytes32",
+          "name": "",
+          "type": "bytes32"
+        }
+      ],
+      "name": "timelockEta",
+      "outputs": [
+        {
+          "internalType": "uint64",
+          "name": "",
+          "type": "uint64"
+        }
+      ],
+      "stateMutability": "view",
       "type": "function"
     },
     {
@@ -5114,11 +5664,101 @@
       "outputs": [
         {
           "internalType": "bool",
-          "name": "",
+          "name": "ok",
           "type": "bool"
         }
       ],
       "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "components": [
+            {
+              "internalType": "bytes32",
+              "name": "requestId",
+              "type": "bytes32"
+            },
+            {
+              "internalType": "uint256",
+              "name": "agentId",
+              "type": "uint256"
+            },
+            {
+              "internalType": "bytes32",
+              "name": "modelCommitment",
+              "type": "bytes32"
+            },
+            {
+              "internalType": "bytes32",
+              "name": "inputCommitment",
+              "type": "bytes32"
+            },
+            {
+              "internalType": "bytes32",
+              "name": "outputCommitment",
+              "type": "bytes32"
+            },
+            {
+              "internalType": "uint64",
+              "name": "deliverBy",
+              "type": "uint64"
+            },
+            {
+              "internalType": "address",
+              "name": "operator",
+              "type": "address"
+            }
+          ],
+          "internalType": "struct VerificationContext",
+          "name": "ctx",
+          "type": "tuple"
+        },
+        {
+          "internalType": "bytes",
+          "name": "attestation",
+          "type": "bytes"
+        }
+      ],
+      "name": "verifyAndAttribute",
+      "outputs": [
+        {
+          "internalType": "bool",
+          "name": "ok",
+          "type": "bool"
+        },
+        {
+          "internalType": "uint256",
+          "name": "originator",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "bytes32",
+          "name": "modelCommitment",
+          "type": "bytes32"
+        },
+        {
+          "internalType": "uint256[]",
+          "name": "instances",
+          "type": "uint256[]"
+        }
+      ],
+      "name": "workKeyFor",
+      "outputs": [
+        {
+          "internalType": "bytes32",
+          "name": "",
+          "type": "bytes32"
+        }
+      ],
+      "stateMutability": "pure",
       "type": "function"
     }
   ]

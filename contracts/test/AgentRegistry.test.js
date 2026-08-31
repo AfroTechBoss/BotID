@@ -97,15 +97,75 @@ describe("AgentRegistry", function () {
 
   describe("credit — reputation multiplies capital, it does not replace it", function () {
     it("prices credit as bond x leverage x tier factor", async function () {
-      // Neutral score => 1.0x leverage. Bronze => 0.5x tier factor.
+      // Neutral score => 1.0x leverage. The tier factor comes from `effectiveTier`, and a freshly
+      // registered agent has demonstrated nothing, so all three sit on Bronze's 0.5x however they
+      // introduced themselves. Declaring a tier is free; this is the line where that stops paying.
       const { agentId } = await registerAgent(env, { bond: E18(1000), tier: Tier.Bronze });
       expect(await env.registry.availableCredit(agentId)).to.equal(E18(500));
 
       const silver = await registerAgent(env, { bond: E18(1000), tier: Tier.Silver });
-      expect(await env.registry.availableCredit(silver.agentId)).to.equal(E18(1000));
+      expect(await env.registry.availableCredit(silver.agentId)).to.equal(E18(500));
 
       const gold = await registerAgent(env, { bond: E18(1000), tier: Tier.Gold });
+      expect(await env.registry.availableCredit(gold.agentId)).to.equal(E18(500));
+    });
+
+    it("pays the declared tier's factor once, and only once, an attestation lands at it", async function () {
+      const silver = await registerAgent(env, { bond: E18(1000), tier: Tier.Silver });
+      const gold = await registerAgent(env, { bond: E18(1000), tier: Tier.Gold });
+      await env.registry.setRouter(env.owner.address);
+
+      // The router records a Silver delivery for each. The Silver agent gets Silver's 1.0x, which
+      // is what it declared and has now shown. The Gold agent gets Silver's too and not Gold's:
+      // `effectiveTier` is the lesser of declared and demonstrated, so the unproven half of a
+      // claim earns nothing until it is proven.
+      await env.registry.recordDelivery(silver.agentId, Tier.Silver);
+      await env.registry.recordDelivery(gold.agentId, Tier.Silver);
+      expect(await env.registry.availableCredit(silver.agentId)).to.equal(E18(1000));
+      expect(await env.registry.availableCredit(gold.agentId)).to.equal(E18(1000));
+
+      // And a Gold delivery finishes the job for the one that declared Gold.
+      await env.registry.recordDelivery(gold.agentId, Tier.Gold);
       expect(await env.registry.availableCredit(gold.agentId)).to.equal(E18(1500));
+
+      // The ratchet is capped by the declaration, not just floored by history: a Gold attestation
+      // credited to an agent that only ever declared Silver still buys Silver. Nothing here can
+      // hand an agent more than it asked for.
+      await env.registry.recordDelivery(silver.agentId, Tier.Gold);
+      expect(await env.registry.availableCredit(silver.agentId)).to.equal(E18(1000));
+    });
+
+    it("ratchets demonstratedTier upward only, and reports both fields", async function () {
+      const { agentId } = await registerAgent(env, { bond: E18(1000), tier: Tier.Gold });
+      await env.registry.setRouter(env.owner.address);
+
+      expect((await env.registry.getProfile(agentId)).tier).to.equal(Tier.Gold);
+      expect((await env.registry.getProfile(agentId)).demonstratedTier).to.equal(Tier.None);
+
+      await expect(env.registry.recordDelivery(agentId, Tier.Gold))
+        .to.emit(env.registry, "TierDemonstrated")
+        .withArgs(agentId, Tier.Gold);
+      expect((await env.registry.getProfile(agentId)).demonstratedTier).to.equal(Tier.Gold);
+
+      // A later Bronze delivery does not demote it. The claim the field encodes is "has produced a
+      // Gold proof at least once", and that does not stop being true — degradation is the score's
+      // job. No event, because nothing moved.
+      await expect(env.registry.recordDelivery(agentId, Tier.Bronze)).to.not.emit(
+        env.registry,
+        "TierDemonstrated"
+      );
+      expect((await env.registry.getProfile(agentId)).demonstratedTier).to.equal(Tier.Gold);
+    });
+
+    it("gives an undemonstrated agent Bronze rather than nothing", async function () {
+      // The floor is load-bearing, not generous. At `Tier.None` the factor is zero, so credit is
+      // zero, so `reserve` reverts, so the agent can never take a request, so it can never
+      // demonstrate anything — the rule would be unsatisfiable for honest agents too. Bronze is
+      // the tier whose attestation is an operator signature, which every registered agent can
+      // already produce, so granting it unproven concedes nothing.
+      const { agentId } = await registerAgent(env, { bond: E18(1000), tier: Tier.Gold });
+      expect(await env.registry.effectiveTier(agentId)).to.equal(Tier.Bronze);
+      expect(await env.registry.availableCredit(agentId)).to.be.greaterThan(0);
     });
 
     it("caps leverage at 6x even at a perfect score", async function () {
@@ -382,6 +442,15 @@ describe("AgentRegistry", function () {
         minBond: E18(1000),
         maxStalenessSeconds: 7 * DAY,
       };
+
+      // `minTier` screens on `effectiveTier`, so declaring Silver is not enough to pass a Silver
+      // filter — the agent has to have had a Silver attestation accepted. Until then it reads as
+      // Bronze and the base policy rejects it.
+      expect(await env.registry.meetsPolicy(agentId, base)).to.equal(false);
+      expect(await env.registry.meetsPolicy(agentId, { ...base, minTier: Tier.Bronze })).to.equal(true);
+
+      await env.registry.setRouter(env.owner.address);
+      await env.registry.recordDelivery(agentId, Tier.Silver);
 
       expect(await env.registry.meetsPolicy(agentId, base)).to.equal(true);
       expect(await env.registry.meetsPolicy(agentId, { ...base, minScore: 5001 })).to.equal(false);

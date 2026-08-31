@@ -999,34 +999,30 @@ Known limits, stated plainly:
 
 ## 8. Where they live
 
-Bohr testnet, chain 968, deployed 2026-08-28, first block 21,458,922. Bond token has 6 decimals.
+Bohr testnet, chain 968, deployed 2026-08-28 16:39Z, first block 21,465,564. Bond token has 6
+decimals.
 
 | Contract | Address |
 |---|---|
-| ReputationEngine | `0xBa49Ff343086E966B3172a29742ea5056553E7D1` |
-| AgentRegistry | `0x39FF930E6974b22a07bdfAd8aDC9f3EE7172aA83` |
-| InputAttestor | `0x9afF2B7D5C8BA5D18F1906efafe1cEeccfe465B9` |
-| ExecutionRouter | `0x987A177BB44fAc7F51580134a7B06A327313E099` |
-| SignatureAdapter (Bronze) | `0x5E0E99F76f7f77e345312d092E342Fee35eF112a` |
-| TeeAdapter (Silver) | `0x7dBC738d03f86893101b2Ce9D670C0542bb7cbE6` |
-| ZkAdapter (Gold) | `0x896BcAaE8DDbF69a9155D8c8f8BcC482F980FF1d` |
-| Halo2Verifier | `0x8E2635D6d45D1D92b9Ab29d831918a52F111beb1` |
+| ReputationEngine | `0x9D602eE0ddA3Eff93e11aE56BC3c6273D9edecB6` |
+| AgentRegistry | `0x673D39B8b0Ce8e61EA5fFbf9b3f8E373aE0B5c87` |
+| InputAttestor | `0xd14CFe710B9d70d7cb191586CbdeB49347c41CF4` |
+| ExecutionRouter | `0xE26843C9AD79D67f48f71F865B397f437171ED9A` |
+| SignatureAdapter (Bronze) | `0xF222a82b9C1d59999C3e48B30F6c797c1dab15BF` |
+| TeeAdapter (Silver) | `0xEC10Fb66Fb1736C45f2c704497ef0fE0f0754150` |
+| ZkAdapter (Gold) | `0x5B63e01298Cfb28ac96C67718daA5788cF934CDf` |
+| Halo2Verifier | `0x0825Ea3EdfE5961094E63F802D11CCD53098D651` |
 | Bond token (test) | `0x75edC9335175Fc0552D51D48439F229c10420fe3` |
 
-All eight are source-verified on the explorer: `https://scan.bohr.life`. Four were submitted by
-`scripts/verify.js`; `ReputationEngine`, `InputAttestor`, `SignatureAdapter` and `Halo2Verifier`
-came back already verified, because Blockscout matches on bytecode rather than on address and had
-seen theirs before. Do not read that split as telling you which contracts changed — `TeeAdapter`
-and `ZkAdapter` are byte-identical to their predecessors too, and were submitted anyway.
+**None of these eight is source-verified yet.** Checked against `https://scan.bohr.life` on
+2026-08-29: `is_verified` is false for all of them. `scripts/verify.js` has not been re-run since
+this set landed, and Blockscout matches on bytecode rather than address, so the previous set's
+verifications do not carry over to these addresses even where the bytecode is unchanged. Until it
+is re-run, a reader cannot check the running code against this repository — which is most of what
+verification is for.
 
-What did change is narrower than a redeploy usually implies. Comparing runtime bytecode against the
-2026-08-25 set, six of the eight are **byte-identical**, and the two that differ — `AgentRegistry`
-and `ExecutionRouter` — differ only in embedded `immutable` values, at the same code length. That is
-the `immutable` claim above showing up in the bytecode: each holds its siblings' addresses in code
-rather than in storage, so pointing at a new engine or router necessarily produces new bytecode. No
-Solidity source changed between the two deployments.
-
-**This replaced the deployment dated 2026-08-25, which had replaced the one dated 2026-08-11.**
+**This replaced the set deployed earlier the same day (registry `0x39FF…aA83`), which had replaced
+the one dated 2026-08-25, which had replaced the one dated 2026-08-11.**
 Nothing here is upgradeable — `registry`, `engine` and `bondToken` are `immutable`, so one contract
 cannot be swapped while the rest stay, and every redeploy is therefore the whole set. Unlike the
 previous redeploy, which carried `Halo2Verifier` over because its bytecode was untouched, this one
@@ -1041,15 +1037,38 @@ current one. There is no window in which two sets work. Agents registered agains
 registry are not visible here at all; their bonds and scores remain on chain at the old addresses
 and nothing reads them.
 
-The wiring below was read back off chain rather than assumed, after the deploy script reported it:
-`registry.router()` and `registry.engine()` point at this set's router and engine, `adapters(1..3)`
-resolve to the three adapters, `engine.writers()` is true for both the registry and the router, and
-`bootstrapped()` returns true on all three timelocked contracts — so the 21-day notice period is
-armed and the trust-redirecting setters are behind it.
+The wiring was reported by the deploy script and recorded in the manifest: `adapters(1..3)`
+resolve to the three adapters, `engine.writers()` is true for both the registry and the router,
+and `bootstrapped()` is true on all three timelocked contracts — so the 21-day notice period is
+armed and the trust-redirecting setters are behind it. The Gold adapter here predates the
+`onlyRouter` fix on `verifyAndAttribute`, and so do the `settleDefault` and `challenge` fixes:
+this set runs source that this repository has since moved past.
 
 The protocol owner and deployer for this set is `0x08c8108383b69052C04B898676a08Bbbb9ca69F4`, which
 is **not** the key that deployed the previous two (`0x3Ae2AfdeF2391E2AC78e1eb901aF4092E5cb6731`).
 Treasury is unchanged at `0x27F2b72256bAAFF93dCfD50addBFd63F45e2e091`.
+
+### After a redeploy
+
+`deploy.js` writes `contracts/deployments/bohr-968.json` and stops there. That manifest is the
+only sanctioned source for the addresses, and everything below is a copy of it that the deploy
+does not touch. The relayer is the exception and the model: `relayer/src/config.js` reads the
+manifest off disk, so it needs nothing. Every other item here is hand-maintained, which is
+exactly why it goes stale quietly — nothing fails loudly when an address is a set behind, the
+reads simply return nothing and the page renders an empty protocol.
+
+| Update | Where | If you skip it |
+|---|---|---|
+| The manifest itself | `contracts/deployments/bohr-968.json` — **commit it**; the script overwrites in place and git is the only history | The previous set's addresses are unrecoverable |
+| The interface's address table | `interface/lib/contracts.ts`, `ADDRESSES.bohr` | The whole app reads a dead set. `npm run check-abi` does not check addresses, only shapes |
+| This section's table, first block, and the "replaced the deployment dated…" line | `docs/contract.md` §8 | The documented protocol and the running one are different protocols |
+| Explorer verification | re-run `scripts/verify.js` | Source-unverified contracts on a page that claims all eight are verified |
+| The timelocked-setter **count** | `interface/app/docs/page.tsx`, `interface/app/security/page.tsx` (twice), `interface/app/legal/disclaimer/page.tsx` | These say **five**, correct for the deployed set. The source now has **six** — `ZkAdapter.setRouter` joined them — so they become wrong on the first deploy that carries it, in the direction of overstating what is protected |
+| `deployedAt`, and whether Gold is live | the manifest's `goldModel.verifier` and `timelock.bootstrapped` | A claim that the Gold tier is live rather than merely named, with nothing behind it |
+
+Do the address updates in the same commit as the manifest. A redeploy split across two commits
+has a window in which the repo describes two different deployments, and that window is where the
+stale copy survives.
 
 ### The tunable numbers
 
@@ -1415,7 +1434,7 @@ exists. It's the setup, not part of the running contract.
 ### `abstract contract Timelocked is Ownable`
 
 A queue-then-execute notice period on the handful of setters that can **redirect trust**.
-`AgentRegistry`, `ExecutionRouter` and `ReputationEngine` inherit it.
+`AgentRegistry`, `ExecutionRouter`, `ReputationEngine` and `ZkAdapter` inherit it.
 
 | Name | Kind | Detail |
 |---|---|---|
@@ -1435,8 +1454,9 @@ A queue-then-execute notice period on the handful of setters that can **redirect
 | `_queue(action)` | internal, onlyOwner | Stamps `block.timestamp + TIMELOCK_DELAY` and emits. Re-queueing restarts the clock |
 | `_consume(action)` | internal | Checks the window and **deletes the entry**, so executing twice needs announcing twice. No-op while `!bootstrapped` |
 
-**What it covers, and why only that.** Five setters: `AgentRegistry.setRouter` and `setTreasury`,
-`ReputationEngine.setWriter`, `ExecutionRouter.setAdapter` and `setInputAttestor`. These are the
+**What it covers, and why only that.** Six setters: `AgentRegistry.setRouter` and `setTreasury`,
+`ReputationEngine.setWriter`, `ExecutionRouter.setAdapter` and `setInputAttestor`, and
+`ZkAdapter.setRouter`. These are the
 ones that point a contract at code it did not previously depend on. Swapping the Bronze adapter for
 one whose `verify` returns true unconditionally does not look like theft in any event these
 contracts emit — every delivery afterwards is simply accepted and every challenge against one
@@ -1456,8 +1476,8 @@ that had long since stopped watching. Past `eta + 14 days` the plan has to be an
 **Why `bootstrapped` exists.** Wiring a protocol takes six calls that all have to land before
 anything works, and a three-week wait between deploying the router and telling the registry about
 it would make deployment impossible rather than safe. The setters therefore run immediately until
-`finalizeBootstrap()`, which the deploy script calls **last** on all three contracts and records in
-the manifest. That it is one-way is the whole guarantee — and it is worth being explicit about what
+`finalizeBootstrap()`, which the deploy script calls **last** on every contract that has one —
+the engine, the registry, the router, and the Gold adapter — and records in the manifest. That it is one-way is the whole guarantee — and it is worth being explicit about what
 it does not guarantee: a deployment that never calls it has no timelock at all. `bootstrapped()`
 returning false on a live deployment is a finding, not a detail.
 
@@ -1798,6 +1818,8 @@ The most intricate contract here.
 | `MAX_SCALE_BITS` | `uint8 internal constant` = 64 | Ceiling on the registered shift |
 | `modelFor` | `mapping(bytes32 => Model) public` | Model commitment → its verifier and shift |
 | `inputAttestor` | `IInputAttestor public` | Where the hashing convention comes from |
+| `provenBy` | `mapping(bytes32 => uint256) public` | Work key → the agent credited with proving it first. Written once, never rewritten |
+| `router` | `address public` | The only caller allowed to write `provenBy`. See `verifyAndAttribute` |
 
 `struct Model { IEzklVerifier verifier; uint8 inputScaleBits; }`
 `struct Reveal { bytes32 feedId; uint64 timestamp; int256 value; bytes32 salt; }`
@@ -1819,7 +1841,11 @@ it's deliberately revealed.
 | `tier()` | anyone | Returns `Tier.Gold` |
 | `setVerifier(modelCommitment, verifier, inputScaleBits)` | owner | Register a circuit. The shift comes from the model's own settings file — guessing it makes every proof for that model fail |
 | `setInputAttestor(attestor)` | owner | Must match the router's, or every honest proof fails closed |
+| `queueRouter(router_)` / `setRouter(router_)` / `routerAction(router_)` | owner | Point at the router. Queued 21 days ahead once bootstrapped, for the same reason `AgentRegistry.setRouter` is |
+| `canVerify(modelCommitment)` | anyone, view | Whether a circuit is registered for this model at all — "could this agent be held to a proof", which is what `ExecutionRouter.challenge` asks before it accepts one |
 | `verify(ctx, attestation)` | anyone, view | The main event, below |
+| `verifyAndAttribute(ctx, attestation)` | **router only** | `verify`, plus the first-write-wins record of who presented this proof first. Reverts `NotRouter` for anyone else |
+| `workKeyFor(modelCommitment, instances)` | anyone, pure | **Helper.** The key `provenBy` records under, so an operator can check whether the work it is about to deliver has already been claimed |
 | `inputCommitmentFor(reveals)` | anyone, view | **Helper.** What commitment these reveals produce |
 | `expectedInputInstances(modelCommitment, reveals)` | anyone, view | **Helper.** What the circuit's input cells must be |
 | `outputCommitmentFor(outputs)` | anyone, pure | **Helper.** What the output cells must hash to |
@@ -1861,7 +1887,10 @@ the party being checked. Let the agent choose it and it could reclassify an inpu
 |---|---|---|
 | `VerifierSet(modelCommitment, verifier, inputScaleBits)` | event | A circuit was registered |
 | `InputAttestorSet(attestor)` | event | The attestor was pointed elsewhere |
+| `RouterSet(router)` / `RouterQueued(router, eta)` | event | The router was pointed elsewhere, or announced |
+| `WorkAttributed(workKey, agentId, requestId)` | event | An instance vector was credited to an agent for the first time |
 | `InvalidParameter()` | error | Zero commitment, a shift above 64, or an unconvertible value |
+| `NotRouter()` | error | Someone other than the router tried to write an attribution |
 
 ---
 

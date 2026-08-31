@@ -31,6 +31,18 @@ describe("parameter calibration", () => {
    */
   const counterparty = (i) => ethers.getAddress(`0x${(i + 1).toString(16).padStart(40, "0")}`);
 
+  /**
+   * The protocol's cut of a fee posted at the router's floor — which is what `recordOutcome` now
+   * prices a consumer's influence in.
+   *
+   * `minFeeBps` is 10 of the notional and `protocolFeeBps` is 500 of that, so the cut is
+   * `notional / 20_000`; at the default `weightPerFeeUnit` of 20,000 it buys back exactly
+   * `notional` of voice. That break-even is the point of the default, and it is why every number
+   * below is unchanged: a consumer paying the fee floor is never the binding ceiling, so these
+   * tests still measure the parameters they were written to measure rather than the Sybil bound.
+   */
+  const feeCut = (notional) => notional / 20_000n;
+
   async function calibrated(
     env,
     { halfWeight = DEFAULTS.halfWeight, consumerWeightCap = halfWeight / 2 } = {}
@@ -43,7 +55,8 @@ describe("parameter calibration", () => {
         whole(consumerWeightCap),
         await env.engine.decayHalfLife(),
         await env.engine.livenessHaircutBps(),
-        await env.engine.verificationHaircutBps()
+        await env.engine.verificationHaircutBps(),
+        await env.engine.weightPerFeeUnit()
       )
     ).wait();
     await (await env.registry.setLimits(whole(DEFAULTS.minBond), whole(DEFAULTS.globalCap))).wait();
@@ -76,7 +89,7 @@ describe("parameter calibration", () => {
     let n = 0;
     while ((await env.engine.getScore(1)) < 7_000n && n < 100) {
       await (
-        await env.engine.recordOutcome(1, counterparty(n), CLEAN, env.units(50), 500)
+        await env.engine.recordOutcome(1, counterparty(n), CLEAN, env.units(50), 500, feeCut(env.units(50)))
       ).wait();
       n += 1;
     }
@@ -97,7 +110,7 @@ describe("parameter calibration", () => {
     // The same fifty clean deliveries, against the parameter as it was before this repricing.
     for (let i = 0; i < 50; i += 1) {
       await (
-        await env.engine.recordOutcome(1, counterparty(i), CLEAN, env.units(50), 500)
+        await env.engine.recordOutcome(1, counterparty(i), CLEAN, env.units(50), 500, feeCut(env.units(50)))
       ).wait();
     }
 
@@ -122,7 +135,7 @@ describe("parameter calibration", () => {
     // 10,000/11,000, or 91% of the distance. Large, deliberately — capital-weighted reputation
     // means a big well-executed delivery should count for more — but not the whole story.
     await (
-      await env.engine.recordOutcome(1, counterparty(0), CLEAN, env.units(5_000_000), 500)
+      await env.engine.recordOutcome(1, counterparty(0), CLEAN, env.units(5_000_000), 500, feeCut(env.units(5_000_000)))
     ).wait();
 
     const score = await env.engine.getScore(1);
@@ -142,21 +155,38 @@ describe("parameter calibration", () => {
     // parameter exists: `settle` takes the consumer's word for the outcome, and the damage of a
     // lie scales with a notional the liar picks while the cost is a fraction of it.
     await (
-      await env.engine.recordOutcome(1, counterparty(0), CLEAN, env.units(5_000_000), 500)
+      await env.engine.recordOutcome(1, counterparty(0), CLEAN, env.units(5_000_000), 500, feeCut(env.units(5_000_000)))
     ).wait();
     expect(await env.engine.getScore(1)).to.equal(6_666n);
 
     // And a second report from the same counterparty, however large, is now almost mute: the
     // budget is spent and refills only on the 90-day half-life.
     await (
-      await env.engine.recordOutcome(1, counterparty(0), CLEAN, env.units(5_000_000), 500)
+      await env.engine.recordOutcome(1, counterparty(0), CLEAN, env.units(5_000_000), 500, feeCut(env.units(5_000_000)))
     ).wait();
     expect(await env.engine.getScore(1)).to.equal(6_666n);
     expect(await env.engine.remainingWeight(1, counterparty(0))).to.equal(0n);
 
-    // A different customer still has its full voice — reputation aggregates across counterparties.
-    expect(await env.engine.remainingWeight(1, counterparty(1))).to.equal(
-      ethers.parseUnits("500", env.decimals)
-    );
+    // A different customer's *budget* is untouched — the per-consumer cap is keyed by address, so
+    // reputation still aggregates across counterparties. What `remainingWeight` reports for it is
+    // nonetheless zero, and that is the Sybil bound showing through rather than a regression: the
+    // two ceilings are independent, the reported figure is the lesser, and a counterparty that has
+    // never paid a fee has bought no voice with which to spend its budget. Minting the address was
+    // always free; this is the line where that stops being enough.
+    expect(await env.engine.remainingWeight(1, counterparty(1))).to.equal(0n);
+
+    // Pay, and the aggregation is real rather than merely budgeted: the score moves again on a
+    // report the first counterparty could no longer have made at any size.
+    await (
+      await env.engine.recordOutcome(
+        1,
+        counterparty(1),
+        CLEAN,
+        env.units(5_000_000),
+        500,
+        feeCut(env.units(5_000_000))
+      )
+    ).wait();
+    expect(await env.engine.getScore(1)).to.be.greaterThan(6_666n);
   });
 });

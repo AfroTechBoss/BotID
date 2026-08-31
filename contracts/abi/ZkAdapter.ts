@@ -20,6 +20,11 @@ export const zkAdapterAbi = [
   },
   {
     "inputs": [],
+    "name": "AlreadyBootstrapped",
+    "type": "error"
+  },
+  {
+    "inputs": [],
     "name": "InvalidParameter",
     "type": "error"
   },
@@ -27,6 +32,64 @@ export const zkAdapterAbi = [
     "inputs": [],
     "name": "NotOwner",
     "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "NotQueued",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "NotRouter",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "Premature",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "Stale",
+    "type": "error"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "bytes32",
+        "name": "action",
+        "type": "bytes32"
+      }
+    ],
+    "name": "ActionCancelled",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "bytes32",
+        "name": "action",
+        "type": "bytes32"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint64",
+        "name": "eta",
+        "type": "uint64"
+      }
+    ],
+    "name": "ActionQueued",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [],
+    "name": "Bootstrapped",
+    "type": "event"
   },
   {
     "anonymous": false,
@@ -84,6 +147,38 @@ export const zkAdapterAbi = [
     "inputs": [
       {
         "indexed": true,
+        "internalType": "address",
+        "name": "router",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint64",
+        "name": "eta",
+        "type": "uint64"
+      }
+    ],
+    "name": "RouterQueued",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "router",
+        "type": "address"
+      }
+    ],
+    "name": "RouterSet",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
         "internalType": "bytes32",
         "name": "modelCommitment",
         "type": "bytes32"
@@ -105,10 +200,74 @@ export const zkAdapterAbi = [
     "type": "event"
   },
   {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "bytes32",
+        "name": "workKey",
+        "type": "bytes32"
+      },
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "agentId",
+        "type": "uint256"
+      },
+      {
+        "indexed": true,
+        "internalType": "bytes32",
+        "name": "requestId",
+        "type": "bytes32"
+      }
+    ],
+    "name": "WorkAttributed",
+    "type": "event"
+  },
+  {
+    "inputs": [],
+    "name": "TIMELOCK_DELAY",
+    "outputs": [
+      {
+        "internalType": "uint64",
+        "name": "",
+        "type": "uint64"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "TIMELOCK_GRACE",
+    "outputs": [
+      {
+        "internalType": "uint64",
+        "name": "",
+        "type": "uint64"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
     "inputs": [],
     "name": "acceptOwnership",
     "outputs": [],
     "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "bootstrapped",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "view",
     "type": "function"
   },
   {
@@ -128,6 +287,19 @@ export const zkAdapterAbi = [
       }
     ],
     "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "action",
+        "type": "bytes32"
+      }
+    ],
+    "name": "cancel",
+    "outputs": [],
+    "stateMutability": "nonpayable",
     "type": "function"
   },
   {
@@ -174,6 +346,13 @@ export const zkAdapterAbi = [
       }
     ],
     "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "finalizeBootstrap",
+    "outputs": [],
+    "stateMutability": "nonpayable",
     "type": "function"
   },
   {
@@ -302,12 +481,89 @@ export const zkAdapterAbi = [
   {
     "inputs": [
       {
+        "internalType": "bytes32",
+        "name": "",
+        "type": "bytes32"
+      }
+    ],
+    "name": "provenBy",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "router_",
+        "type": "address"
+      }
+    ],
+    "name": "queueRouter",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "router",
+    "outputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "router_",
+        "type": "address"
+      }
+    ],
+    "name": "routerAction",
+    "outputs": [
+      {
+        "internalType": "bytes32",
+        "name": "",
+        "type": "bytes32"
+      }
+    ],
+    "stateMutability": "pure",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
         "internalType": "contract IInputAttestor",
         "name": "attestor",
         "type": "address"
       }
     ],
     "name": "setInputAttestor",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "router_",
+        "type": "address"
+      }
+    ],
+    "name": "setRouter",
     "outputs": [],
     "stateMutability": "nonpayable",
     "type": "function"
@@ -346,6 +602,25 @@ export const zkAdapterAbi = [
       }
     ],
     "stateMutability": "pure",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "",
+        "type": "bytes32"
+      }
+    ],
+    "name": "timelockEta",
+    "outputs": [
+      {
+        "internalType": "uint64",
+        "name": "",
+        "type": "uint64"
+      }
+    ],
+    "stateMutability": "view",
     "type": "function"
   },
   {
@@ -415,11 +690,101 @@ export const zkAdapterAbi = [
     "outputs": [
       {
         "internalType": "bool",
-        "name": "",
+        "name": "ok",
         "type": "bool"
       }
     ],
     "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "components": [
+          {
+            "internalType": "bytes32",
+            "name": "requestId",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "uint256",
+            "name": "agentId",
+            "type": "uint256"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "modelCommitment",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "inputCommitment",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "outputCommitment",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "uint64",
+            "name": "deliverBy",
+            "type": "uint64"
+          },
+          {
+            "internalType": "address",
+            "name": "operator",
+            "type": "address"
+          }
+        ],
+        "internalType": "struct VerificationContext",
+        "name": "ctx",
+        "type": "tuple"
+      },
+      {
+        "internalType": "bytes",
+        "name": "attestation",
+        "type": "bytes"
+      }
+    ],
+    "name": "verifyAndAttribute",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "ok",
+        "type": "bool"
+      },
+      {
+        "internalType": "uint256",
+        "name": "originator",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "modelCommitment",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "uint256[]",
+        "name": "instances",
+        "type": "uint256[]"
+      }
+    ],
+    "name": "workKeyFor",
+    "outputs": [
+      {
+        "internalType": "bytes32",
+        "name": "",
+        "type": "bytes32"
+      }
+    ],
+    "stateMutability": "pure",
     "type": "function"
   }
 ] as const;

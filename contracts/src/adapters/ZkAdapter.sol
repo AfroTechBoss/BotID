@@ -2,7 +2,7 @@
 pragma solidity ^0.8.24;
 
 import {Tier, VerificationContext} from "../libraries/Types.sol";
-import {Ownable} from "../libraries/Utils.sol";
+import {Ownable, Timelocked} from "../libraries/Utils.sol";
 import {IInputAttestor} from "../interfaces/IInputAttestor.sol";
 import {IVerificationAdapter} from "../interfaces/IVerificationAdapter.sol";
 
@@ -46,10 +46,31 @@ interface IEzklVerifier {
 ///
 ///      Binding them on chain is both cheaper and stronger. Keccak costs 6 gas a word here,
 ///      and the check is against the router's own storage rather than against a number the
-///      prover chose. Nothing is lost: `requestId` and `agentId` do not need to appear in the
-///      instances either, because a proof is only reusable across two requests that share a
-///      model, an input commitment *and* an output commitment — and for those two requests it
-///      is asserting the identical, true statement.
+///      prover chose.
+///
+///      ## What that leaves open, and what closes it
+///
+///      This header used to argue that `requestId` and `agentId` did not need to appear in the
+///      instances either, "because a proof is only reusable across two requests that share a
+///      model, an input commitment *and* an output commitment — and for those two requests it is
+///      asserting the identical, true statement". The statement is identical. The *attribution*
+///      is not, and attribution is the product: what a consumer buys is not "this number is
+///      correct", it is "**this agent** produced this number", and that is the claim
+///      `recordOutcome` writes into a score and `meetsPolicy` sells on.
+///
+///      A proof is a transferable object. `deliver` is a public transaction carrying it in
+///      calldata, and `modelCommitment` is public in `AgentRegistered`, so copying a Gold
+///      delivery costs one registration and one request: same model, same inputs, same outputs,
+///      same proof, a different agent. Every check above passes, and Gold finalises immediately,
+///      so there is no window in which anyone could object.
+///
+///      The clean fix is a public instance cell carrying `agentId`, checked here before the input
+///      cells. That is a circuit change — new graph, new verifying key, new verifier contract,
+///      new model commitment — and it is the right fix, recorded as such. Short of it, this
+///      adapter remembers which agent presented each instance vector first and reports that agent
+///      to the router, which then scores a duplicate at zero weight. The copy still delivers a
+///      correct answer and still gets paid for it; it just does not get to call the work its own.
+///      See `verifyAndAttribute` for what that does and does not cover.
 ///
 ///      ## Revealing values
 ///
@@ -75,7 +96,7 @@ interface IEzklVerifier {
 ///      A wrong shift is not a security hole; it is a liveness one. Every honest proof for
 ///      that model is rejected until the owner corrects it, which is the safe direction to
 ///      fail in.
-contract ZkAdapter is IVerificationAdapter, Ownable {
+contract ZkAdapter is IVerificationAdapter, Timelocked {
     /// @notice The bn254 scalar field. `ezkl` emits instances as elements of it, so a negative
     ///         fixed-point value `-x` arrives as `P - x`.
     uint256 internal constant P =
@@ -115,14 +136,60 @@ contract ZkAdapter is IVerificationAdapter, Ownable {
     ///         a mismatch makes every honest Gold proof fail closed rather than open.
     IInputAttestor public inputAttestor;
 
+    /// @notice Agent credited with first proving a given `(model, instances)` pair, by work key.
+    /// @dev Zero means nobody has proven it yet. Written once and never rewritten: the record is
+    ///      "who established this first", which does not change when someone repeats it.
+    mapping(bytes32 => uint256) public provenBy;
+
+    /// @notice The only address allowed to establish an attribution. See `onlyRouter`.
+    address public router;
+
     error InvalidParameter();
+    error NotRouter();
 
     event VerifierSet(bytes32 indexed modelCommitment, address verifier, uint8 inputScaleBits);
     event InputAttestorSet(address attestor);
+    event RouterSet(address indexed router);
+    event RouterQueued(address indexed router, uint64 eta);
+    /// @param workKey `keccak256(modelCommitment ‖ instances)` — see `workKeyFor`.
+    event WorkAttributed(bytes32 indexed workKey, uint256 indexed agentId, bytes32 indexed requestId);
 
     constructor(address initialOwner, IInputAttestor attestor) Ownable(initialOwner) {
         inputAttestor = attestor;
         emit InputAttestorSet(address(attestor));
+    }
+
+    /// @dev `provenBy` is a permanent, first-write-wins claim on a work key, and every constraint
+    ///      that makes claiming one expensive — a registered agent, a posted bond, a request
+    ///      standing open against it, a consumer who is not the agent — lives in `ExecutionRouter`,
+    ///      not here. An attribution write reachable without the router is therefore not a cheaper
+    ///      version of the residual race described on `verifyAndAttribute`; it is a different
+    ///      attack with none of its prerequisites, available to an address that has registered
+    ///      nothing and risked nothing.
+    modifier onlyRouter() {
+        if (msg.sender != router) revert NotRouter();
+        _;
+    }
+
+    /// @dev Mirrors `AgentRegistry.queueRouter`. Repointing the router is repointing who may write
+    ///      attribution, so past `finalizeBootstrap` it waits out `TIMELOCK_DELAY`.
+    function queueRouter(address router_) external {
+        emit RouterQueued(router_, _queue(_routerAction(router_)));
+    }
+
+    function setRouter(address router_) external onlyOwner {
+        _consume(_routerAction(router_));
+        router = router_;
+        emit RouterSet(router_);
+    }
+
+    /// @notice The action id `queueRouter(router_)` produces, and `cancel` expects.
+    function routerAction(address router_) external pure returns (bytes32) {
+        return _routerAction(router_);
+    }
+
+    function _routerAction(address router_) private pure returns (bytes32) {
+        return keccak256(abi.encode(this.setRouter.selector, router_));
     }
 
     function tier() external pure returns (Tier) {
@@ -161,10 +228,85 @@ contract ZkAdapter is IVerificationAdapter, Ownable {
     function verify(VerificationContext calldata ctx, bytes calldata attestation)
         external
         view
-        returns (bool)
+        returns (bool ok)
+    {
+        (ok,) = _check(ctx, attestation);
+    }
+
+    /// @inheritdoc IVerificationAdapter
+    /// @dev First presenter of a work key keeps it. That is the whole rule, and its two halves
+    ///      are worth stating separately because only one of them is airtight.
+    ///
+    ///      Airtight: a proof that is already on chain cannot be re-presented for credit. Copying
+    ///      a delivery out of calldata is the cheap, repeatable, scalable version of this attack —
+    ///      it needs no timing, no privileged position, and nothing but a registration — and after
+    ///      this it earns exactly nothing.
+    ///
+    ///      Not airtight: a copier who sees the *original* delivery in the mempool and lands its
+    ///      own first takes the credit, and the honest agent is the one scored at zero. That
+    ///      requires winning a race for every single delivery, a request already standing open
+    ///      against a clone agent with its own bond, and a consumer address that is not the
+    ///      agent's own (`ExecutionRouter.requestExecution` refuses self-dealing). It is a real
+    ///      residual and the in-circuit binding is what actually removes it; nothing an adapter
+    ///      can observe distinguishes the two transactions.
+    ///
+    ///      Those prerequisites are what `onlyRouter` buys, and they are the whole difference
+    ///      between a residual and a hole. This function used to be callable by anybody, and
+    ///      `_check` binds only the model and the two commitments — never `ctx.agentId`, never
+    ///      `msg.sender`. So a copied attestation plus a hand-built `ctx` naming any id at all
+    ///      claimed the key outright: no registration, no bond, no open request, no operator key,
+    ///      no fee, gas only, and the setup deferrable until after the claim had landed. The
+    ///      honest agent lost its score and its `demonstratedTier` ratchet permanently, and the
+    ///      caller could then register a clone and deliver the same proof for unearned Gold
+    ///      credit. Routing every write through `deliver` and `resolveChallenge` restores the
+    ///      cost the paragraph above assumes it has.
+    ///
+    ///      The deliberate non-choice: a duplicate is not rejected. Rejecting would make the same
+    ///      race a way to *brick* an honest delivery rather than merely outrank it — the original
+    ///      would revert, miss `deliverBy`, and take a liveness fault for work it had done. Losing
+    ///      a score update is recoverable; being slashed for someone else's front-run is not.
+    function verifyAndAttribute(VerificationContext calldata ctx, bytes calldata attestation)
+        external
+        onlyRouter
+        returns (bool ok, uint256 originator)
+    {
+        bytes32 key;
+        (ok, key) = _check(ctx, attestation);
+        if (!ok) return (false, 0);
+
+        originator = provenBy[key];
+        if (originator == 0) {
+            originator = ctx.agentId;
+            provenBy[key] = originator;
+            emit WorkAttributed(key, originator, ctx.requestId);
+        }
+    }
+
+    /// @notice The key an attestation's `(model, instances)` pair is recorded under.
+    /// @dev Public so an operator can ask `provenBy(workKeyFor(...))` whether the work it is about
+    ///      to deliver has already been claimed, and decline the request inside the rejection
+    ///      window rather than deliver something that will not be scored. That pair, with
+    ///      `verify`, is the whole permissionless surface: everything an honest party needs to
+    ///      read is a view, and the one function that writes is the one the router calls.
+    function workKeyFor(bytes32 modelCommitment, uint256[] calldata instances)
+        external
+        pure
+        returns (bytes32)
+    {
+        return keccak256(abi.encode(modelCommitment, instances));
+    }
+
+    /// @dev The verification proper, plus the work key its result would be recorded under. The key
+    ///      is over the model and the full instance vector rather than over the proof bytes:
+    ///      Groth16 proofs are re-randomisable, so two byte-different proofs of the same statement
+    ///      are trivially producible and keying on them would catch nobody.
+    function _check(VerificationContext calldata ctx, bytes calldata attestation)
+        private
+        view
+        returns (bool, bytes32)
     {
         Model memory model = modelFor[ctx.modelCommitment];
-        if (address(model.verifier) == address(0)) return false;
+        if (address(model.verifier) == address(0)) return (false, bytes32(0));
 
         (bytes memory proof, uint256[] memory instances, Reveal[] memory reveals) =
             abi.decode(attestation, (bytes, uint256[], Reveal[]));
@@ -172,16 +314,16 @@ contract ZkAdapter is IVerificationAdapter, Ownable {
         // A circuit with no inputs proves nothing about the request, and one with no outputs
         // has nothing to commit to.
         uint256 nIn = reveals.length;
-        if (nIn == 0 || instances.length <= nIn) return false;
+        if (nIn == 0 || instances.length <= nIn) return (false, bytes32(0));
 
-        if (!_bindsInputs(ctx, instances, reveals, model.inputScaleBits)) return false;
-        if (!_bindsOutputs(ctx, instances, nIn)) return false;
+        if (!_bindsInputs(ctx, instances, reveals, model.inputScaleBits)) return (false, bytes32(0));
+        if (!_bindsOutputs(ctx, instances, nIn)) return (false, bytes32(0));
 
         // Bubble a reverting verifier up as `false` rather than as an opaque failure.
         try model.verifier.verifyProof(proof, instances) returns (bool ok) {
-            return ok;
+            return (ok, keccak256(abi.encode(ctx.modelCommitment, instances)));
         } catch {
-            return false;
+            return (false, bytes32(0));
         }
     }
 

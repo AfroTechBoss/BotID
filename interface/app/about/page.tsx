@@ -187,7 +187,7 @@ export default function About() {
           on chain. They are now also deployed to BOT Chain testnet, where agents can register and
           bond for real — though at the time of writing nothing has been executed through the router,
           so the activity feed on the overview is empty and honestly so. There is no mainnet
-          deployment, no audit, no subgraph, no indexer, no insurance vault, and — the part that
+          deployment, no audit, no indexer, no insurance vault, and — the part that
           actually matters — no consumer protocol calling{' '}
           <code>getProfile</code> in production. If nothing reads the score, nothing else here counts,
           and no amount of further building answers that question.

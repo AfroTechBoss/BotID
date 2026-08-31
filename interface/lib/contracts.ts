@@ -37,8 +37,9 @@ export interface Contract {
  * adapter is bound, and the Gold verifier is the one the manifest names. A manifest records what
  * the deploy *sent*; these are what stuck.
  *
- * These are the THIRD set, deployed 2026-08-28. They replace the 2026-08-25 set, which had itself
- * replaced the 2026-08-11 one — and the reason to spell that out here rather than just swap the
+ * These are the FOURTH set, deployed 2026-08-28 16:39Z, first block 21,465,564. They replace the
+ * earlier set from the same day (`0x39FF…aA83` registry), which replaced the 2026-08-25 set, which
+ * had itself replaced the 2026-08-11 one — and the reason to spell that out here rather than just swap the
  * strings is that each replacement is total. None of these contracts is upgradeable: `registry`,
  * `engine` and `bondToken` are immutable, so a redeploy is always the whole set and every address
  * on this page changes together. Nothing was carried over this time, not even `Halo2Verifier`,
@@ -47,8 +48,10 @@ export interface Contract {
  * Superseded addresses are not deprecated so much as incompatible. The EIP-712 domain includes the
  * verifying contract, so an attestation signed for a previous adapter does not verify at the
  * current one, and there is no window in which two sets both work. Anything still pointing at the
- * 0x0bC0…9142 set — or the 0x7E1A…6914 one before it — is talking to a different protocol that
- * happens to share a name.
+ * 0x39FF…aA83 set — or the 0x0bC0…9142 and 0x7E1A…6914 ones before it — is talking to a different
+ * protocol that happens to share a name. That is not hypothetical: this file named the 0x39FF…aA83
+ * set for a day after it had been replaced, which is the failure the redeploy checklist in
+ * `docs/contract.md` §8 exists to stop.
  *
  * The practical consequence, and the reason this comment keeps growing rather than being trimmed:
  * agents registered against the old registry do not exist here. Their bonds, scores and execution
@@ -94,14 +97,14 @@ export interface Contract {
  */
 export const ADDRESSES = {
   testnet: {
-    AgentRegistry: '0x39FF930E6974b22a07bdfAd8aDC9f3EE7172aA83',
-    ExecutionRouter: '0x987A177BB44fAc7F51580134a7B06A327313E099',
-    ReputationEngine: '0xBa49Ff343086E966B3172a29742ea5056553E7D1',
-    InputAttestor: '0x9afF2B7D5C8BA5D18F1906efafe1cEeccfe465B9',
-    SignatureAdapter: '0x5E0E99F76f7f77e345312d092E342Fee35eF112a',
-    TeeAdapter: '0x7dBC738d03f86893101b2Ce9D670C0542bb7cbE6',
-    ZkAdapter: '0x896BcAaE8DDbF69a9155D8c8f8BcC482F980FF1d',
-    Halo2Verifier: '0x8E2635D6d45D1D92b9Ab29d831918a52F111beb1',
+    AgentRegistry: '0x673D39B8b0Ce8e61EA5fFbf9b3f8E373aE0B5c87',
+    ExecutionRouter: '0xE26843C9AD79D67f48f71F865B397f437171ED9A',
+    ReputationEngine: '0x9D602eE0ddA3Eff93e11aE56BC3c6273D9edecB6',
+    InputAttestor: '0xd14CFe710B9d70d7cb191586CbdeB49347c41CF4',
+    SignatureAdapter: '0xF222a82b9C1d59999C3e48B30F6c797c1dab15BF',
+    TeeAdapter: '0xEC10Fb66Fb1736C45f2c704497ef0fE0f0754150',
+    ZkAdapter: '0x5B63e01298Cfb28ac96C67718daA5788cF934CDf',
+    Halo2Verifier: '0x0825Ea3EdfE5961094E63F802D11CCD53098D651',
     bondToken: '0x75edC9335175Fc0552D51D48439F229c10420fe3',
   },
   mainnet: {

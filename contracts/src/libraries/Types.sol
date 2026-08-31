@@ -55,6 +55,12 @@ struct Request {
     uint64 settleBy;
     Tier tier;
     Status status;
+    /// @dev Whether this agent is the one credited with producing the delivered work, as opposed
+    ///      to having presented an artifact somebody else produced first. False only on the Gold
+    ///      path, and only for a duplicate — see `IVerificationAdapter.verifyAndAttribute`. The
+    ///      score update is weighted at zero when this is false, so a copied proof is delivered
+    ///      and paid for but earns nothing.
+    bool attributed;
     address challenger;
     uint128 challengeBond;
     uint64 escalationDeadline;
@@ -71,7 +77,14 @@ struct Policy {
 
 struct Profile {
     address owner;
+    /// @notice The tier the agent declared at registration. A ceiling, not an achievement:
+    ///         `registerAgent` takes it on the agent's word and nothing there can check it.
     Tier tier;
+    /// @notice The highest tier this agent has actually had an attestation accepted at.
+    /// @dev The one to filter on. `tier` says what the agent claims it can do; this says what it
+    ///      has done. They differ for every agent that has not delivered yet, and they differ
+    ///      permanently for one that declared above its capability.
+    Tier demonstratedTier;
     uint32 score;
     uint32 faults;
     uint32 settledExecutions;

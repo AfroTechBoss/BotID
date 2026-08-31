@@ -632,7 +632,7 @@ score' = decay(score, Δt) + (q − decay(score, Δt)) · w / (w + K)`}</div>
               <tbody>
                 <tr><td>1</td><td>AgentRegistry, ExecutionRouter, SignatureAdapter, ReputationEngine, InputAttestor — Bronze end to end</td><td style={{ color: 'var(--score-good)' }}>built</td></tr>
                 <tr><td>2</td><td>TeeAdapter, challenge and escalation resolution, IReputationOracle read API</td><td style={{ color: 'var(--score-good)' }}>built — no integration partner</td></tr>
-                <tr><td>3</td><td>ZkAdapter and the ezkl pipeline, subgraph, dashboard</td><td>circuit and adapter built; no subgraph, no dashboard</td></tr>
+                <tr><td>3</td><td>ZkAdapter and the ezkl pipeline, indexer, dashboard</td><td>circuit and adapter built; dashboard live on direct reads; no indexer, so no leaderboard and no history</td></tr>
                 <tr><td>4</td><td>Insurance vault</td><td className="text-muted">not started</td></tr>
               </tbody>
             </table>
@@ -680,8 +680,8 @@ score' = decay(score, Δt) + (q − decay(score, Δt)) · w / (w + K)`}</div>
               here.
             </li>
             <li>
-              <strong>No subgraph and no indexer.</strong> Every historical view here is assembled by
-              pulling the router&apos;s logs over a bounded block window and folding them in the browser.
+              <strong>No indexer.</strong> Every historical view here is assembled by pulling the
+              router&apos;s logs over a bounded block window and folding them in the browser.
               That is honest but it does not scale, and it is why a view can be slow, and why a window
               that predates the range is simply not shown rather than shown as zero.
             </li>

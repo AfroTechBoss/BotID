@@ -392,6 +392,25 @@ export const agentRegistryAbi = [
     "inputs": [
       {
         "indexed": true,
+        "internalType": "uint256",
+        "name": "agentId",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "enum Tier",
+        "name": "tier",
+        "type": "uint8"
+      }
+    ],
+    "name": "TierDemonstrated",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
         "internalType": "address",
         "name": "treasury",
         "type": "address"
@@ -625,6 +644,25 @@ export const agentRegistryAbi = [
     "type": "function"
   },
   {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "agentId",
+        "type": "uint256"
+      }
+    ],
+    "name": "effectiveTier",
+    "outputs": [
+      {
+        "internalType": "enum Tier",
+        "name": "",
+        "type": "uint8"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
     "inputs": [],
     "name": "engine",
     "outputs": [
@@ -674,6 +712,11 @@ export const agentRegistryAbi = [
           {
             "internalType": "enum Tier",
             "name": "tier",
+            "type": "uint8"
+          },
+          {
+            "internalType": "enum Tier",
+            "name": "demonstratedTier",
             "type": "uint8"
           },
           {
@@ -735,6 +778,11 @@ export const agentRegistryAbi = [
           {
             "internalType": "enum Tier",
             "name": "tier",
+            "type": "uint8"
+          },
+          {
+            "internalType": "enum Tier",
+            "name": "demonstratedTier",
             "type": "uint8"
           },
           {
@@ -1015,6 +1063,24 @@ export const agentRegistryAbi = [
       }
     ],
     "name": "queueTreasury",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "agentId",
+        "type": "uint256"
+      },
+      {
+        "internalType": "enum Tier",
+        "name": "tier",
+        "type": "uint8"
+      }
+    ],
+    "name": "recordDelivery",
     "outputs": [],
     "stateMutability": "nonpayable",
     "type": "function"

@@ -206,5 +206,71 @@ export const signatureAdapterAbi = [
     ],
     "stateMutability": "view",
     "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "components": [
+          {
+            "internalType": "bytes32",
+            "name": "requestId",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "uint256",
+            "name": "agentId",
+            "type": "uint256"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "modelCommitment",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "inputCommitment",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "outputCommitment",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "uint64",
+            "name": "deliverBy",
+            "type": "uint64"
+          },
+          {
+            "internalType": "address",
+            "name": "operator",
+            "type": "address"
+          }
+        ],
+        "internalType": "struct VerificationContext",
+        "name": "ctx",
+        "type": "tuple"
+      },
+      {
+        "internalType": "bytes",
+        "name": "attestation",
+        "type": "bytes"
+      }
+    ],
+    "name": "verifyAndAttribute",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "ok",
+        "type": "bool"
+      },
+      {
+        "internalType": "uint256",
+        "name": "originator",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
   }
 ] as const;

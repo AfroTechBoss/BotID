@@ -22,7 +22,8 @@ contract AgentRegistry is IReputationOracle, Timelocked {
         address owner;
         address operator; // key that signs deliveries; rotatable without losing history
         bytes32 modelCommitment; // weightsHash ‖ vkHash ‖ declared limits — immutable
-        Tier tier;
+        Tier tier; // declared at registration, on the agent's word — a ceiling, not a fact
+        Tier demonstratedTier; // highest tier an attestation has actually been accepted at
         bool active;
         uint32 lossToleranceBps; // downside the agent declares as within-spec
         uint256 bond;
@@ -79,6 +80,8 @@ contract AgentRegistry is IReputationOracle, Timelocked {
         uint256 bond
     );
     event OperatorRotated(uint256 indexed agentId, address indexed from, address indexed to);
+    /// @dev Only ever emitted on an increase, and never more than twice in an agent's life.
+    event TierDemonstrated(uint256 indexed agentId, Tier tier);
     event BondIncreased(uint256 indexed agentId, uint256 amount, uint256 total);
     event UnbondingStarted(uint256 indexed agentId, uint256 amount, uint64 availableAt);
     event Withdrawn(uint256 indexed agentId, uint256 amount);
@@ -174,6 +177,14 @@ contract AgentRegistry is IReputationOracle, Timelocked {
 
     // ---------------------------------------------------------------- lifecycle
 
+    /// @notice Register an agent, posting `bondAmount` and declaring the tier it intends to work at.
+    /// @param tier What the agent *claims* it can produce. It is taken on the agent's word, and it
+    ///        has to be: nothing at registration time has an attestation to check, and requiring one
+    ///        would mean an agent had to deliver before it could register. The claim is free, so it
+    ///        buys nothing — credit follows `demonstratedTier`, which is raised only by the router
+    ///        when an attestation at that tier is actually accepted. Declaring Gold and never
+    ///        proving one gets an agent Bronze credit and a Gold label; the label is cosmetic, and
+    ///        `getProfile` reports both so a consumer can see the difference rather than infer it.
     function registerAgent(
         address operator,
         bytes32 modelCommitment,
@@ -191,6 +202,7 @@ contract AgentRegistry is IReputationOracle, Timelocked {
             operator: operator,
             modelCommitment: modelCommitment,
             tier: tier,
+            demonstratedTier: Tier.None,
             active: true,
             lossToleranceBps: lossToleranceBps,
             bond: bondAmount,
@@ -335,6 +347,22 @@ contract AgentRegistry is IReputationOracle, Timelocked {
         emit ExposureChanged(agentId, next);
     }
 
+    /// @notice Record that `agentId` had an attestation accepted at `tier`.
+    /// @dev The only thing that raises `demonstratedTier`, and it ratchets — it never falls, because
+    ///      the claim it encodes is "this agent has produced a Gold proof at least once", and that
+    ///      does not stop being true later. Degradation is what the score is for.
+    ///
+    ///      Called by the router on the two paths where an attestation was actually checked against
+    ///      the tier's adapter: a successful `deliver`, and a `resolveChallenge` the agent won. It
+    ///      must not be called for a delivery the Gold adapter declined to attribute — presenting
+    ///      somebody else's proof demonstrates possession, not capability.
+    function recordDelivery(uint256 agentId, Tier tier) external onlyRouter {
+        Agent storage a = _agents[agentId];
+        if (a.demonstratedTier >= tier) return;
+        a.demonstratedTier = tier;
+        emit TierDemonstrated(agentId, tier);
+    }
+
     function release(uint256 agentId, uint256 notional) external onlyRouter {
         Agent storage a = _agents[agentId];
         a.openNotional = notional > a.openNotional ? 0 : a.openNotional - notional;
@@ -384,13 +412,38 @@ contract AgentRegistry is IReputationOracle, Timelocked {
         return 0;
     }
 
+    /// @notice The tier an agent's credit and eligibility are actually computed at.
+    /// @dev Sits between the two fields and is the answer to "what is this agent, really".
+    ///
+    ///      Upper bound: the declared tier, so an agent cannot be given more than it asked for.
+    ///      Lower bound: Bronze, and that floor is load-bearing rather than generous. Without it a
+    ///      newly registered agent has `demonstratedTier == None`, `tierFactorBps(None) == 0`, and
+    ///      therefore zero credit — so `reserve` reverts, so it can never take a request, so it can
+    ///      never deliver, so it can never demonstrate anything. The rule would make itself
+    ///      unsatisfiable for every agent including the honest ones. Bronze is the tier whose
+    ///      attestation is an operator signature, which any registered agent can already produce
+    ///      by construction, so granting it unproven concedes nothing that was not already true.
+    ///
+    ///      What this actually takes away is the 3× jump from Bronze's factor to Gold's on an
+    ///      unbacked claim. An agent that declares Gold and delivers Gold gets Gold on its second
+    ///      request; one that declares Gold and only ever signs stays at Bronze forever.
+    function effectiveTier(uint256 agentId) public view returns (Tier) {
+        return _effectiveTier(_agents[agentId]);
+    }
+
+    function _effectiveTier(Agent storage a) private view returns (Tier) {
+        Tier t = a.demonstratedTier;
+        if (t < Tier.Bronze) t = Tier.Bronze;
+        return t > a.tier ? a.tier : t;
+    }
+
     function _maxOpenNotional(uint256 agentId, Agent storage a) private view returns (uint256) {
         if (!a.active) return 0;
         uint256 effectiveBond = a.bond > a.unbondingAmount ? a.bond - a.unbondingAmount : 0;
         if (effectiveBond < minBond) return 0;
 
         uint256 limit = (effectiveBond * leverageBps(engine.getScore(agentId))) / 10_000;
-        limit = (limit * tierFactorBps(a.tier)) / 10_000;
+        limit = (limit * tierFactorBps(_effectiveTier(a))) / 10_000;
         return limit > globalNotionalCap ? globalNotionalCap : limit;
     }
 
@@ -406,6 +459,7 @@ contract AgentRegistry is IReputationOracle, Timelocked {
         p = Profile({
             owner: a.owner,
             tier: a.tier,
+            demonstratedTier: a.demonstratedTier,
             score: score,
             faults: faults,
             settledExecutions: settled,
@@ -444,10 +498,14 @@ contract AgentRegistry is IReputationOracle, Timelocked {
         allowed = amount != 0 && a.openNotional == 0 && block.timestamp < a.unbondingAt;
     }
 
+    /// @dev `minTier` is screened against `effectiveTier`, not the declared one. A policy asking for
+    ///      Gold is asking for a proof, and the declared field answers a different question —
+    ///      whether the agent said it could. Screening on the claim let anyone pass a Gold filter
+    ///      for the price of a registration call.
     function meetsPolicy(uint256 agentId, Policy calldata policy) external view returns (bool) {
         Agent storage a = _agents[agentId];
         if (a.owner == address(0) || !a.active) return false;
-        if (a.tier < policy.minTier) return false;
+        if (_effectiveTier(a) < policy.minTier) return false;
         if (a.bond < policy.minBond) return false;
 
         (uint32 score, uint32 faults,, uint64 lastActiveAt) = engine.getStats(agentId);

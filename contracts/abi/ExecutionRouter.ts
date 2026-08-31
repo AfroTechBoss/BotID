@@ -125,6 +125,11 @@ export const executionRouterAbi = [
   },
   {
     "inputs": [],
+    "name": "SelfDealing",
+    "type": "error"
+  },
+  {
+    "inputs": [],
     "name": "Stale",
     "type": "error"
   },
@@ -899,6 +904,11 @@ export const executionRouterAbi = [
             "internalType": "enum Status",
             "name": "status",
             "type": "uint8"
+          },
+          {
+            "internalType": "bool",
+            "name": "attributed",
+            "type": "bool"
           },
           {
             "internalType": "address",

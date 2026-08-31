@@ -21,12 +21,17 @@ interface IReputationEngine {
     ///        `outcome` is a placeholder rather than a report — see `ExecutionRouter
     ///        .settleDefault`. At zero the execution still counts and still pays; it just does
     ///        not move the score, because nobody said anything about how it went.
+    /// @param protocolFee The protocol's cut of this execution's fee — the part of the money that
+    ///        left the consumer and did not come back. It buys the consumer influence to spend,
+    ///        here and on any other agent, which is what stops a fresh address from arriving with
+    ///        a fresh budget. See `ReputationEngine.weightPerFeeUnit`.
     function recordOutcome(
         uint256 agentId,
         address consumer,
         Outcome calldata outcome,
         uint256 notional,
-        uint32 lossToleranceBps
+        uint32 lossToleranceBps,
+        uint256 protocolFee
     ) external;
 
     /// @notice Weight `consumer` may still spend on `agentId`'s score.

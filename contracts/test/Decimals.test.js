@@ -61,7 +61,14 @@ describe("bond token decimals", () => {
 
       // Three hundred thousand USDT is a large trade by any reading of the parameters. The EWMA
       // weights it as w/(w + halfWeight) — here 3e11 against 1e23, about one part in 10^12.
-      await (await env.engine.recordOutcome(1, env.consumer.address, BAD, env.units(300_000), 500)).wait();
+      await (await env.engine.recordOutcome(
+        1,
+        env.consumer.address,
+        BAD,
+        env.units(300_000),
+        500,
+        env.units(300_000) / 20_000n
+      )).wait();
 
       expect(await env.engine.getScore(1)).to.equal(NEUTRAL);
       // And the execution was recorded, which is what makes this quiet rather than obvious: the
@@ -96,7 +103,8 @@ describe("bond token decimals", () => {
           whole(500),
           await env.engine.decayHalfLife(),
           await env.engine.livenessHaircutBps(),
-          await env.engine.verificationHaircutBps()
+          await env.engine.verificationHaircutBps(),
+          await env.engine.weightPerFeeUnit()
         )
       ).wait();
       await (await env.registry.setLimits(whole(100), whole(5_000_000))).wait();
@@ -133,7 +141,14 @@ describe("bond token decimals", () => {
       await (await env.engine.setWriter(env.owner.address, true)).wait();
       await (await env.engine.initAgent(1)).wait();
 
-      await (await env.engine.recordOutcome(1, env.consumer.address, BAD, env.units(300_000), 500)).wait();
+      await (await env.engine.recordOutcome(
+        1,
+        env.consumer.address,
+        BAD,
+        env.units(300_000),
+        500,
+        env.units(300_000) / 20_000n
+      )).wait();
 
       // Same outcome, same notional, same contract — only the parameters changed. The notional is
       // far above weightCap, and this consumer's whole budget is 500, so it weighs in at the

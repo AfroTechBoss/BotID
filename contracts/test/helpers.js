@@ -262,6 +262,7 @@ async function deployProtocol({ decimals = 18, bootstrapped = false } = {}) {
   await engine.setWriter(registry.target, true);
   await engine.setWriter(router.target, true);
   await registry.setRouter(router.target);
+  await zkAdapter.setRouter(router.target);
   await router.setAdapter(Tier.Bronze, sigAdapter.target);
   await router.setAdapter(Tier.Silver, teeAdapter.target);
   await router.setAdapter(Tier.Gold, zkAdapter.target);
@@ -270,6 +271,7 @@ async function deployProtocol({ decimals = 18, bootstrapped = false } = {}) {
     await engine.finalizeBootstrap();
     await registry.finalizeBootstrap();
     await router.finalizeBootstrap();
+    await zkAdapter.finalizeBootstrap();
   }
 
   // One publisher, quorum of 1, is enough for most tests; multi-publisher cases override.

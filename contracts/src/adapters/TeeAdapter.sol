@@ -90,8 +90,20 @@ contract TeeAdapter is IVerificationAdapter, Ownable, ExecutionVerifier {
         emit EnclaveRevoked(enclaveKey);
     }
 
-    function verify(VerificationContext calldata ctx, bytes calldata attestation)
+    /// @inheritdoc IVerificationAdapter
+    /// @dev Always the delivering agent, for the reason given on `SignatureAdapter`: the enclave
+    ///      signs over `ctx`, so the quote binds one agent and one request and is of no use to
+    ///      anyone else.
+    function verifyAndAttribute(VerificationContext calldata ctx, bytes calldata attestation)
         external
+        view
+        returns (bool ok, uint256 originator)
+    {
+        return (verify(ctx, attestation), ctx.agentId);
+    }
+
+    function verify(VerificationContext calldata ctx, bytes calldata attestation)
+        public
         view
         returns (bool)
     {

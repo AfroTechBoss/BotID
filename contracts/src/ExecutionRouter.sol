@@ -90,6 +90,7 @@ contract ExecutionRouter is Timelocked {
     error DeliveryWindowTooShort();
     error ZeroNotional();
     error NotEscalatable();
+    error SelfDealing();
 
     event ExecutionRequested(
         bytes32 indexed requestId,
@@ -276,6 +277,19 @@ contract ExecutionRouter is Timelocked {
     ///        this the agent has no way to obtain the data it is being asked to run on. The
     ///        agent must still check the bundle it fetches hashes to `inputCommitment`; a
     ///        hostile URI can therefore waste its time but never change what it is judged on.
+    /// @dev The agent's own owner and operator keys may not commission its work. That is a
+    ///      narrow check and it is worth being precise about what it does and does not buy.
+    ///
+    ///      It does not stop self-dealing. Nothing on chain can: the owner deploys a second
+    ///      address, funds it, and hires itself through that, and the two are indistinguishable
+    ///      from an arms-length consumer. What it stops is self-dealing that costs *nothing extra
+    ///      to attempt* — the single-key case, where the whole cycle of commission, deliver and
+    ///      report a flawless outcome runs from the address that also owns the agent. The
+    ///      economics are handled elsewhere and properly, by `ReputationEngine.weightPerFeeUnit`:
+    ///      every fabricated execution's influence is bought with a protocol fee that does not
+    ///      come back, so a farm of consumer addresses buys exactly as much voice as one address
+    ///      paying the same total. This check is the cheap half — it makes the laziest version of
+    ///      the attack fail loudly rather than settle quietly, and it costs one storage read.
     function requestExecution(
         uint256 agentId,
         bytes32 inputCommitment,
@@ -301,6 +315,10 @@ contract ExecutionRouter is Timelocked {
         // privately. See `minFeeBps`.
         if (fee < (uint256(notional) * minFeeBps) / 10_000) revert FeeBelowFloor();
 
+        // See the note above: the one-key case only.
+        AgentRegistry.Agent memory agent = registry.getAgent(agentId);
+        if (msg.sender == agent.owner || msg.sender == agent.operator) revert SelfDealing();
+
         requestId = keccak256(abi.encode(block.chainid, address(this), _nonce++));
 
         registry.reserve(agentId, notional);
@@ -318,6 +336,7 @@ contract ExecutionRouter is Timelocked {
             settleBy: 0,
             tier: Tier.None,
             status: Status.Pending,
+            attributed: false,
             challenger: address(0),
             challengeBond: 0,
             escalationDeadline: 0
@@ -357,7 +376,18 @@ contract ExecutionRouter is Timelocked {
             revert InputAttestationFailed();
         }
 
-        _verify(r, agent, requestId, outputCommitment, agent.tier, attestation);
+        uint256 originator =
+            _verifyAndAttribute(r, agent, requestId, outputCommitment, agent.tier, attestation);
+
+        // Verified, and produced by this agent rather than merely presented by it. The two come
+        // apart only on the Gold path — see `IVerificationAdapter.verifyAndAttribute` — and when
+        // they do, the delivery still stands: the output is correct, the consumer gets it, the
+        // agent gets paid. What it does not get is credit. `_settle` weights the score update at
+        // zero, and the tier is not recorded as demonstrated, because presenting a proof someone
+        // else produced demonstrates possession and not capability.
+        bool attributed = originator == r.agentId;
+        r.attributed = attributed;
+        if (attributed) registry.recordDelivery(r.agentId, agent.tier);
 
         r.outputCommitment = outputCommitment;
         r.tier = agent.tier;
@@ -376,18 +406,44 @@ contract ExecutionRouter is Timelocked {
         emit ExecutionDelivered(requestId, r.agentId, outputCommitment, agent.tier);
     }
 
-    function _verify(
+    /// @dev The one verification entry point, used by both `deliver` and `resolveChallenge`.
+    ///      Non-view, because the Gold adapter records who first presented a given proof and that
+    ///      record is the whole point — see `ZkAdapter.verifyAndAttribute`.
+    ///
+    ///      Note what it deliberately does not do: a duplicate never reverts. Answering a challenge
+    ///      is how an agent avoids a slash, so it must not be possible for a *different* agent, on
+    ///      a *different* request, to make that answer fail. A copied proof still establishes the
+    ///      statement, so it still ends the challenge; it just does not earn anything.
+    /// @return originator The agent credited with producing the work, which is `r.agentId` on every
+    ///         path except a Gold proof that had already been presented by somebody else.
+    function _verifyAndAttribute(
         Request storage r,
         AgentRegistry.Agent memory agent,
         bytes32 requestId,
         bytes32 outputCommitment,
         Tier tier,
         bytes calldata attestation
-    ) private view {
-        IVerificationAdapter adapter = adapters[tier];
-        if (address(adapter) == address(0)) revert NoAdapter();
+    ) private returns (uint256 originator) {
+        IVerificationAdapter adapter = _adapter(tier);
+        bool ok;
+        (ok, originator) = adapter.verifyAndAttribute(
+            _context(r, agent, requestId, outputCommitment), attestation
+        );
+        if (!ok) revert VerificationFailed();
+    }
 
-        VerificationContext memory ctx = VerificationContext({
+    function _adapter(Tier tier) private view returns (IVerificationAdapter adapter) {
+        adapter = adapters[tier];
+        if (address(adapter) == address(0)) revert NoAdapter();
+    }
+
+    function _context(
+        Request storage r,
+        AgentRegistry.Agent memory agent,
+        bytes32 requestId,
+        bytes32 outputCommitment
+    ) private view returns (VerificationContext memory) {
+        return VerificationContext({
             requestId: requestId,
             agentId: r.agentId,
             modelCommitment: agent.modelCommitment,
@@ -396,8 +452,6 @@ contract ExecutionRouter is Timelocked {
             deliverBy: r.deliverBy,
             operator: agent.operator
         });
-
-        if (!adapter.verify(ctx, attestation)) revert VerificationFailed();
     }
 
     // ---------------------------------------------------------------- phase D: challenge
@@ -456,7 +510,14 @@ contract ExecutionRouter is Timelocked {
         AgentRegistry.Agent memory agent = registry.getAgent(r.agentId);
         if (msg.sender != agent.operator) revert NotOperator();
 
-        _verify(r, agent, requestId, r.outputCommitment, Tier.Gold, zkProof);
+        uint256 originator =
+            _verifyAndAttribute(r, agent, requestId, r.outputCommitment, Tier.Gold, zkProof);
+
+        // Winning a challenge with a proof this agent actually produced is a Gold demonstration in
+        // the fullest sense — it is the escalation the tier exists for. Winning with somebody
+        // else's proof still clears the challenge, for the reason in `_verifyAndAttribute`, but it
+        // is not evidence the agent can produce one, so it does not raise the tier.
+        if (originator == r.agentId) registry.recordDelivery(r.agentId, Tier.Gold);
 
         uint256 bond = r.challengeBond;
         address challenger = r.challenger;
@@ -550,11 +611,24 @@ contract ExecutionRouter is Timelocked {
 
         AgentRegistry.Agent memory agent = registry.getAgent(r.agentId);
         registry.release(r.agentId, r.notional);
-        engine.recordOutcome(r.agentId, r.consumer, outcome, scoreWeight, agent.lossToleranceBps);
 
+        // Computed before the outcome is recorded, because the engine prices the consumer's
+        // influence in it — the fee has to be known to the score update, not merely paid after it.
         uint256 fee = r.fee;
+        uint256 protocolCut = (fee * protocolFeeBps) / 10_000;
+
+        // An unattributed delivery is paid and settled exactly like any other and moves the score
+        // by nothing. See `deliver`: the work is real, the credit is not this agent's.
+        engine.recordOutcome(
+            r.agentId,
+            r.consumer,
+            outcome,
+            r.attributed ? scoreWeight : 0,
+            agent.lossToleranceBps,
+            protocolCut
+        );
+
         if (fee != 0) {
-            uint256 protocolCut = (fee * protocolFeeBps) / 10_000;
             if (protocolCut != 0) bondToken.safeTransfer(treasury, protocolCut);
             bondToken.safeTransfer(agent.owner, fee - protocolCut);
         }

@@ -1014,12 +1014,19 @@ decimals.
 | Halo2Verifier | `0x0825Ea3EdfE5961094E63F802D11CCD53098D651` |
 | Bond token (test) | `0x75edC9335175Fc0552D51D48439F229c10420fe3` |
 
-**None of these eight is source-verified yet.** Checked against `https://scan.bohr.life` on
-2026-08-29: `is_verified` is false for all of them. `scripts/verify.js` has not been re-run since
-this set landed, and Blockscout matches on bytecode rather than address, so the previous set's
-verifications do not carry over to these addresses even where the bytecode is unchanged. Until it
-is re-run, a reader cannot check the running code against this repository — which is most of what
-verification is for.
+**Two of these eight are source-verified. The other six cannot be, from this repository.**
+`scripts/verify.js` was re-run on 2026-08-31: `InputAttestor` and `Halo2Verifier` came back
+already verified, and the remaining six failed with "bytecode doesn't match any of your local
+contracts". That is the correct answer rather than a tooling failure. Exactly six contract sources
+have changed since this set was deployed — `ReputationEngine`, `AgentRegistry`, `ExecutionRouter`,
+`SignatureAdapter`, `TeeAdapter` and `ZkAdapter` — and they are exactly the six that failed. The
+two that passed are the two nobody touched, and Blockscout matched them on bytecode it had already
+seen rather than on anything submitted here.
+
+Verifying the other six would mean checking out the tree as of the deploy and publishing from
+there, which is work with the lifespan of one redeploy. The honest position is that this set is
+unverifiable from `main` and stays that way until a set built from `main` replaces it. A reader
+who wants to check the running code against source has, for now, no way to do it.
 
 **This replaced the set deployed earlier the same day (registry `0x39FF…aA83`), which had replaced
 the one dated 2026-08-25, which had replaced the one dated 2026-08-11.**
@@ -1040,9 +1047,22 @@ and nothing reads them.
 The wiring was reported by the deploy script and recorded in the manifest: `adapters(1..3)`
 resolve to the three adapters, `engine.writers()` is true for both the registry and the router,
 and `bootstrapped()` is true on all three timelocked contracts — so the 21-day notice period is
-armed and the trust-redirecting setters are behind it. The Gold adapter here predates the
-`onlyRouter` fix on `verifyAndAttribute`, and so do the `settleDefault` and `challenge` fixes:
-this set runs source that this repository has since moved past.
+armed and the trust-redirecting setters are behind it.
+
+The `settleDefault` and `challenge` fixes **are** live here, contrary to what this section said
+until 2026-08-31. Commit `8c03858` landed at 16:32:33Z and this set went out at 16:39:32Z, seven
+minutes later; the deployed router's runtime bytecode carries `canEscalate(uint256)` and the
+Bronze adapter carries `canVerify(bytes32)`, both introduced by that commit. Its own message says
+"None of this is live", which was true when it was written and stopped being true seven minutes
+afterwards, and the redeploy did not go back to correct it — which is how a claim that was
+carefully argued at the time becomes the most confidently wrong line in the file.
+
+What this set does **not** carry is the four fixes after it: weight bought with protocol fees,
+tier demonstrated rather than declared, the self-dealing check at `requestExecution`, and the
+`provenBy` attribution record with `onlyRouter` on `verifyAndAttribute`. Checked by selector
+against the deployed bytecode on 2026-08-31, `weightPerFeeUnit()`, `voice(address)`,
+`effectiveTier(uint256)`, `recordDelivery(uint256,uint8)`, `provenBy(bytes32)` and `router()` are
+all absent. Read anything on this page about those four as describing source, not this chain.
 
 The protocol owner and deployer for this set is `0x08c8108383b69052C04B898676a08Bbbb9ca69F4`, which
 is **not** the key that deployed the previous two (`0x3Ae2AfdeF2391E2AC78e1eb901aF4092E5cb6731`).

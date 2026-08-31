@@ -424,13 +424,24 @@ async function run() {
 
   log.info(`alert daemon online on chain ${chainId}, following from block ${cursor}`);
 
+  // What the cursor row already says, so a pass that moved nowhere writes nothing. Null rather
+  // than `cursor`, so the first pass always writes and the row exists even on a fresh database.
+  // Without this a halted chain — or simply a quiet one — rewrites the same number to a metered
+  // database on every poll, forever.
+  let written = null;
+  const saveCursor = async (block) => {
+    if (block === written) return;
+    await writeCursor(db, chainId, registry, block);
+    written = block;
+  };
+
   let lastSweep = 0;
   for (;;) {
     try {
       const subs = await liveSubscriptions(db, chainId, registry);
       if (subs.length > 0) {
         cursor = await followEvents(db, chain, subs, cursor);
-        await writeCursor(db, chainId, registry, cursor);
+        await saveCursor(cursor);
         if (Date.now() - lastSweep >= config.alerts.sweepIntervalMs) {
           await sweepScores(db, chain, subs);
           lastSweep = Date.now();
@@ -440,7 +451,7 @@ async function run() {
         // subscribed to — a subscription made now is about what happens next, not what happened
         // while the table was empty.
         cursor = (await chain.provider.getBlockNumber()) + 1;
-        await writeCursor(db, chainId, registry, cursor);
+        await saveCursor(cursor);
       }
       await deliverPending(db, chainId, registry);
     } catch (e) {

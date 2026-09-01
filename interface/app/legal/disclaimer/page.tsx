@@ -245,9 +245,9 @@ export default function Disclaimer() {
             that a mature deployment would separate sit on one key.
           </p>
           <p>
-            Five of those setters — the registry&apos;s router, its treasury, a reputation writer, a
-            verification adapter, and the router&apos;s input attestor — are now behind a 21-day
-            queue-then-execute delay. Those are the ones that <em>redirect trust</em>: they can
+            Six of those setters — the registry&apos;s router, its treasury, a reputation writer, a
+            verification adapter, the router&apos;s input attestor, and the Gold adapter&apos;s
+            router — are now behind a 21-day queue-then-execute delay. Those are the ones that <em>redirect trust</em>: they can
             substitute the code that decides whether an execution was honest, or where slashed
             collateral goes, which is a different kind of change from moving a fee. The delay is
             a smoke alarm, not a lock — it guarantees you get three weeks&apos; warning, and nothing

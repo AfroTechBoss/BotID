@@ -687,9 +687,10 @@ score' = decay(score, Δt) + (q − decay(score, Δt)) · w / (w + K)`}</div>
             </li>
             <li>
               <strong>Protocol parameters are owner-settable</strong>, including slash rates and windows. That is
-              a governance surface, and it is currently a single owner key. The five setters that
-              can redirect trust — the router, the treasury, a reputation writer, a verification
-              adapter, the input attestor — have to be queued 21 days ahead and are announced on chain when they
+              a governance surface, and it is currently a single owner key. The six setters that
+              can redirect trust — the registry's router, the treasury, a reputation writer, a
+              verification adapter, the input attestor, the Gold adapter's router — have to be
+              queued 21 days ahead and are announced on chain when they
               are; everything else takes effect in the block it lands in. See{' '}
               <a href="/security">security</a>.
             </li>

@@ -1004,14 +1004,14 @@ decimals.
 
 | Contract | Address |
 |---|---|
-| ReputationEngine | `0x9D602eE0ddA3Eff93e11aE56BC3c6273D9edecB6` |
-| AgentRegistry | `0x673D39B8b0Ce8e61EA5fFbf9b3f8E373aE0B5c87` |
-| InputAttestor | `0xd14CFe710B9d70d7cb191586CbdeB49347c41CF4` |
-| ExecutionRouter | `0xE26843C9AD79D67f48f71F865B397f437171ED9A` |
-| SignatureAdapter (Bronze) | `0xF222a82b9C1d59999C3e48B30F6c797c1dab15BF` |
-| TeeAdapter (Silver) | `0xEC10Fb66Fb1736C45f2c704497ef0fE0f0754150` |
-| ZkAdapter (Gold) | `0x5B63e01298Cfb28ac96C67718daA5788cF934CDf` |
-| Halo2Verifier | `0x0825Ea3EdfE5961094E63F802D11CCD53098D651` |
+| ReputationEngine | `0x054a5019c75184850F96C276607b2A2127a3Be73` |
+| AgentRegistry | `0xB6D13d5BC5BC87462AaD431cd2Fd22e3a374e6Dc` |
+| InputAttestor | `0x0814675fa013B7d7440530E010DCe7B09283fe4C` |
+| ExecutionRouter | `0x0E9d52514195C7CC3f17E90D3c4af363c2a5Eb47` |
+| SignatureAdapter (Bronze) | `0x9B2e1e4aD190bC15cdE98993593F8992Ad664A13` |
+| TeeAdapter (Silver) | `0xde6D31Cd9089Fd236E6c35B04c73568f3183C12b` |
+| ZkAdapter (Gold) | `0x4889cbC3Ce84Cb169b1bf21AfF3Bd4c764627fE8` |
+| Halo2Verifier | `0xDdf0D8b4ECFCa9a630EE54b9dC0FF62Ed16bd346` |
 | Bond token (test) | `0x75edC9335175Fc0552D51D48439F229c10420fe3` |
 
 **Two of these eight are source-verified. The other six cannot be, from this repository.**

@@ -410,7 +410,8 @@ async function main() {
           consumerWeightCap,
           decayHalfLife,
           livenessHaircutBps,
-          verificationHaircutBps
+          verificationHaircutBps,
+          weightPerFeeUnit
         ),
     ]);
   }

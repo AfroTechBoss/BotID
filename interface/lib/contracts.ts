@@ -97,14 +97,14 @@ export interface Contract {
  */
 export const ADDRESSES = {
   testnet: {
-    AgentRegistry: '0x673D39B8b0Ce8e61EA5fFbf9b3f8E373aE0B5c87',
-    ExecutionRouter: '0xE26843C9AD79D67f48f71F865B397f437171ED9A',
-    ReputationEngine: '0x9D602eE0ddA3Eff93e11aE56BC3c6273D9edecB6',
-    InputAttestor: '0xd14CFe710B9d70d7cb191586CbdeB49347c41CF4',
-    SignatureAdapter: '0xF222a82b9C1d59999C3e48B30F6c797c1dab15BF',
-    TeeAdapter: '0xEC10Fb66Fb1736C45f2c704497ef0fE0f0754150',
-    ZkAdapter: '0x5B63e01298Cfb28ac96C67718daA5788cF934CDf',
-    Halo2Verifier: '0x0825Ea3EdfE5961094E63F802D11CCD53098D651',
+    AgentRegistry: '0xB6D13d5BC5BC87462AaD431cd2Fd22e3a374e6Dc',
+    ExecutionRouter: '0x0E9d52514195C7CC3f17E90D3c4af363c2a5Eb47',
+    ReputationEngine: '0x054a5019c75184850F96C276607b2A2127a3Be73',
+    InputAttestor: '0x0814675fa013B7d7440530E010DCe7B09283fe4C',
+    SignatureAdapter: '0x9B2e1e4aD190bC15cdE98993593F8992Ad664A13',
+    TeeAdapter: '0xde6D31Cd9089Fd236E6c35B04c73568f3183C12b',
+    ZkAdapter: '0x4889cbC3Ce84Cb169b1bf21AfF3Bd4c764627fE8',
+    Halo2Verifier: '0xDdf0D8b4ECFCa9a630EE54b9dC0FF62Ed16bd346',
     bondToken: '0x75edC9335175Fc0552D51D48439F229c10420fe3',
   },
   mainnet: {
@@ -125,11 +125,11 @@ export const DEPLOY_BLOCK: Partial<Record<NetworkId, bigint>> = {
   // copied from a receipt — the manifest does not record creation transactions.
   //
   // It must not be later than the first block of any contract whose logs are read here, and today
-  // that is ExecutionRouter alone (activity.ts). The router landed at 21,458,941, nineteen blocks
+  // that is ExecutionRouter alone (activity.ts). The router landed at 21,931,905, twelve blocks
   // after the registry, so the registry's block covers it. Moving this forward past a queried
   // contract would silently truncate its history rather than fail — the feed would just look
   // emptier than the chain is.
-  testnet: 21_458_928n,
+  testnet: 21_931_893n,
 };
 
 export type ContractName =

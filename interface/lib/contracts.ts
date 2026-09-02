@@ -37,18 +37,27 @@ export interface Contract {
  * adapter is bound, and the Gold verifier is the one the manifest names. A manifest records what
  * the deploy *sent*; these are what stuck.
  *
- * These are the FOURTH set, deployed 2026-08-28 16:39Z, first block 21,465,564. They replace the
- * earlier set from the same day (`0x39FF…aA83` registry), which replaced the 2026-08-25 set, which
- * had itself replaced the 2026-08-11 one — and the reason to spell that out here rather than just swap the
+ * These are the FIFTH set, deployed 2026-09-01 23:43Z, first block 21,931,893. They carry the
+ * `settleDefault` and `canEscalate` fixes from the internal review, which changed
+ * `IVerificationAdapter` and so could not have reached a live chain any other way. They replace the
+ * 2026-08-28 16:39Z set (`0x673D…5c87` registry), which replaced an earlier set from the same day
+ * (`0x39FF…aA83`), which replaced the 2026-08-25 set, which had itself replaced the 2026-08-11 one
+ * — and the reason to spell that out here rather than just swap the
  * strings is that each replacement is total. None of these contracts is upgradeable: `registry`,
  * `engine` and `bondToken` are immutable, so a redeploy is always the whole set and every address
- * on this page changes together. Nothing was carried over this time, not even `Halo2Verifier`,
- * which the previous redeploy had reused.
+ * on this page changes together. Nothing was carried over this time either, not even
+ * `Halo2Verifier`, which an earlier redeploy had reused.
+ *
+ * One address is on chain that was never a set: the 2026-09-01 deploy was attempted twice, and the
+ * first run (`0x63A4…E118` registry) deployed and wired eight contracts before aborting on a
+ * seven-argument setter the script called with six. It has no parameters, no timelock and no
+ * manifest, and it is abandoned — but it is wired, so it reads as live on the explorer. It is
+ * listed here because that is the only place it is written down.
  *
  * Superseded addresses are not deprecated so much as incompatible. The EIP-712 domain includes the
  * verifying contract, so an attestation signed for a previous adapter does not verify at the
  * current one, and there is no window in which two sets both work. Anything still pointing at the
- * 0x39FF…aA83 set — or the 0x0bC0…9142 and 0x7E1A…6914 ones before it — is talking to a different
+ * 0x673D…5c87 set — or the 0x39FF…aA83, 0x0bC0…9142 and 0x7E1A…6914 ones before it — is talking to a different
  * protocol that happens to share a name. That is not hypothetical: this file named the 0x39FF…aA83
  * set for a day after it had been replaced, which is the failure the redeploy checklist in
  * `docs/contract.md` §8 exists to stop.

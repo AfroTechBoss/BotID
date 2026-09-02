@@ -114,18 +114,20 @@ export default function Security() {
 
         <h3>Deployment state</h3>
         <p>
-          BotID is deployed on Bohr testnet, chain 968, as of 2026-08-25, with the bn254 precompiles
+          BotID is deployed on Bohr testnet, chain 968, as of 2026-09-01, with the bn254 precompiles
           confirmed present. There is no mainnet deployment. Bohr is a testnet: its BOT has no
           value, the chain carries no uptime commitment, and the deployment can be replaced without
           notice. Nothing there is a place to put capital you expect to keep.
         </p>
         <p>
-          &ldquo;Replaced without notice&rdquo; is not hypothetical: this is the second deployment,
-          and it replaced the one dated 2026-08-11. Six of the eight contracts changed bytecode when
-          the findings below were remediated, and none of them is upgradeable — the router&apos;s
+          &ldquo;Replaced without notice&rdquo; is not hypothetical: this is the fifth deployment
+          since 2026-08-11, and every one of them replaced the whole set. This one carries the
+          <code>settleDefault</code> and <code>canEscalate</code> fixes from the internal review,
+          which changed <code>IVerificationAdapter</code> and so could not have reached a live chain
+          any other way. None of these contracts is upgradeable — the router&apos;s
           registry, engine and bond token are <code>immutable</code>, so there was no way to swap one
           contract and keep the rest. The signing domain changed too, so nothing signed for the old
-          adapters verifies against the new ones. If you hold addresses from before that date, they
+          adapters verifies against the new ones. If you hold addresses from before 2026-09-01, they
           are not stale so much as a different protocol wearing the same name. All eight are
           source-verified on the explorer; the table below is the current set.
         </p>
@@ -186,10 +188,11 @@ export default function Security() {
             0x08a284ace0e1e53d8ecffe84217e9680646ac0264ab252948dabbfe7f54d8fa2
           </code>{' '}
           — bound to the <code>Halo2Verifier</code> in the table above. Read back from{' '}
-          <code>ZkAdapter.modelFor()</code> on 2026-08-25, against the new adapter. The verifier
-          itself is the one contract carried over from the previous deployment unchanged, so the
-          model binding is identical to what it was. Nothing is registered on mainnet, because there
-          is no mainnet adapter.
+          <code>ZkAdapter.modelFor()</code> on 2026-09-01, against the current adapter, returning
+          the <code>Halo2Verifier</code> in the table above at an input scale of 8. The verifier was
+          redeployed with the rest of the set this time rather than carried over, so the binding is
+          new even though the commitment — which is only the hash of the name — is unchanged.
+          Nothing is registered on mainnet, because there is no mainnet adapter.
         </p>
 
         <h6 style={HEAD}>Misconfiguration, which is not an attack and is still how money is lost</h6>

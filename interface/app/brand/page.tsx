@@ -92,12 +92,14 @@ export default function Brand() {
 
       <h6 style={HEAD}>Type</h6>
       <div style={RULE}>
-        <div style={{ fontFamily: 'var(--font-heading)', fontWeight: 800, fontSize: 34, letterSpacing: '-0.02em' }}>
-          Cabinet Grotesk Extrabold
+        <div style={{ fontFamily: 'var(--font-heading)', fontWeight: 'var(--font-heading-weight)' as React.CSSProperties['fontWeight'], fontSize: 34, letterSpacing: '-0.02em' }}>
+          Beautifully Delicious Sans Black
         </div>
         <p className="text-muted" style={{ fontSize: 12, margin: '4px 0 var(--space-4)' }}>
           --font-heading · h1–h3 and the headline numerals, and nothing else. It is loud because it
-          is rare; setting h4–h6 in it too would spend the emphasis on section labels.
+          is rare; setting h4–h6 in it too would spend the emphasis on section labels. The Sans cut,
+          not the family&apos;s Script — this variable also sets the 34px numerals on the overview,
+          and a script numeral is a poor way to state a fact.
         </p>
         <div style={{ fontFamily: 'var(--font-body)', fontWeight: 500, fontSize: 20 }}>
           Satoshi Medium — body copy, subheadings, tables and controls.

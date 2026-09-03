@@ -1,7 +1,9 @@
-/* Cabinet Grotesk Extrabold for titles, Satoshi Medium for everything that has to be read.
+/* Beautifully Delicious Sans Black for titles, Satoshi Medium for everything that has to be read.
    Both are self-hosted and declared in app/fonts.ts — there is no @import here on purpose, and
    nothing in this file may reintroduce one: a webfont @import blocks rendering on a third-party
-   response, which is both a performance cost and a privacy claim the legal pages contradict. */
+   response, which is both a performance cost and a privacy claim the legal pages contradict.
+   That rule binds harder now than it did, because the heading face is licensed rather than free
+   and a CDN link is the tempting way to skip buying it. */
 
 /* --- Theme ---------------------------------------------------------------------------------
    Dark is the default: :root carries it, and [data-theme='light'] is the opt-out. The Modernist
@@ -50,8 +52,8 @@
      fallback to each variable, so a trailing `, system-ui` would only ever duplicate what is
      there. This form applies solely when the variable itself is missing — a page rendered
      outside the root layout. */
-  --font-heading: var(--font-cabinet, system-ui, sans-serif);
-  --font-heading-weight: 800;
+  --font-heading: var(--font-delicious, system-ui, sans-serif);
+  --font-heading-weight: 900;
   --font-body: var(--font-satoshi, system-ui, sans-serif);
   --font-body-weight: 500;
   --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
@@ -190,11 +192,11 @@ body {
 * { scrollbar-width: none; -ms-overflow-style: none; }
 *::-webkit-scrollbar { width: 0; height: 0; }
 
-/* The two faces are split by job, not by tag depth. Cabinet Grotesk Extrabold is the loud voice —
-   page titles and the headline numerals — and it is used sparingly enough to still be loud.
-   Everything that exists to be read quietly, including the small uppercase section labels this
-   design leans on heavily, is Satoshi. Setting all six levels in Cabinet 800 would put an
-   extrabold display face on the label above every table, which is shouting at a filing cabinet. */
+/* The two faces are split by job, not by tag depth. The display face is the loud voice — page
+   titles and the headline numerals — and it is used sparingly enough to still be loud. Everything
+   that exists to be read quietly, including the small uppercase section labels this design leans
+   on heavily, is Satoshi. Setting all six levels in the display face would put it on the label
+   above every table, which is shouting at a filing cabinet. */
 h1, h2, h3, h4, h5, h6 {
   line-height: 1.12; letter-spacing: -0.015em; margin: 0 0 var(--space-2);
 }
@@ -215,8 +217,8 @@ img { display: block; max-width: 100%; }
 
 .btn {
   display: inline-flex; align-items: center; justify-content: center; gap: 6px;
-  /* Button labels are Satoshi 700, not Cabinet 800: at 14px the display face's tight extrabold
-     forms close up and a control starts competing with the page title for attention. */
+  /* Button labels are Satoshi 700, not the display face: at 14px its heaviest forms close up and
+     a control starts competing with the page title for attention. */
   cursor: pointer; text-decoration: none; font-family: var(--font-body); font-weight: 700;
   font-size: 14px; color: var(--color-text); background: transparent; border: 1px solid transparent;
   padding: var(--space-2) calc(var(--space-3) * 1.2); border-radius: var(--radius-md);
@@ -621,7 +623,7 @@ img { display: block; max-width: 100%; }
    on every child but the last it replaces was only right in a single row. */
 .stat-strip { display: grid; grid-template-columns: repeat(var(--cols, 4), 1fr); border-top: 2px solid var(--color-divider); border-bottom: 2px solid var(--color-divider); }
 .stat-strip > * + * { border-left: 1px solid var(--color-divider); }
-.stat-num { font-family: var(--font-heading); font-weight: 800; font-size: 34px; letter-spacing: -0.02em; }
+.stat-num { font-family: var(--font-heading); font-weight: var(--font-heading-weight); font-size: 34px; letter-spacing: -0.02em; }
 @media (max-width: 720px) {
   .stat-strip { grid-template-columns: repeat(2, 1fr); gap: 1px; background: var(--color-divider); }
   .stat-strip > * { background: var(--color-bg); }

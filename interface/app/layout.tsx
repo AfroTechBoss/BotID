@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import './globals.css';
-import { cabinet, satoshi } from './fonts';
+import { delicious, satoshi } from './fonts';
 import Nav from '@/components/Nav';
 import Footer from '@/components/Footer';
 import NetworkGate from '@/components/NetworkGate';
@@ -18,7 +18,7 @@ export const metadata: Metadata = {
 // links required by §18 were missing from exactly the pages a stranger is most likely to land on.
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    // The font classes carry --font-cabinet and --font-satoshi; globals.css reads them through
+    // The font classes carry --font-delicious and --font-satoshi; globals.css reads them through
     // --font-heading and --font-body, so no component ever names a typeface directly.
     // data-theme is rendered by the server from the cookie, not written by a pre-paint script
     // reading localStorage. The script version does not survive: <html> is a React-rendered
@@ -27,7 +27,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     // server can see makes the first paint already correct, with no mismatch to suppress.
     // The cost is that this opts every route into dynamic rendering — acceptable here, where
     // every page already renders per-request data.
-    <html lang="en" data-theme={readTheme()} className={`${cabinet.variable} ${satoshi.variable}`}>
+    <html lang="en" data-theme={readTheme()} className={`${delicious.variable} ${satoshi.variable}`}>
       {/* Grammarly and its kind stamp their own attributes onto <body> the moment the HTML lands —
           data-gr-ext-installed and friends — which is before React hydrates. React then compares
           the DOM it finds against the HTML it sent, sees attributes it did not write, and reports

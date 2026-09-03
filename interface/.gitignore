@@ -26,3 +26,16 @@ test-results/
 
 # deployment
 .vercel
+
+# The licensed heading face. Satoshi is Fontshare-licensed and free to redistribute, so it stays
+# tracked; Beautifully Delicious Sans (Elena Genova, My Creative Land) is bought per-licence, and
+# the webfont licence covers serving it from our own origin — not handing the file to everyone who
+# clones a public repo. It is ignored by exact name rather than by *.woff2 so that dropping a free
+# face into this directory still gets committed by default, and so that forgetting to ignore the
+# next licensed one is a deliberate act rather than an oversight.
+#
+# Consequence, stated plainly because it will bite a fresh clone: `next build` throws
+# "Can't resolve './fonts/BeautifullyDeliciousSans-Black.woff2'" until someone with the licence
+# supplies the file. That is the intended failure — a missing licensed font should stop a build,
+# not silently fall back to system-ui and ship a different-looking site. See app/fonts.ts.
+app/fonts/BeautifullyDeliciousSans-Black.woff2

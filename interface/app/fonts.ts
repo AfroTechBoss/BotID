@@ -21,6 +21,13 @@ import localFont from 'next/font/local';
 // CDN font makes one before the first paint, which is how that promise quietly became false the
 // last time. Buy the webfont licence and keep the file in this directory, or use a free face.
 //
+// The file itself is NOT in the repo — interface/.gitignore excludes it by name, because this
+// repo is public and shipping a bought woff2 to everyone who clones it is redistribution, which
+// the webfont licence does not cover. So a fresh clone fails to build until whoever holds the
+// licence supplies the file, and that includes any CI or Vercel build, which clones like anyone
+// else. Getting it there means handing it to the builder out of band, not committing it: the
+// licence is the constraint, and a private pipeline is the place to satisfy it.
+//
 // woff2 only. Every browser that can run this app supports it, and shipping woff and ttf
 // fallbacks would triple the directory for readers who will never fetch them.
 

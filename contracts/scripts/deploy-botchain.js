@@ -24,6 +24,7 @@
  */
 
 const { spawn } = require("child_process");
+const fs = require("fs");
 const path = require("path");
 const { ethers } = require("ethers");
 
@@ -81,9 +82,18 @@ const CONFIG = Object.freeze({
   // adding Gold later is a 21-day round trip rather than a transaction.
   DEPLOY_GOLD: "false",
 
-  // PUBLISHERS, PUBLISHER_QUORUM, TEE_NOTARIES are deliberately absent, which leaves those sets
-  // empty and those paths inert. On mainnet inert is the better failure: an empty notary set means
-  // nobody can enroll an enclave, a wrong one means someone unintended can.
+  // Explicitly empty, not absent. This is a correction, and the 2026-09-03 deploy is what taught
+  // it: leaving these out of CONFIG does not produce an empty set, it produces whatever
+  // contracts/.env says, because the child still reads that file for everything CONFIG does not
+  // override. Bohr's publisher came through exactly that gap and is live on 677.
+  //
+  // The rule the rest of this object follows — set it even when the value matches the default —
+  // has to extend to the values whose intended setting is "nothing", because absent and empty are
+  // the same in a JS object and opposite on a chain. On mainnet inert is the better failure: an
+  // empty notary set means nobody can enroll an enclave, a wrong one means someone unintended can.
+  PUBLISHERS: "",
+  PUBLISHER_QUORUM: "",
+  TEE_NOTARIES: "",
 });
 
 async function preflight() {
@@ -125,6 +135,21 @@ async function preflight() {
 
 async function main() {
   const go = process.argv.includes("--yes");
+
+  // deploy.js overwrites deployments/botchain-677.json in place with no confirmation, and on
+  // mainnet that file is the only record of which addresses are live. A second --yes would not
+  // fail — it would deploy a whole second set and quietly replace the record of the first, which
+  // stays deployed, funded and bonded with nothing pointing at it. Once one exists, deploying
+  // another has to be typed out.
+  const manifest = path.join(__dirname, "..", "deployments", "botchain-677.json");
+  if (go && fs.existsSync(manifest) && !process.argv.includes("--redeploy")) {
+    throw new Error(
+      `${manifest} already exists — chain 677 has a deployed set.\n` +
+        `Deploying again abandons it and overwrites the only record of its addresses. ` +
+        `If that is really the intent, commit the current manifest first and pass --redeploy.`
+    );
+  }
+
   const facts = await preflight();
 
   console.log(`rpc          ${RPC_URL} — chain ${CHAIN_ID}, block ${facts.block}`);
@@ -153,12 +178,18 @@ async function main() {
   // lifetime of one child process. hardhat.config.js prefers real environment variables over
   // contracts/.env, which is what makes that work — and PRIVATE_KEY, which is not here, still
   // comes from the file.
-  const child = spawn("npx", ["hardhat", "run", "scripts/deploy.js", "--network", "botchain"], {
-    cwd: path.join(__dirname, ".."),
-    env: { ...process.env, ...CONFIG },
-    stdio: "inherit",
-    shell: process.platform === "win32",
-  });
+  // npx.cmd rather than shell:true. With a shell the arguments are concatenated rather than
+  // escaped, which node warns about (DEP0190) and which would matter the moment any value here
+  // contained a space.
+  const child = spawn(
+    process.platform === "win32" ? "npx.cmd" : "npx",
+    ["hardhat", "run", "scripts/deploy.js", "--network", "botchain"],
+    {
+      cwd: path.join(__dirname, ".."),
+      env: { ...process.env, ...CONFIG },
+      stdio: "inherit",
+    }
+  );
   child.on("exit", (code) => {
     if (code === 0) {
       console.log(`\nDeployed. The contracts exist and do nothing yet — §4 of the checklist is the`);

@@ -28,21 +28,33 @@
  * The state file records the requestId, so a second run never starts a second execution.
  * ---------------------------------------------------------------------------------------------
  *
- * ALMOST ONE KEY. PRIVATE_KEY is the consumer, the agent owner and the attestation publisher.
+ * THREE KEYS, TWO OF THEM DERIVED. PRIVATE_KEY is the agent owner and the attestation publisher.
  * It cannot also be the operator: the registry enforces one agent per operator address
- * (`agentIdByOperator[operator] != 0` reverts as OperatorInUse), and on this deployment that key
- * already operates agent #1. So the script derives a second key for the operator role and sends
- * it a little gas.
+ * (`agentIdByOperator[operator] != 0` reverts as OperatorInUse). And as of the audit fixes it
+ * cannot be the consumer either — `ExecutionRouter.sol:320` reverts SelfDealing when the caller of
+ * requestExecution is the agent's owner or its operator.
  *
- * That derived key is deterministic — the same PRIVATE_KEY always produces the same operator, so
- * re-running never strands an agent behind a key nobody can reproduce. It is a hot key on a
- * testnet and nothing more; a real operator key lives wherever the model runs, which is the whole
- * reason the registry keeps operator and owner apart in the first place.
+ * That guard is the reason this script needs a third key, and it is worth saying plainly that the
+ * guard is right and the old script was wrong. An earlier version of this file said the cast being
+ * one person was "fine for proving the pipeline". It was not: an agent ordering its own work is
+ * the exact shape of the self-dealing the audit found, where the only cost is the protocol's cut
+ * on a fee that returns to the other pocket and the reward is a score that buys leverage. A
+ * lifecycle script that could not run without doing it was demonstrating the wrong thing.
  *
- * Beyond that separation the cast is still one person: the consumer who commissions the work and
- * reports the outcome is also the owner of the agent being judged. Fine for proving the pipeline,
- * and not how any of this is meant to be run — the bond only means something when the person
- * grading the work is not the person who did it.
+ * So the consumer is derived too, and the roles now separate the way the protocol intends:
+ *
+ *   PRIVATE_KEY   owns the agent, posts its bond, publishes the feed reading
+ *   operator      derived — signs and sends the delivery
+ *   consumer      derived — commissions the work, pays the fee, reports the outcome
+ *
+ * Both derived keys are deterministic: the same PRIVATE_KEY always produces the same two
+ * addresses, so re-running never strands an agent or a request behind a key nobody can reproduce,
+ * and neither secret is ever written to the state file. They are hot keys on a testnet and nothing
+ * more.
+ *
+ * The cast is still one person in the sense that matters least and no longer in the sense that
+ * matters most: one human funds all three, but the address grading the work is no longer the
+ * address that did it, and the chain can tell.
  */
 
 const fs = require("fs");
@@ -115,8 +127,18 @@ async function main() {
     ethers.provider
   );
 
-  log(`consumer    ${me.address}`);
+  // The consumer, derived the same way under a different label. Distinct from both the owner and
+  // the operator, which is what SelfDealing requires — see the header.
+  const consumer = new ethers.Wallet(
+    ethers.keccak256(
+      ethers.solidityPacked(["bytes32", "string"], [me.privateKey, "botid.execute-once.consumer.v1"])
+    ),
+    ethers.provider
+  );
+
+  log(`owner       ${me.address} (also the publisher)`);
   log(`operator    ${operator.address} (derived)`);
+  log(`consumer    ${consumer.address} (derived)`);
   log(`network     ${network.name} (${chainId})`);
 
   const at = (name, key) => ethers.getContractAt(name, m.contracts[key ?? name], me);
@@ -131,6 +153,7 @@ async function main() {
       "function balanceOf(address) view returns (uint256)",
       "function allowance(address,address) view returns (uint256)",
       "function approve(address,uint256) returns (bool)",
+      "function transfer(address,uint256) returns (bool)",
       "function decimals() view returns (uint8)",
     ],
     me
@@ -212,6 +235,15 @@ async function main() {
     await wait(me.sendTransaction({ to: operator.address, value: GAS_FLOOR - opGas }));
   }
 
+  // The consumer pays for its own `requestExecution` and, later, its own `settle`. Unlike the
+  // operator it is still needed on a resumed run — settle is the last transaction in the
+  // lifecycle and it sends it — so this is not gated on the request being outstanding.
+  const conGas = await ethers.provider.getBalance(consumer.address);
+  if (conGas < GAS_FLOOR) {
+    log(`funding the consumer with ${ethers.formatEther(GAS_FLOOR - conGas)} for gas…`);
+    await wait(me.sendTransaction({ to: consumer.address, value: GAS_FLOOR - conGas }));
+  }
+
   // ------------------------------------------------------- phase B: request, and phase C: deliver
   if (!state.requestId) {
     const notional = units(NOTIONAL_USDT);
@@ -229,9 +261,22 @@ async function main() {
     const fee = (notional * BigInt(minFeeBps) + 9999n) / 10000n;
 
     const routerAddr = await router.getAddress();
-    if ((await token.allowance(me.address, routerAddr)) < fee) {
+
+    // The fee is pulled from the consumer, so the consumer has to hold it. It is a derived key
+    // that starts empty, so the owner sends it exactly the fee rather than a float — anything
+    // sent to a throwaway key beyond what it spends is stranded there.
+    const conBal = await token.balanceOf(consumer.address);
+    if (conBal < fee) {
+      const short = fee - conBal;
+      const mine = await token.balanceOf(me.address);
+      if (mine < short) throw new Error(`need ${fmt(short)} to fund the consumer, have ${fmt(mine)}`);
+      log(`sending the consumer ${fmt(short)} for the fee…`);
+      await wait(token.transfer(consumer.address, short));
+    }
+
+    if ((await token.allowance(consumer.address, routerAddr)) < fee) {
       log(`approving router for the fee…`);
-      await wait(token.approve(routerAddr, ethers.MaxUint256));
+      await wait(token.connect(consumer).approve(routerAddr, ethers.MaxUint256));
     }
 
     // The input bundle: one feed reading, signed by the publisher.
@@ -265,8 +310,12 @@ async function main() {
     const deliverBy = timestamp + BigInt(DELIVER_BY_SECS);
 
     log(`requesting: notional ${fmt(notional)}, fee ${fmt(fee)}…`);
+    // Sent from the consumer. Sending it from the owner is what SelfDealing rejects, and the
+    // consumer is also the only address `settle` will later accept.
     const rc = await wait(
-      router.requestExecution(agentId, inputCommitment, notional, fee, deliverBy, "")
+      router
+        .connect(consumer)
+        .requestExecution(agentId, inputCommitment, notional, fee, deliverBy, "")
     );
     const ev = rc.logs
       .map((l) => { try { return router.interface.parseLog(l); } catch { return null; } })
@@ -371,8 +420,10 @@ async function main() {
   const after = await router.getRequest(state.requestId);
   if (Number(after.status) === Status.Finalized) {
     log(`settling at ${REALIZED_PNL_BPS >= 0 ? "+" : ""}${REALIZED_PNL_BPS} bps…`);
+    // From the consumer: `settle` checks msg.sender against the request's consumer and reverts
+    // NotConsumer otherwise. The address that commissioned the work is the one that grades it.
     await wait(
-      router.settle(state.requestId, {
+      router.connect(consumer).settle(state.requestId, {
         realizedPnlBps: REALIZED_PNL_BPS,
         slaBreached: false,
         limitBreached: false,

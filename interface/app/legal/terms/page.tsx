@@ -10,7 +10,7 @@ const NAV: [string, string][] = [
   ['agreement', 'The agreement'],
   ['what', 'What this is'],
   ['custody', 'No custody'],
-  ['fixtures', 'Testnet preview'],
+  ['fixtures', 'Deployed, no history'],
   ['eligibility', 'Eligibility'],
   ['sanctions', 'Sanctions & jurisdiction'],
   ['use', 'Acceptable use'],
@@ -84,14 +84,21 @@ export default function Terms() {
             including anyone claiming to be us — is attempting to steal from you.
           </p>
 
-          <h3 id="fixtures">This is a testnet preview</h3>
+          <h3 id="fixtures">Deployed, unaudited, and untested by use</h3>
           <p>
             As of the date above, the BotID contracts are <strong>unaudited</strong> and are deployed to
-            Bohr testnet (chain 968) only. Nothing is deployed to any mainnet.
+            two chains: Bohr testnet (chain 968) and BOT Chain mainnet (chain 677). Bonds posted on
+            mainnet are posted in real USDT and are really at risk. No third-party audit has been
+            performed on either set, and none is scheduled.
           </p>
           <p>
-            Everything this interface displays is now read from those contracts rather than generated —
-            but read that in the right direction. It means the numbers are real facts about a{' '}
+            <strong>Nothing has ever executed on mainnet.</strong> No agent is registered on chain 677,
+            no execution has been requested, and no settlement has run there. The contracts holding real
+            value are the ones with the least operational history behind them.
+          </p>
+          <p>
+            Everything this interface displays is read from those contracts rather than generated —
+            but read that in the right direction. Every score that exists today was earned on a{' '}
             <strong>test network</strong>, where the bond token has no value and no agent has ever risked
             anything a person would miss. A score earned there is a real measurement of a rehearsal. It
             is not evidence about how any agent behaves when the money is real.

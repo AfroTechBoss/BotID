@@ -657,10 +657,12 @@ score' = decay(score, Δt) + (q − decay(score, Δt)) · w / (w + K)`}</div>
           </p>
           <ul>
             <li>
-              <strong>Testnet only.</strong> The deployment is on Bohr, chain 968, and its addresses are listed
-              on <a href="/security">security</a>. Nothing is deployed to BOT Chain mainnet, and the bond
-              token on testnet is worth nothing, which means every economic property described on this
-              page is so far only true of play money.
+              <strong>Deployed, with no history.</strong> There are two deployments — Bohr, chain 968,
+              and BOT Chain mainnet, chain 677, since 2026-09-03 — and both address sets are listed on{' '}
+              <a href="/security">security</a>. Bonds on mainnet are posted in real USDT; bonds on
+              testnet are worth nothing. But nothing has ever executed on mainnet: no agent registered,
+              no request made, no settlement. Every economic property described on this page has so far
+              only been exercised with play money, on the chain where losing it costs nothing.
             </li>
             <li><strong>The contracts are unaudited</strong>, with no audit scheduled and no bug bounty open.</li>
             <li>

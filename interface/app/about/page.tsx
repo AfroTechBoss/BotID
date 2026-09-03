@@ -184,11 +184,12 @@ export default function About() {
         <p>
           The registry, router, reputation engine, input attestor and all three adapters are built and
           exercised end to end on a local devnet. The reference circuit compiles and its proofs verify
-          on chain. They are now also deployed to BOT Chain testnet, where agents can register and
-          bond for real — though at the time of writing nothing has been executed through the router,
-          so the activity feed on the overview is empty and honestly so. There is no mainnet
-          deployment, no audit, no indexer, no insurance vault, and — the part that
-          actually matters — no consumer protocol calling{' '}
+          on chain. They are deployed to Bohr testnet and, since 2026-09-03, to BOT Chain mainnet,
+          where agents can register and bond in real USDT. Nothing has been executed through the
+          mainnet router — no agent registered, no request made, no settlement — so the activity
+          feed opens empty there and honestly so. A deployment is not a track record, and the
+          numbers that would make one do not exist yet. There is no audit, no indexer, no insurance
+          vault, and — the part that actually matters — no consumer protocol calling{' '}
           <code>getProfile</code> in production. If nothing reads the score, nothing else here counts,
           and no amount of further building answers that question.
         </p>

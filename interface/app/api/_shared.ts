@@ -52,16 +52,23 @@ export function fail(status: number, error: string, detail?: Record<string, unkn
 }
 
 /**
- * Resolve `?network=`, defaulting to testnet.
+ * Resolve `?network=`, defaulting to mainnet.
  *
  * Defaulting is safe here in a way it is not in `lib/contracts.ts`: this route only ever reads,
  * and a read against the wrong network returns a wrong answer rather than sending a transaction
  * into one. The response echoes the network back so a caller who forgot the parameter can see
  * which chain answered.
+ *
+ * The default was testnet until mainnet was deployed on 2026-09-03. That flip changes the answer
+ * to every existing no-parameter call, which is the honest behaviour — the default should be the
+ * chain the protocol actually runs on — but a caller that was relying on the old default now reads
+ * an empty mainnet rather than a populated Bohr. It reads as "this agent does not exist" instead
+ * of as an error, so it is worth stating loudly rather than leaving to be discovered: pin
+ * `?network=testnet` if testnet is what you meant.
  */
 export function parseNetwork(url: URL): { network: NetworkId } | { error: Response } {
   const raw = url.searchParams.get('network');
-  if (!raw) return { network: 'testnet' };
+  if (!raw) return { network: 'mainnet' };
   const match = NETWORK_IDS.find((id) => id === raw || String(CHAINS[id].id) === raw);
   if (!match) {
     return {

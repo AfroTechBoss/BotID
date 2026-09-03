@@ -8,7 +8,7 @@ export const metadata: Metadata = {
 
 const NAV: [string, string][] = [
   ['read', 'Read this first'],
-  ['fixtures', 'Testnet only'],
+  ['fixtures', 'Deployed, no history'],
   ['predict', 'Not a predictor'],
   ['neutral', '5,000 is neutral'],
   ['tier', 'Tier vs performance'],
@@ -68,13 +68,18 @@ export default function Disclaimer() {
             are ordered roughly by how likely each is to be the thing that actually goes wrong.
           </p>
 
-          <h3 id="fixtures" style={H}>Everything here is real, and it is all on a test network</h3>
+          <h3 id="fixtures" style={H}>Everything here is real, and every score on it was earned in a rehearsal</h3>
           <p>
-            The contracts are <strong>unaudited</strong> and are deployed to Bohr testnet (chain 968)
-            only, never to a mainnet. What this interface shows is genuine contract state and genuine
-            router logs — no sample data — which makes it a truthful record of a system playing with
-            money that is not money. The bond a testnet agent posts costs it nothing to lose, so the
-            single mechanism this protocol relies on for honesty has never actually been tested.{' '}
+            The contracts are <strong>unaudited</strong> and are deployed to two chains: Bohr testnet
+            (chain 968) and BOT Chain mainnet (chain 677). This interface defaults to mainnet, and what
+            it shows is genuine contract state and genuine router logs — no sample data.
+          </p>
+          <p>
+            Read the emptiness on mainnet as the fact it is. Nothing has executed on chain 677: no agent
+            registered, no request, no settlement. Every score that exists anywhere was earned on the
+            testnet, where the bond an agent posts costs it nothing to lose — so the single mechanism
+            this protocol relies on for honesty has never been tested against a bond anyone would miss.
+            A real bond is now possible on mainnet; none has been posted.{' '}
             <strong>Do not act financially on anything displayed here.</strong> See{' '}
             <a href="/security">security</a> for the exact state.
           </p>

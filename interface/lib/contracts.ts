@@ -67,8 +67,32 @@ export interface Contract {
  * history are still on chain at the old addresses, and this interface will never show them again.
  * Testnet, so nobody is out of pocket — but the leaderboard starting empty is correct, not broken.
  *
- * Mainnet remains empty, and that is the current truth rather than an oversight. Nothing of ours
- * is deployed to BOT Chain.
+ * Mainnet is no longer empty. Deployed 2026-09-03 10:59Z, first block 21,932,276, transcribed from
+ * contracts/deployments/botchain-677.json and then read back off-chain the same way: minBond is
+ * 500000000 (500 USDT at six decimals, not a testnet number scaled wrong), registry.router points
+ * at the router, Bronze and Silver adapters are bound, and all three of the engine, registry and
+ * router report bootstrapped — so the 21-day timelock is armed rather than merely intended.
+ *
+ * Two contracts are absent from mainnet on purpose, not pending. ZkAdapter and Halo2Verifier were
+ * not deployed (DEPLOY_GOLD=false), because Gold binds one circuit commitment at one input scale
+ * and that binding is the part most likely to need revising. `adapters(3)` is the zero address on
+ * chain, so Gold cannot be requested at all, and the table shows no row rather than a dead one.
+ *
+ * READ THIS BEFORE COPYING AN ADDRESS OUT OF THIS FILE. Mainnet's AgentRegistry is
+ * `0x39FF930E…aA83`, and that is the same address as one of the superseded testnet registries
+ * listed above — the second of the 2026-08-28 sets. This is not a transcription error and not a
+ * coincidence: both were deployed by the same key, and a CREATE address is a hash of the deployer
+ * and its nonce, so the same key at the same nonce lands on the same address on every chain it
+ * touches. Verified rather than reasoned about — eth_getCode returns bytecode for that address on
+ * 968 *and* on 677.
+ *
+ * So this one address is simultaneously a live mainnet registry holding real bonds and a dead
+ * testnet registry that nothing should ever talk to, and which of those you get depends entirely
+ * on which RPC the question is asked over. Every other trap in this file is two addresses that
+ * must not be confused; this is one address that is two protocols. An explorer link, a support
+ * answer, or a debugging session that carries it across chains will look right the whole way.
+ * That is the reason the addresses here are keyed by network and there is no shared default
+ * anywhere — the key is the only thing distinguishing them.
  *
  * The bond token is the exception, and it is a principled one: it is a pre-existing dependency
  * rather than something BotID deploys, so its address is knowable before any deployment happens.
@@ -117,6 +141,12 @@ export const ADDRESSES = {
     bondToken: '0x75edC9335175Fc0552D51D48439F229c10420fe3',
   },
   mainnet: {
+    AgentRegistry: '0x39FF930E6974b22a07bdfAd8aDC9f3EE7172aA83',
+    ExecutionRouter: '0x987A177BB44fAc7F51580134a7B06A327313E099',
+    ReputationEngine: '0xBa49Ff343086E966B3172a29742ea5056553E7D1',
+    InputAttestor: '0x9afF2B7D5C8BA5D18F1906efafe1cEeccfe465B9',
+    SignatureAdapter: '0x5E0E99F76f7f77e345312d092E342Fee35eF112a',
+    TeeAdapter: '0x7dBC738d03f86893101b2Ce9D670C0542bb7cbE6',
     bondToken: '0xaBabc7Ddc03e501d190C676BF3d92ef0e6e87a3C',
   },
 } as const satisfies Record<NetworkId, Partial<Record<ContractName, `0x${string}`>>>;
@@ -139,6 +169,14 @@ export const DEPLOY_BLOCK: Partial<Record<NetworkId, bigint>> = {
   // contract would silently truncate its history rather than fail — the feed would just look
   // emptier than the chain is.
   testnet: 21_931_893n,
+  // Found the same way, by bisecting eth_getCode on 677 rather than reading the manifest. The
+  // registry landed here and the router later in the same run, so this covers the router's logs —
+  // which is the requirement above, since being early is harmless and being late silently
+  // truncates history instead of failing.
+  //
+  // Nothing has been executed on mainnet yet, so every feed reading from this block is legitimately
+  // empty. That is the correct answer and not a broken query — worth knowing before debugging it.
+  mainnet: 21_932_276n,
 };
 
 export type ContractName =

@@ -101,8 +101,8 @@ export default function Security() {
 
         <div style={{ border: '2px solid var(--score-critical)', color: 'var(--score-critical)', padding: 'var(--space-3)', fontWeight: 600, margin: 'var(--space-4) 0', display: 'flex', flexDirection: 'column', gap: 8 }}>
           <span>Unaudited. No audit is scheduled and no bug bounty is open.</span>
-          <span>Deployed to Bohr testnet only (chain 968). Nothing is deployed to BOT Chain mainnet, and no address on mainnet is ours.</span>
-          <span>Every figure in this interface is now read from chain 968 — there is no sample data left in it. That makes the numbers true and the stakes fake: the testnet bond token is worthless, so nothing here has yet been tested by an adversary with something to gain.</span>
+          <span>Now deployed to BOT Chain mainnet (chain 677) as well as Bohr testnet (chain 968). The mainnet deployment is unaudited and bonds there are posted in real USDT.</span>
+          <span>Nothing has ever settled on mainnet. No agent is registered, no execution has been requested, and the settlement path has never run on chain 677 — so the contracts holding real value are the ones with the least evidence behind them.</span>
         </div>
 
         <p>
@@ -114,30 +114,69 @@ export default function Security() {
 
         <h3>Deployment state</h3>
         <p>
-          BotID is deployed on Bohr testnet, chain 968, as of 2026-09-01, with the bn254 precompiles
-          confirmed present. There is no mainnet deployment. Bohr is a testnet: its BOT has no
-          value, the chain carries no uptime commitment, and the deployment can be replaced without
-          notice. Nothing there is a place to put capital you expect to keep.
+          BotID is deployed twice. On Bohr testnet, chain 968, since 2026-09-01; and on BOT Chain
+          mainnet, chain 677, since 2026-09-03, first block 21,932,276. Both have the bn254
+          precompiles confirmed present. Bohr is a testnet: its BOT has no value, the chain carries
+          no uptime commitment, and the deployment can be replaced without notice. Nothing there is
+          a place to put capital you expect to keep.
+        </p>
+        <p>
+          Mainnet is different in exactly one way that matters — the bond token there is real USDT —
+          and it is worth being blunt about what that buys you, which is nothing yet.{' '}
+          <strong>No agent is registered on chain 677 and no execution has ever been requested
+          there.</strong> The settlement path, which is the part an audit found two flaws in, has
+          never executed on that chain at all. The mainnet set is the newest code with the least
+          evidence behind it, and it is the one holding real money. A deployment is not a track
+          record; the empty tables on mainnet are the honest reading of it.
+        </p>
+        <p>
+          Two capabilities are deliberately switched off there rather than pending. Gold was not
+          deployed at all, so <code>adapters(3)</code> is the zero address and a Gold execution
+          cannot be requested. And the input attestor has no registered publishers, so the attested
+          input path is inert — anything depending on a feed reading cannot run on mainnet. Both are
+          reversible, and both were chosen because an inert capability fails visibly while a
+          wrongly-configured one does not.
         </p>
         <p>
           &ldquo;Replaced without notice&rdquo; is not hypothetical: this is the fifth deployment
-          since 2026-08-11, and every one of them replaced the whole set. This one carries the
-          <code>settleDefault</code> and <code>canEscalate</code> fixes from the internal review,
+          since 2026-08-11, and every one of them replaced the whole set. Both current sets carry
+          the <code>settleDefault</code> and <code>canEscalate</code> fixes from the internal review,
           which changed <code>IVerificationAdapter</code> and so could not have reached a live chain
           any other way. None of these contracts is upgradeable — the router&apos;s
           registry, engine and bond token are <code>immutable</code>, so there was no way to swap one
           contract and keep the rest. The signing domain changed too, so nothing signed for the old
           adapters verifies against the new ones. If you hold addresses from before 2026-09-01, they
-          are not stale so much as a different protocol wearing the same name. All eight are
-          source-verified on the explorer; the table below is the current set.
+          are not stale so much as a different protocol wearing the same name. Every address in
+          both sets is source-verified on the explorer; the table below is whichever set the nav is
+          pointing at.
         </p>
         <p>
-          The owner of every parameter on that deployment is a single externally-owned key, which is
-          also the deployer, the only registered feed publisher, and the only TEE notary. That is
-          four roles on one key: it can change the capital limits, it alone signs the input readings
-          every execution is judged against, it alone decides which enclaves count as Silver, and
-          losing it loses all four at once. Acceptable on a testnet, stated plainly because it is
-          exactly the sort of thing that quietly survives into mainnet.
+          One consequence of that is worth stating before you read the table, because it looks like
+          a mistake and is not. The mainnet <code>AgentRegistry</code> and the Bohr
+          <code>AgentRegistry</code> have the <em>same address</em>. Contract addresses are derived
+          from the deployer and a counter, not from the chain, so the same key deploying the same
+          sequence lands on the same addresses on every chain it touches. An explorer link is
+          therefore only as trustworthy as the chain it points at, and an address that checks out
+          here is not evidence you are on the network you think you are. Check the chain id, not
+          just the characters.
+        </p>
+        <p>
+          The owner of every parameter on both deployments is a single externally-owned key, which
+          is also the deployer. On Bohr it is additionally the only registered feed publisher and
+          the only TEE notary: four roles on one key, so it can change the capital limits, it alone
+          signs the input readings every execution is judged against, it alone decides which
+          enclaves count as Silver, and losing it loses all four at once. This page used to say that
+          was acceptable on a testnet and was &ldquo;exactly the sort of thing that quietly survives
+          into mainnet.&rdquo; It did survive. The one-key ownership is now live on a chain holding
+          real USDT, and nothing about it was made safer in the move.
+        </p>
+        <p>
+          Two of those four roles were at least left off the mainnet key deliberately — it publishes
+          no readings and notarises no enclaves there, because both lists were deployed empty. The
+          key that can change every capital parameter, though, is the same one, on both chains, and
+          it is a single key on a laptop. The treasury and router addresses behind the 21-day
+          timelock cannot be corrected quickly if that key is lost; the limits, the fee floor and
+          the penalty can be changed by whoever holds it, immediately.
         </p>
         <p>
           The table below is load-bearing: it is this site&apos;s answer to &ldquo;is this the real
@@ -146,8 +185,11 @@ export default function Security() {
           exists for that network.
         </p>
         <p>
-          Switch the nav to BOT Chain and the table disappears, because there is nothing of ours to
-          list there. The bond token is the exception on both networks and is marked as such: USDT
+          It opens on BOT Chain, because mainnet is the default network now, and it is two rows
+          shorter there than on Bohr: <code>ZkAdapter</code> and its <code>Halo2Verifier</code> were
+          not deployed to mainnet at all. A missing row means the capability does not exist on that
+          chain, not that we have not got round to listing it. The bond token is the exception
+          on both networks and is marked as such: USDT
           is not ours, it was already deployed, and agents post their bonds in it. It is listed per
           network because the two addresses differ — and using the mainnet one on Bohr does not
           fail, it resolves to an unrelated token with different decimals. Every address in the
@@ -158,11 +200,14 @@ export default function Security() {
         <p>
           <strong>That table is the whole list.</strong> An address presented to you as{' '}
           <em>our</em> contract — in a message, a post, a wallet prompt or a fork of this site — and
-          not appearing above is not ours, whatever it is named after. Until today the honest answer
-          was &ldquo;none of them are real&rdquo;, which was easy to check and impossible to
-          impersonate. That is over: there are real addresses now, so check the one you are about to
-          sign against this table character by character, and check it against the explorer link
-          rather than against the string someone sent you.
+          not appearing above is not ours, whatever it is named after. For most of this project&apos;s
+          life the honest answer was &ldquo;none of them are real&rdquo;, which was easy to check and
+          impossible to impersonate. That is over twice over: there are real addresses now, and on a
+          chain where a bond is real money. Check the one you are about to sign against this table
+          character by character, check it against the explorer link rather than against the string
+          someone sent you — and check that the explorer you landed on is the chain you meant, since
+          one of these addresses is a real registry of ours on both chains, and they are not the
+          same registry.
         </p>
 
         <h6 style={HEAD}>The contracts that appear there</h6>
@@ -192,7 +237,9 @@ export default function Security() {
           the <code>Halo2Verifier</code> in the table above at an input scale of 8. The verifier was
           redeployed with the rest of the set this time rather than carried over, so the binding is
           new even though the commitment — which is only the hash of the name — is unchanged.
-          Nothing is registered on mainnet, because there is no mainnet adapter.
+          Nothing is registered on mainnet, and nothing can be: <code>ZkAdapter</code> was not
+          deployed there, so <code>adapters(3)</code> is the zero address and a Gold execution
+          reverts rather than falling through to a weaker tier.
         </p>
 
         <h6 style={HEAD}>Misconfiguration, which is not an attack and is still how money is lost</h6>

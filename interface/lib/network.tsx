@@ -55,10 +55,30 @@ export interface Network {
 // against the deployed address rather than assumed from the hostname pattern — an explorer that
 // exists but indexes a different chain would render a "not found" page under a real address, on
 // the one page whose job is to prove an address is ours.
+//
+// Mainnet is first because it is the default. Order here is the order in the nav switcher, and the
+// first entry is also the fallback for a network id that does not resolve — so the array order,
+// the switcher order and the default were three things that could drift apart, and are now one.
 export const NETWORKS: Network[] = [
+  { id: 'mainnet', name: CHAINS.mainnet.name, short: 'mainnet', chainId: CHAINS.mainnet.id, explorer: CHAINS.mainnet.blockExplorers.default.url, live: true },
   { id: 'testnet', name: CHAINS.testnet.name, short: 'testnet', chainId: CHAINS.testnet.id, explorer: CHAINS.testnet.blockExplorers.default.url, live: true },
-  { id: 'mainnet', name: CHAINS.mainnet.name, short: 'mainnet', chainId: CHAINS.mainnet.id, explorer: CHAINS.mainnet.blockExplorers.default.url, live: false },
 ];
+
+/**
+ * The network a visitor gets before touching the switcher.
+ *
+ * Mainnet since 2026-09-03. It was testnet for as long as testnet was the only deployment, and the
+ * flip is not cosmetic: the default decides which chain an unmodified wallet prompt is asking about
+ * and which addresses every table on the site is showing. Mainnet is the chain where a bond is real
+ * money, so it is the one a first-time reader should be looking at — landing on testnet and
+ * assuming otherwise is the more expensive mistake of the two.
+ *
+ * The consequence to expect is empty tables. Nothing has executed on mainnet, so the overview,
+ * agents and executions pages open with nothing in them. That is the true state of chain 677 and
+ * not a failure to load; the pages say so rather than showing testnet's numbers under a mainnet
+ * heading.
+ */
+export const DEFAULT_NETWORK: NetworkId = 'mainnet';
 
 interface NetworkContextValue {
   network: Network;
@@ -76,7 +96,7 @@ interface NetworkContextValue {
   dismissPending: () => void;
 }
 
-// Defaulting to testnet rather than throwing on a missing provider is deliberate: every route
+// Defaulting rather than throwing on a missing provider is deliberate: every route
 // renders through the root layout, and a component that reads the network should never be the
 // reason a page fails to render.
 const NetworkContext = createContext<NetworkContextValue>({
@@ -87,7 +107,7 @@ const NetworkContext = createContext<NetworkContextValue>({
 });
 
 export function NetworkProvider({ children }: { children: React.ReactNode }) {
-  const [id, setId] = useState<NetworkId>('testnet');
+  const [id, setId] = useState<NetworkId>(DEFAULT_NETWORK);
   const [pending, setPending] = useState<Network>();
   // One place decides. Any caller — the switcher today, a deep link or a saved preference later —
   // asks for a network and either gets it or gets an explanation; nobody has to remember to check

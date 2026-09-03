@@ -44,14 +44,16 @@ deploy is scheduled at all, and each one can stop the whole thing.
 
 | Gate | Why it stops the deploy |
 |---|---|
-| **The fixes have run on a live chain** | The four post-`8c03858` changes are not deployed anywhere. `canEscalate`, `weightPerFeeUnit`, `effectiveTier`, `recordDelivery` and `provenBy` have never executed outside a test suite. Mainnet must not be the first chain to run them |
+| **The fixes have run on a live chain** | ~~Met 2026-09-03.~~ The post-`8c03858` set was deployed to Bohr on 2026-09-01 (registry `0xB6D13d5B…74e6Dc`) and `canEscalate` has been read on chain returning true for a live agent. `weightPerFeeUnit` is set from the manifest, `effectiveTier`, `recordDelivery` and `provenBy` have still only executed in tests — nothing has settled on Bohr yet, so this gate is met only in the narrow sense that the code is no longer test-only |
 | **A third-party audit exists** | What ran was an internal review. Three of its findings are still open. The docs say "unaudited" deliberately, and a mainnet address published under that word invites people to read it as a formality |
 | **A full lifecycle has been exercised end to end on Bohr** | Register, request, deliver, challenge, resolve, settle, and a settlement that defaults. Against the redeployed set, not a memory of the last one |
 | **The alert path has delivered at least one real webhook** | It never has — there were no agents to subscribe to. The first time that code posts should not be the time it is telling someone their bond is being slashed |
 | **The owner is a multisig, and it has been tested** | See §3. Not "will be moved to a multisig later": the wiring calls in §4 are owner-only, and moving ownership afterwards is a separate trust event |
 
-Bohr being halted at block 21,768,658 blocks the first, third and fourth of those. That is the
-current critical path, and it is not something this repository can fix.
+Bohr is producing blocks again — the halt at 21,768,658 cleared, and the set above was deployed
+at 21,931,893. That unblocked the first gate and makes the third and fourth reachable rather than
+impossible; neither has been done. As of 2026-09-03 the standing blockers are the audit, a full
+lifecycle exercised end to end on Bohr, one real webhook delivery, and the owner key.
 
 ---
 
@@ -207,8 +209,25 @@ So, concretely:
 ## 5. The deploy itself
 
 ```bash
+node scripts/deploy-botchain.js          # preflight and print, deploy nothing
+node scripts/deploy-botchain.js --yes    # preflight, then deploy
+```
+
+`scripts/deploy-botchain.js` carries the §2 configuration as code and passes it to
+`scripts/deploy.js` as environment for one child process. That is deliberate rather than
+convenient: `hardhat.config.js` prefers real environment variables over `contracts/.env`, so the
+mainnet values never have to be written into the shared `.env` — which is how the wrong-token case
+above reaches a later `--network bohr` run. It refuses to start unless the RPC answers chain 677
+and `BOND_TOKEN` answers USDT at 6 decimals, and it deploys nothing without `--yes`.
+
+The raw form still works and is what the script runs:
+
+```bash
 npx hardhat run scripts/deploy.js --network botchain
 ```
+
+Use it only with the environment set for that one command. Run bare, it takes whatever is in
+`contracts/.env` — today, Bohr's values — and succeeds.
 
 Notes specific to 677:
 

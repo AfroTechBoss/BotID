@@ -21,6 +21,7 @@
 
 import { decodeAbiParameters, decodeFunctionData, parseAbiParameters } from 'viem';
 import { executionRouterAbi } from '@abi/ExecutionRouter';
+import { inputAttestorAbi } from '@abi/InputAttestor';
 import { addressOf } from './contracts';
 import { publicClient } from './chain';
 import { tierNameOf, type TierName } from './registry';
@@ -364,4 +365,97 @@ export async function readAdapter(network: NetworkId, tier: number): Promise<`0x
   } catch {
     return undefined;
   }
+}
+
+/** What the router and the attestor will accept on a new request. */
+export interface RequestTerms {
+  router: `0x${string}`;
+  /** Seconds. `deliverBy` must be at least this far ahead of the block that mines the request. */
+  minDeliveryWindow: bigint;
+  /** Seconds after createdAt during which the agent may decline. Strictly below the above. */
+  rejectionWindow: bigint;
+  /** Fee floor, in basis points of notional. */
+  minFeeBps: number;
+  /** Undefined where no attestor is deployed, which makes a bundle uncheckable rather than absent. */
+  attestor?: `0x${string}`;
+  /** Seconds. How stale a feed reading may be, measured against the request's own createdAt. */
+  maxAge: bigint;
+  /** Distinct publisher signatures each reading needs before `deliver` will accept the bundle. */
+  quorum: bigint;
+}
+
+/**
+ * The three numbers that decide whether `requestExecution` reverts, plus the two that decide
+ * whether the delivery against it can ever be verified.
+ *
+ * Read together and from the chain, for the same reason readRouterTerms exists: `setMinFeeBps` and
+ * `setDeliveryWindows` are live setters, and a form that validated against ExecutionRouter.sol's
+ * defaults would be quoting a rulebook the deployed router may have moved on from. The difference
+ * between the two functions is who they are for — that one prices a challenge, this one prices a
+ * commission.
+ *
+ * maxAge and quorum come from a different contract and are not enforced by `requestExecution` at
+ * all. They are here because they are enforced by `deliver`, against `createdAt` — the timestamp
+ * this request is about to acquire. A bundle that is fresh when it is pasted and stale when it is
+ * signed produces a request no honest agent can deliver, and the agent takes the liveness fault for
+ * it. That failure belongs in the form that creates the request, not in the one that answers it.
+ */
+export async function readRequestTerms(network: NetworkId): Promise<RequestTerms | undefined> {
+  const router = addressOf(network, 'ExecutionRouter');
+  if (!router) return undefined;
+  const client = publicClient(network);
+  const contract = { address: router, abi: executionRouterAbi } as const;
+  const attestor = addressOf(network, 'InputAttestor');
+
+  const [minDeliveryWindow, rejectionWindow, minFeeBps] = await Promise.all([
+    client.readContract({ ...contract, functionName: 'minDeliveryWindow' }),
+    client.readContract({ ...contract, functionName: 'rejectionWindow' }),
+    client.readContract({ ...contract, functionName: 'minFeeBps' }),
+  ]);
+
+  // Defaults matching InputAttestor.sol, used only where there is no attestor to ask. They are a
+  // fallback for the prose, never for a check: with no attestor deployed there is nothing to
+  // verify a bundle against and the form says so rather than validating against a guess.
+  let maxAge = 300n;
+  let quorum = 1n;
+  if (attestor) {
+    const a = { address: attestor, abi: inputAttestorAbi } as const;
+    [maxAge, quorum] = await Promise.all([
+      client.readContract({ ...a, functionName: 'maxAge' }).then((v) => BigInt(v)),
+      client.readContract({ ...a, functionName: 'quorum' }).then((v) => BigInt(v)),
+    ]);
+  }
+
+  return {
+    router,
+    minDeliveryWindow: BigInt(minDeliveryWindow),
+    rejectionWindow: BigInt(rejectionWindow),
+    minFeeBps: Number(minFeeBps),
+    attestor,
+    maxAge,
+    quorum,
+  };
+}
+
+/**
+ * The commitment the router should be given for `feeds`, computed by the attestor itself.
+ *
+ * A view call rather than four lines of viem, and the four lines are the point: the commitment is
+ * `keccak256(abi.encode(leaves))` over EIP-712 feed digests whose domain includes the attestor's
+ * own address, so a JavaScript reimplementation would be a second definition of the hash — able to
+ * disagree with the contract's, and only ever discovered when a delivery that should verify does
+ * not. Signatures are not part of the commitment; they are checked later, by `verifyInputs`.
+ */
+export async function commitmentFor(
+  network: NetworkId,
+  feeds: { feedId: `0x${string}`; valueHash: `0x${string}`; timestamp: bigint; signatures: `0x${string}`[] }[]
+): Promise<`0x${string}` | undefined> {
+  const attestor = addressOf(network, 'InputAttestor');
+  if (!attestor || feeds.length === 0) return undefined;
+  return publicClient(network).readContract({
+    address: attestor,
+    abi: inputAttestorAbi,
+    functionName: 'commit',
+    args: [feeds],
+  });
 }

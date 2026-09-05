@@ -1,6 +1,7 @@
 'use client';
 import { useState } from 'react';
 import BotIdBadge from '@/components/BotIdBadge';
+import CommissionAgent from './CommissionAgent';
 import { Bar, LinesSkeleton, TableSkeleton } from '@/components/Skeleton';
 import { useNetwork } from '@/lib/network';
 import { useAgent, useAgentExecutions, useNow } from '@/lib/useChain';
@@ -46,7 +47,7 @@ export default function AgentProfile({ params }: { params: { id: string } }) {
     agentId = undefined;
   }
 
-  const { data: a, loading, error, deployed } = useAgent(network.id, agentId);
+  const { data: a, loading, error, deployed, refresh } = useAgent(network.id, agentId);
   const { data: execs, loading: execsLoading, error: execsError } = useAgentExecutions(network.id, agentId);
   const now = useNow(30_000);
   const registry = registryAddress(network.id);
@@ -108,6 +109,12 @@ export default function AgentProfile({ params }: { params: { id: string } }) {
             .
           </p>
         )}
+
+        {/* Above the score rather than below the executions table, because it is the only thing
+            on this page a reader can do rather than read, and a directory whose entries cannot be
+            hired is a catalogue. Collapsed to one line until it is wanted — the record is still
+            what the page is for. */}
+        <CommissionAgent agent={a} onDone={refresh} />
 
         <section style={{ marginBottom: 'var(--space-8)' }}>
           <h6 style={{ marginBottom: 'var(--space-3)', color: 'var(--text-muted)' }}>Score</h6>

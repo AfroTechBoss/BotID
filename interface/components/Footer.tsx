@@ -49,7 +49,45 @@ export default function Footer() {
           <Link href="/legal/disclaimer">Disclaimer</Link><Link href="/legal/cookies">Cookies</Link><Link href="/security">Security</Link>
         </div>
       </div>
-      <div style={{ gridColumn: '1/-1', display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', gap: 'var(--space-2) var(--space-4)', color: 'var(--text-subtle)', borderTop: '1px solid var(--color-divider)', paddingTop: 'var(--space-3)', marginTop: 'var(--space-2)' }}>
+      {/* Ecosystem attribution, and the one block in this footer that exists because somebody else
+          asked for it. BOT Chain's mainnet criteria require the site to name the chain in its bottom
+          section or its ecosystem section and to link both the chain's own site and its explorer —
+          and it is marked "no objections", which is the polite phrasing of non-negotiable.
+          It sits in its own full-width row rather than becoming a fourth link column, because the
+          grid above is three columns at every width on purpose: a fourth would wrap to a second row
+          on a phone and read as an afterthought. A row of its own reads as what it is — a credit,
+          not a navigation group.
+          Two links rather than one: botchain.ai is the claim and scan.botchain.ai is how you check
+          it, which is the same pairing this interface makes everywhere else — every address on the
+          security page carries its explorer link for exactly that reason.
+
+          Their logo rather than their name set in our type. It ships as a white wordmark beside a
+          green mark, which is a logo built for a dark background and nothing else — on the light
+          theme's #f3f2f2 the word would vanish and leave a green mark floating next to "Built on",
+          like a signature written in white ink on white paper. So there are two files: theirs
+          exactly as supplied for the dark theme, and a light-background counterpart where only the
+          white wordmark is recoloured to our ink and their green is left byte-for-byte alone. Worth
+          asking BOT Chain for their own light-background lockup and an SVG; until they send one,
+          recolouring a single flat white is the smallest change that keeps the mark legible. */}
+      <div style={{ gridColumn: '1/-1', display: 'flex', flexWrap: 'wrap', alignItems: 'baseline', gap: 'var(--space-2) var(--space-3)', borderTop: '1px solid var(--color-divider)', paddingTop: 'var(--space-3)', marginTop: 'var(--space-2)' }}>
+        <span style={{ color: 'var(--text-subtle)' }}>Built on</span>
+        {/* The mark is the link to the chain's own site, so the credit and its destination are one
+            thing rather than a logo sitting beside a separate word to click. Both files carry the
+            same alt text, and only one is ever displayed, so a screen reader hears "BOT Chain" once.
+            Width and height are stated because they are the file's own 409×80 scaled to the 16px
+            cap — without them the row reflows the instant the image decodes, which on the last
+            element of the page is a visible twitch. */}
+        <a href="https://botchain.ai" target="_blank" rel="noopener noreferrer" style={{ display: 'inline-flex' }}>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img className="botchain-mark on-dark" src="/botchain-on-dark.png" alt="BOT Chain" width={82} height={16} />
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img className="botchain-mark on-light" src="/botchain-on-light.png" alt="BOT Chain" width={82} height={16} />
+        </a>
+        <span className="footer-links" style={{ flexDirection: 'row', gap: 'var(--space-3)' }}>
+          <a href="https://scan.botchain.ai" target="_blank" rel="noopener noreferrer">Explorer</a>
+        </span>
+      </div>
+      <div style={{ gridColumn: '1/-1', display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', gap: 'var(--space-2) var(--space-4)', color: 'var(--text-subtle)', borderTop: '1px solid var(--color-divider)', paddingTop: 'var(--space-3)' }}>
         <span><NetworkLabel /></span>
         <span style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-4)' }}>
           {/* Read here rather than threaded down from the layout: the footer is already a server

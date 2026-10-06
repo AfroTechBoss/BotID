@@ -723,6 +723,17 @@ img { display: block; max-width: 100%; }
    the page; these three label a stack of four links. */
 .site-footer h6 { font-size: 10px; margin-bottom: var(--space-2); }
 .footer-links { display: flex; flex-direction: column; gap: 3px; }
+/* The BOT Chain credit mark, in the two files their white-on-transparent lockup forces on us.
+   Which one shows is decided the same way every other colour on the site is: dark is :root and
+   light is the opt-out, so the dark-background file is the one that needs no rule. Swapped by
+   display rather than by swapping the src in JS, so the right mark is already in the first paint
+   of a server-rendered page — a theme read after hydration would flash the wrong one.
+   Height, not width: their lockup is a mark plus a wordmark, and capping the height is what keeps
+   it sitting on the same line as 11px type. 16px is the cap; the width follows from the file. */
+.botchain-mark { height: 16px; width: auto; display: block; }
+.botchain-mark.on-light { display: none; }
+[data-theme='light'] .botchain-mark.on-dark { display: none; }
+[data-theme='light'] .botchain-mark.on-light { display: block; }
 @media (max-width: 560px) {
   /* The gutters give up more than the type does. Padding is what the three columns are competing
      with for width, and a footer link needs its characters more than the page needs its margin. */

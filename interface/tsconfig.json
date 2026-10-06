@@ -30,6 +30,18 @@
       ],
       "@abi/*": [
         "../contracts/abi/*"
+      ],
+      // @neondatabase/serverless 1.1.0 ships index.d.ts and then does not point at it: its
+      // package.json has no "types" field and an "exports" map with only "require" and "import"
+      // conditions, so under moduleResolution "bundler" TypeScript refuses to look at a declaration
+      // file sitting beside the module it declares. The import resolved to `any`, which took
+      // lib/db.ts and every `rows.map` in app/api/alerts with it — two errors whose cause is one
+      // missing line in somebody else's manifest.
+      //
+      // This steers type resolution only; the bundler still resolves the real module through
+      // "exports" as before. Worth removing when neon publishes a "types" condition.
+      "@neondatabase/serverless": [
+        "./node_modules/@neondatabase/serverless/index.d.ts"
       ]
     },
     "plugins": [

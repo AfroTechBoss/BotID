@@ -15,10 +15,11 @@
 // only that: the no-parameter path returned before ever touching the array, so the bug hid behind
 // the default. lib/chain.ts carries the same chain data and says in its first line that it has no
 // 'use client' precisely so server code can read it.
-import { CHAINS } from '@/lib/chain';
-import type { NetworkId } from '@/lib/network';
-
-const NETWORK_IDS = Object.keys(CHAINS) as NetworkId[];
+// NETWORK_IDS is imported rather than derived here. It was `Object.keys(CHAINS)` in this file,
+// which produced the right list and the wrong order guarantee: the registry's order is the
+// switcher's order and the fallback for an unresolvable id, and a second derivation is a second
+// thing to keep in step. The type comes from chain.ts for the same reason the values do.
+import { CHAINS, DEFAULT_NETWORK, NETWORK_IDS, networkFromParam, type NetworkId } from '@/lib/chain';
 
 /**
  * JSON with bigints written as strings.
@@ -52,24 +53,28 @@ export function fail(status: number, error: string, detail?: Record<string, unkn
 }
 
 /**
- * Resolve `?network=`, defaulting to mainnet.
+ * Resolve `?network=`, defaulting to DEFAULT_NETWORK.
  *
  * Defaulting is safe here in a way it is not in `lib/contracts.ts`: this route only ever reads,
  * and a read against the wrong network returns a wrong answer rather than sending a transaction
  * into one. The response echoes the network back so a caller who forgot the parameter can see
  * which chain answered.
  *
- * The default was testnet until mainnet was deployed on 2026-09-03. That flip changes the answer
+ * The default was Bohr until BOT Chain was deployed on 2026-09-03. That flip changes the answer
  * to every existing no-parameter call, which is the honest behaviour — the default should be the
  * chain the protocol actually runs on — but a caller that was relying on the old default now reads
- * an empty mainnet rather than a populated Bohr. It reads as "this agent does not exist" instead
+ * an empty BOT Chain rather than a populated Bohr. It reads as "this agent does not exist" instead
  * of as an error, so it is worth stating loudly rather than leaving to be discovered: pin
- * `?network=testnet` if testnet is what you meant.
+ * `?network=bohr` if the testnet is what you meant.
+ *
+ * An unknown value is a 400 rather than a fallback, and the two server-rendered receipt pages now
+ * resolve through the same `networkFromParam`, so a bad `?network=` cannot quietly answer with a
+ * different chain's data on any of the three.
  */
 export function parseNetwork(url: URL): { network: NetworkId } | { error: Response } {
   const raw = url.searchParams.get('network');
-  if (!raw) return { network: 'mainnet' };
-  const match = NETWORK_IDS.find((id) => id === raw || String(CHAINS[id].id) === raw);
+  if (!raw) return { network: DEFAULT_NETWORK };
+  const match = networkFromParam(raw);
   if (!match) {
     return {
       error: fail(400, 'unknown network', {

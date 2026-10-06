@@ -7,7 +7,7 @@ import { formatToken, applyBps } from '@/lib/token';
 import { useNetwork } from '@/lib/network';
 import { useWallet, shortAddress } from '@/lib/wallet';
 import { useTx } from '@/lib/tx';
-import { CHAINS, explorerLink, publicClient } from '@/lib/chain';
+import { CHAINS, explorerLink, publicClient, type NetworkId } from '@/lib/chain';
 import { addressOf } from '@/lib/contracts';
 import {
   agentIdsOf,
@@ -804,7 +804,7 @@ export default function Portal() {
 }
 
 /** The chain's own numbers for the selected agent. Nothing here is recomputed from a formula. */
-function AgentFacts({ agent, money, network }: { agent: AgentView; money: (v: bigint) => string; network: 'testnet' | 'mainnet' }) {
+function AgentFacts({ agent, money, network }: { agent: AgentView; money: (v: bigint) => string; network: NetworkId }) {
   const rows: [string, React.ReactNode][] = [
     ['agent', `#${String(agent.agentId)} · ${TIER_NAME[agent.tier]} · ${agent.active ? 'active' : 'paused'}`],
     ['bond', money(agent.bond)],

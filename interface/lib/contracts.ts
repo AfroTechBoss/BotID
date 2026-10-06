@@ -6,7 +6,7 @@
 // reference when the server imports it — the theme cookie name was defined that way once, and
 // cookies().get() silently received an undefined key for it. A plain data module cannot fail that
 // way. The NetworkId import is type-only, so it is erased at compile time and drags nothing in.
-import type { NetworkId } from './network';
+import { NETWORK_IDS, type NetworkId } from './chain';
 
 export interface Contract {
   name: string;
@@ -129,7 +129,7 @@ export interface Contract {
  * then send transactions into the void.
  */
 export const ADDRESSES = {
-  testnet: {
+  bohr: {
     AgentRegistry: '0xB6D13d5BC5BC87462AaD431cd2Fd22e3a374e6Dc',
     ExecutionRouter: '0x0E9d52514195C7CC3f17E90D3c4af363c2a5Eb47',
     ReputationEngine: '0x054a5019c75184850F96C276607b2A2127a3Be73',
@@ -140,7 +140,7 @@ export const ADDRESSES = {
     Halo2Verifier: '0xDdf0D8b4ECFCa9a630EE54b9dC0FF62Ed16bd346',
     bondToken: '0x75edC9335175Fc0552D51D48439F229c10420fe3',
   },
-  mainnet: {
+  botchain: {
     AgentRegistry: '0x39FF930E6974b22a07bdfAd8aDC9f3EE7172aA83',
     ExecutionRouter: '0x987A177BB44fAc7F51580134a7B06A327313E099',
     ReputationEngine: '0xBa49Ff343086E966B3172a29742ea5056553E7D1',
@@ -149,7 +149,7 @@ export const ADDRESSES = {
     TeeAdapter: '0x7dBC738d03f86893101b2Ce9D670C0542bb7cbE6',
     bondToken: '0xaBabc7Ddc03e501d190C676BF3d92ef0e6e87a3C',
   },
-} as const satisfies Record<NetworkId, Partial<Record<ContractName, `0x${string}`>>>;
+} as const satisfies Partial<Record<NetworkId, Partial<Record<ContractName, `0x${string}`>>>>;
 
 /**
  * Block the protocol was deployed at, per network. Log queries start here.
@@ -168,7 +168,7 @@ export const DEPLOY_BLOCK: Partial<Record<NetworkId, bigint>> = {
   // after the registry, so the registry's block covers it. Moving this forward past a queried
   // contract would silently truncate its history rather than fail — the feed would just look
   // emptier than the chain is.
-  testnet: 21_931_893n,
+  bohr: 21_931_893n,
   // Found the same way, by bisecting eth_getCode on 677 rather than reading the manifest. The
   // registry landed here and the router later in the same run, so this covers the router's logs —
   // which is the requirement above, since being early is harmless and being late silently
@@ -176,7 +176,7 @@ export const DEPLOY_BLOCK: Partial<Record<NetworkId, bigint>> = {
   //
   // Nothing has been executed on mainnet yet, so every feed reading from this block is legitimately
   // empty. That is the correct answer and not a broken query — worth knowing before debugging it.
-  mainnet: 21_932_276n,
+  botchain: 21_932_276n,
 };
 
 export type ContractName =
@@ -190,9 +190,18 @@ export type ContractName =
   | 'Halo2Verifier'
   | 'bondToken';
 
-/** Address of `name` on `network`, or undefined where it is not deployed. */
+/**
+ * Address of `name` on `network`, or undefined where it is not deployed.
+ *
+ * Two levels of absent, both meaning the same thing to a caller. A chain can be in the registry
+ * with no entry here at all — which is the normal state of a chain the switcher offers before
+ * anything is deployed to it — or have an entry that omits this contract, as mainnet omits the
+ * Gold adapter. Neither is an error, and both must answer undefined rather than throw: this is
+ * called during render on every page.
+ */
 export function addressOf(network: NetworkId, name: ContractName): `0x${string}` | undefined {
-  return (ADDRESSES[network] as Partial<Record<ContractName, `0x${string}`>>)[name];
+  const set = (ADDRESSES as Partial<Record<NetworkId, Partial<Record<ContractName, `0x${string}`>>>>)[network];
+  return set?.[name];
 }
 
 // How each address is labelled in the security table. Ordered as a reader checks them, not as the
@@ -213,10 +222,11 @@ const DISPLAY: { name: ContractName; label: string; dependency?: boolean }[] = [
   { name: 'bondToken', label: 'USDT (bond token)', dependency: true },
 ];
 
-export const CONTRACTS: Record<NetworkId, Contract[]> = {
-  testnet: rows('testnet'),
-  mainnet: rows('mainnet'),
-};
+// Derived over every known id rather than one line per network, so a chain added to the registry
+// gets a (correctly empty) security table without anyone remembering to add it here.
+export const CONTRACTS: Record<NetworkId, Contract[]> = Object.fromEntries(
+  NETWORK_IDS.map((id) => [id, rows(id)])
+) as Record<NetworkId, Contract[]>;
 
 function rows(network: NetworkId): Contract[] {
   return DISPLAY.flatMap(({ name, label, dependency }) => {

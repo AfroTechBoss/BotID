@@ -1,13 +1,17 @@
 'use client';
 import { createContext, useCallback, useContext, useMemo, useState } from 'react';
-import { CHAINS } from './chain';
+import { DEFAULT_NETWORK, NETWORKS as REGISTRY, NETWORK_IDS, type NetworkId } from './chain';
 
 // The selected network is app-wide state, not the nav's private business. It was local to
 // NetworkSelect, so switching to mainnet changed the nav and nothing else — the footer and the
 // overview's status bar went on saying "testnet" underneath a nav that said BOT Chain. On a
 // protocol interface that is not a cosmetic bug: the whole page is claiming to describe a chain,
 // and two parts of it were describing different ones.
-export type NetworkId = 'testnet' | 'mainnet';
+// Re-exported rather than defined here. It lives in chain.ts now, beside the registry it is the
+// key of, so that adding a chain cannot leave the id union and the chain table disagreeing. Kept
+// exported from this module because seventeen files import it from here and none of them care
+// where it is declared.
+export type { NetworkId };
 
 export interface Network {
   id: NetworkId;
@@ -25,6 +29,15 @@ export interface Network {
    */
   explorer: string;
   /**
+   * Whether this chain is a testnet.
+   *
+   * A property rather than an id, which is the whole point of the widening: `id === 'mainnet'` was
+   * a workable test of "is this real money" while there was exactly one of each, and becomes a bug
+   * the moment BotID is on Base as well as BOT Chain. Read off the viem chain object, where it was
+   * already recorded and could not drift.
+   */
+  testnet: boolean;
+  /**
    * Whether BotID is actually on this chain yet.
    *
    * Not a synonym for "the chain exists" — BOT Chain is live and producing blocks, it simply has
@@ -32,8 +45,8 @@ export interface Network {
    * write pointed at an address holding no code, which fails as an unhelpful revert rather than as
    * an explanation. So the switcher offers it and then declines, saying why.
    *
-   * The flag rather than a hardcoded `id !== 'mainnet'` check: on the day mainnet is deployed this
-   * is the one line that changes, and nothing else in the interface has to be found and edited.
+   * The flag rather than a hardcoded id check: on the day a chain is deployed to, one entry in
+   * chain.ts changes and nothing else in the interface has to be found and edited.
    */
   live: boolean;
 }
@@ -56,29 +69,24 @@ export interface Network {
 // exists but indexes a different chain would render a "not found" page under a real address, on
 // the one page whose job is to prove an address is ours.
 //
-// Mainnet is first because it is the default. Order here is the order in the nav switcher, and the
-// first entry is also the fallback for a network id that does not resolve — so the array order,
-// the switcher order and the default were three things that could drift apart, and are now one.
-export const NETWORKS: Network[] = [
-  { id: 'mainnet', name: CHAINS.mainnet.name, short: 'mainnet', chainId: CHAINS.mainnet.id, explorer: CHAINS.mainnet.blockExplorers.default.url, live: true },
-  { id: 'testnet', name: CHAINS.testnet.name, short: 'testnet', chainId: CHAINS.testnet.id, explorer: CHAINS.testnet.blockExplorers.default.url, live: true },
-];
+// Derived from the chain registry rather than written out again. This list was two hand-written
+// literals that repeated CHAINS.mainnet.name, CHAINS.mainnet.id and the explorer URL — three
+// values already stated in chain.ts, restated here, in an array whose order also had to match. A
+// third chain would have been a fourth place to remember. Order, and therefore the switcher order
+// and the fallback for an unresolvable id, now comes from NETWORK_IDS alone.
+export const NETWORKS: Network[] = NETWORK_IDS.map((id) => ({
+  id,
+  name: REGISTRY[id].chain.name,
+  short: REGISTRY[id].short,
+  chainId: REGISTRY[id].chain.id,
+  explorer: REGISTRY[id].chain.blockExplorers?.default.url ?? '',
+  testnet: REGISTRY[id].chain.testnet === true,
+  live: REGISTRY[id].live,
+}));
 
-/**
- * The network a visitor gets before touching the switcher.
- *
- * Mainnet since 2026-09-03. It was testnet for as long as testnet was the only deployment, and the
- * flip is not cosmetic: the default decides which chain an unmodified wallet prompt is asking about
- * and which addresses every table on the site is showing. Mainnet is the chain where a bond is real
- * money, so it is the one a first-time reader should be looking at — landing on testnet and
- * assuming otherwise is the more expensive mistake of the two.
- *
- * The consequence to expect is empty tables. Nothing has executed on mainnet, so the overview,
- * agents and executions pages open with nothing in them. That is the true state of chain 677 and
- * not a failure to load; the pages say so rather than showing testnet's numbers under a mainnet
- * heading.
- */
-export const DEFAULT_NETWORK: NetworkId = 'mainnet';
+// DEFAULT_NETWORK moved to chain.ts, where a server component can read it, and is re-exported here
+// so callers that think of it as a network concern still find it.
+export { DEFAULT_NETWORK };
 
 interface NetworkContextValue {
   network: Network;

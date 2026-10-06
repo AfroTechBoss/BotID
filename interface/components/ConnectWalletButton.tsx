@@ -1,6 +1,7 @@
 'use client';
 import { useState } from 'react';
 import { useWallet, shortAddress, networkOf } from '@/lib/wallet';
+import { CHAINS } from '@/lib/chain';
 import { useNetwork } from '@/lib/network';
 
 /**
@@ -88,7 +89,7 @@ export default function ConnectWalletButton() {
         className="btn btn-secondary"
         onClick={switchToSelected}
         style={{ borderColor: 'var(--score-critical)', color: 'var(--score-critical)' }}
-        title={`Wallet is on ${on ? (on === 'testnet' ? 'Bohr Testnet' : 'BOT Chain') : `chain ${walletChainId ?? '?'}`}; this page is showing ${network.name}`}
+        title={`Wallet is on ${on ? CHAINS[on].name : `chain ${walletChainId ?? '?'}`}; this page is showing ${network.name}`}
       >
         Switch to {network.name}
       </button>

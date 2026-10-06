@@ -1,7 +1,7 @@
 'use client';
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { createWalletClient, custom, type Address, type WalletClient, type EIP1193Provider } from 'viem';
-import { CHAINS } from './chain';
+import { CHAINS, NETWORK_IDS } from './chain';
 import { useNetwork, type NetworkId } from './network';
 
 /**
@@ -230,7 +230,10 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                 chainName: chain.name,
                 nativeCurrency: chain.nativeCurrency,
                 rpcUrls: [chain.rpcUrls.default.http[0]],
-                blockExplorerUrls: [chain.blockExplorers.default.url],
+                // Omitted rather than sent empty where a chain has none: wallets reject an
+                // addEthereumChain whose blockExplorerUrls contains a non-URL, and a chain with no
+                // explorer is a legitimate registry entry.
+                ...(chain.blockExplorers ? { blockExplorerUrls: [chain.blockExplorers.default.url] } : {}),
               },
             ],
           });
@@ -305,9 +308,14 @@ export function walletMessage(e: unknown): string {
   return msg ? msg.split('\n')[0] : 'Something went wrong in the wallet.';
 }
 
-/** Which network a chain id belongs to, or undefined if it is neither of ours. */
+/**
+ * Which network a chain id belongs to, or undefined if it is none of ours.
+ *
+ * Was an if-ladder with one line per chain, which is a line somebody has to remember to add — and
+ * forgetting it does not fail, it silently reports a connected wallet as being on an unknown chain
+ * and asks the reader to switch to the network they are already on.
+ */
 export function networkOf(chainId: number | undefined): NetworkId | undefined {
-  if (chainId === CHAINS.testnet.id) return 'testnet';
-  if (chainId === CHAINS.mainnet.id) return 'mainnet';
-  return undefined;
+  if (chainId === undefined) return undefined;
+  return NETWORK_IDS.find((id) => CHAINS[id].id === chainId);
 }

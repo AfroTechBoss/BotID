@@ -105,7 +105,7 @@ async function registeredIds(network: NetworkId, owner?: Address): Promise<bigin
   // against the same chain tip.
   const head = await client.getBlockNumber();
   const pages = await Promise.all(
-    logWindows(fromBlock, head).map((range) =>
+    logWindows(network, fromBlock, head).map((range) =>
       client.getLogs({ address: registry, event: AGENT_REGISTERED, args: owner ? { owner } : {}, ...range })
     )
   );

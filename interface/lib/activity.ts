@@ -16,7 +16,7 @@
 import { parseEventLogs } from 'viem';
 import { executionRouterAbi } from '@abi/ExecutionRouter';
 import { addressOf, DEPLOY_BLOCK } from './contracts';
-import { publicClient, logWindows, BLOCK_TIME_MS } from './chain';
+import { publicClient, logWindows, blockTimeMs } from './chain';
 import { tierNameOf, type TierName } from './registry';
 import { formatToken } from './token';
 import type { NetworkId } from './network';
@@ -125,7 +125,7 @@ export async function readActivity(network: NetworkId, days = 14): Promise<Activ
   const times = await blockTimes(network, feed.map((e) => e.block));
   for (const e of feed) e.time = times.get(e.block) ?? 0;
 
-  return { feed, perDay: bucket(events, head, days), head, total: events.length };
+  return { feed, perDay: bucket(network, events, head, days), head, total: events.length };
 }
 
 /**
@@ -157,7 +157,7 @@ export async function routerLogs(network: NetworkId, head: bigint) {
   const pages = await Promise.all(
     // A single failed window should cost that window, not the page. The result is then understated
     // rather than absent, which is the better failure for a feed.
-    logWindows(fromBlock, head).map((range) => client.getLogs({ address: router, ...range }).catch(() => []))
+    logWindows(network, fromBlock, head).map((range) => client.getLogs({ address: router, ...range }).catch(() => []))
   );
 
   // strict: false keeps a log whose event is not in the ABI out of the result rather than throwing.
@@ -320,13 +320,16 @@ export async function blockTimes(network: NetworkId, blocks: bigint[]): Promise<
  * within a few seconds of midnight, which is immaterial to a bar chart and would not be to a
  * timestamp on a row — which is why rows get the exact read and bars do not.
  *
+ * The block time is the chain's own rather than a shared constant, so the approximation degrades
+ * with the chain's speed instead of silently using BOT Chain's on a chain that is nothing like it.
+ *
  * Deliveries rather than requests: ExecutionDelivered is the event that carries the tier, and a
  * request that never arrives is a fault rather than an execution.
  */
-function bucket(events: ChainEvent[], head: bigint, days: number): DayBucket[] {
+function bucket(network: NetworkId, events: ChainEvent[], head: bigint, days: number): DayBucket[] {
   const now = Date.now();
   const today = Math.floor(now / DAY_MS) * DAY_MS;
-  const blocksPerMs = 1 / BLOCK_TIME_MS;
+  const blocksPerMs = 1 / blockTimeMs(network);
 
   return Array.from({ length: days }, (_, i) => {
     const day = today - (days - 1 - i) * DAY_MS;

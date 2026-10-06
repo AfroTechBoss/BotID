@@ -4,7 +4,7 @@ import { notFound } from 'next/navigation';
 import { readRequest, readDelivery, readAdapter } from '@/lib/execution';
 import { readAgent } from '@/lib/registry';
 import { addressOf } from '@/lib/contracts';
-import { explorerLink } from '@/lib/chain';
+import { explorerLink, DEFAULT_NETWORK, networkFromParam } from '@/lib/chain';
 import { shortHash, formatNum } from '@/lib/format';
 import type { NetworkId } from '@/lib/network';
 import VerifyActions from './VerifyActions';
@@ -22,8 +22,16 @@ import VerifyActions from './VerifyActions';
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
-function networkOf(search: Record<string, string | string[] | undefined>): NetworkId {
-  return search.network === 'mainnet' ? 'mainnet' : 'testnet';
+// The network is client state everywhere else in the interface, and a server component cannot read
+// it, so `?network=` is honoured and DEFAULT_NETWORK stands in when it is absent — a link to a
+// specific chain's receipt stays a link to that chain's receipt. This used to be a hand-rolled
+// `search.network === 'mainnet' ? 'mainnet' : 'testnet'`, which answered testnet for anything it
+// did not recognise, including a chain id and including the name of the chain the protocol runs
+// on. Resolving through the registry means a value that names no known chain is a 404 rather than
+// a silent redirect to a different chain's data.
+function networkOf(search: Record<string, string | string[] | undefined>): NetworkId | undefined {
+  if (search.network === undefined) return DEFAULT_NETWORK;
+  return networkFromParam(search.network);
 }
 
 export function generateMetadata({ params }: { params: { requestId: string } }): Metadata {
@@ -38,6 +46,9 @@ export default async function ProofInspector(
 ) {
   const { requestId } = params;
   const network = networkOf(searchParams);
+  // See the execution receipt: undefined means the parameter named a chain the registry does not
+  // know, and the honest answer to that is a 404 rather than a different chain's proof.
+  if (!network) notFound();
 
   if (!addressOf(network, 'ExecutionRouter')) {
     return <Bare>BotID is not deployed on this network, so there is no proof to inspect.</Bare>;

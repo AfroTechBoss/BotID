@@ -4,7 +4,7 @@ import { notFound } from 'next/navigation';
 import { readRequest, readRequestSteps, readDelivery, readAdapter } from '@/lib/execution';
 import { readAgent } from '@/lib/registry';
 import { addressOf } from '@/lib/contracts';
-import { explorerLink } from '@/lib/chain';
+import { explorerLink, DEFAULT_NETWORK, networkFromParam } from '@/lib/chain';
 import { TIER_META, shortHash, formatNum } from '@/lib/format';
 import { formatToken } from '@/lib/token';
 import type { NetworkId } from '@/lib/network';
@@ -26,11 +26,15 @@ export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
 // The network is client state everywhere else in the interface, and a server component cannot read
-// it. Testnet is the default for the same reason the read API defaults to it — a read against the
-// wrong chain is a wrong answer rather than a misdirected transaction — and `?network=` is honoured
-// so a link to a specific chain's receipt stays a link to that chain's receipt.
-function networkOf(search: Record<string, string | string[] | undefined>): NetworkId {
-  return search.network === 'mainnet' ? 'mainnet' : 'testnet';
+// it, so `?network=` is honoured and DEFAULT_NETWORK stands in when it is absent — a link to a
+// specific chain's receipt stays a link to that chain's receipt. This used to be a hand-rolled
+// `search.network === 'mainnet' ? 'mainnet' : 'testnet'`, which answered testnet for anything it
+// did not recognise, including a chain id and including the name of the chain the protocol runs
+// on. Resolving through the registry means a value that names no known chain is a 404 rather than
+// a silent redirect to a different chain's data.
+function networkOf(search: Record<string, string | string[] | undefined>): NetworkId | undefined {
+  if (search.network === undefined) return DEFAULT_NETWORK;
+  return networkFromParam(search.network);
 }
 
 export async function generateMetadata(
@@ -38,6 +42,10 @@ export async function generateMetadata(
 ): Promise<Metadata> {
   const network = networkOf(searchParams);
   const title = `Execution ${shortHash(params.requestId)}`;
+  // An unresolvable ?network= gets the bare title rather than a read against a substituted chain.
+  // The page itself answers the same value with a 404; metadata runs first and must not describe a
+  // record it is about to refuse to render.
+  if (!network) return { title };
   try {
     const r = await readRequest(network, params.requestId);
     if (!r) return { title, description: 'No request with this id on BOT Chain.' };
@@ -59,6 +67,11 @@ export default async function ExecutionDetail(
 ) {
   const { requestId } = params;
   const network = networkOf(searchParams);
+  // A ?network= that names no known chain is a 404, which is what `networkOf` returning undefined
+  // means. The alternative — falling back to the default — renders a different chain's receipt
+  // under the URL the reader asked for, and a receipt is the one page on this site that must never
+  // describe a chain other than the one it was asked about.
+  if (!network) notFound();
 
   if (!addressOf(network, 'ExecutionRouter')) {
     return (

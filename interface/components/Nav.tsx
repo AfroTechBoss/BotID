@@ -15,6 +15,7 @@ const LINKS: [string, string][] = [
   ['/', 'Overview'],
   ['/agents', 'Agents'],
   ['/executions', 'Executions'],
+  ['/transactions', 'Transactions'],
   ['/portal', 'Portal'],
   ['/docs', 'Docs'],
 ];

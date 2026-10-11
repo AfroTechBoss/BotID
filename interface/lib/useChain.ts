@@ -11,6 +11,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { readAllAgents, readAgent, registryAddress, type AgentView } from './registry';
 import { readActivity, readAgentExecutions, readExecutions, type Activity, type AgentExecution } from './activity';
+import { readTransactions, type ProtocolTx } from './transactions';
 import type { NetworkId } from './network';
 
 export interface Feed<T> {
@@ -34,6 +35,9 @@ export interface Feed<T> {
  */
 const AGENTS_MS = 30_000;
 const ACTIVITY_MS = 8_000;
+// Every protocol contract over the whole deploy range is the heaviest read in the app, and a reader
+// scanning a history table does not need it to tick. Slower than activity on purpose.
+const TRANSACTIONS_MS = 30_000;
 
 export function useAgents(network: NetworkId): Feed<AgentView[]> {
   return usePolled(network, readAllAgents, AGENTS_MS);
@@ -46,6 +50,11 @@ export function useActivity(network: NetworkId): Feed<Activity> {
 /** Every execution on the router, folded into one row per request. */
 export function useExecutions(network: NetworkId): Feed<AgentExecution[]> {
   return usePolled(network, readExecutions, ACTIVITY_MS);
+}
+
+/** Every transaction that touched a protocol contract, newest first. */
+export function useTransactions(network: NetworkId): Feed<ProtocolTx[]> {
+  return usePolled(network, readTransactions, TRANSACTIONS_MS);
 }
 
 /**

@@ -1,10 +1,11 @@
 #!/usr/bin/env node
 /**
- * A cast of fifteen wallets that use the Bohr testnet deployment the way a small market would,
- * one round at a time, so the interface has real, varied traffic to show.
+ * A cast of wallets that use the Bohr testnet deployment the way a small, imperfect market would,
+ * one round at a time, so the interface has real, varied traffic to show and the unhappy paths
+ * get exercised as well as the happy one.
  *
  *   node scripts/testnet-sim.js new-mnemonic   print a fresh mnemonic (store it as SIM_MNEMONIC)
- *   node scripts/testnet-sim.js wallets        list the fifteen addresses and their roles
+ *   node scripts/testnet-sim.js wallets        list the addresses and their roles
  *   node scripts/testnet-sim.js status         balances, agents and in-flight requests
  *   node scripts/testnet-sim.js tick           play one round
  *
@@ -17,26 +18,36 @@
  * key is ever written to disk or to the repository.
  *
  *   0        treasury   funded by hand; distributes BOT and USDT; signs input bundles (publisher)
- *   1 - 4    owners     each registers and bonds one Bronze agent
+ *   1 - 4    owners     each registers and bonds one Bronze agent; owner 1 also owns agent E
  *   5 - 8    operators  owner i's agent is operated by wallet i + 4; they sign and send `deliver`
- *   9 - 14   consumers  commission work, pay the fee, and grade it at settlement
+ *   9 - 14   consumers  commission work, pay fees, grade it, expire it, and challenge it
+ *   15       operator   of agent E, the one agent registered on the reference Gold model
  *
- * Owners and operators are distinct from consumers by construction, so SelfDealing never trips.
+ * Agent E exists because `challenge` reverts NotEscalatable against an agent whose model has no
+ * Gold verifier, and the four label-hash agents have none. Registering one agent on the
+ * deployment's reference model commitment is what makes challenges possible at all. It cannot
+ * produce the halo2 proof that would answer one, so every challenge against it is lost and
+ * slashed: that is the path being exercised, not a bug in the cast.
  *
  * WHY IT KEEPS NO STATE FILE. Scheduled runs land in fresh containers, so a local state file is
  * gone by the next round. Everything a round needs is on chain: agents are found through
  * `agentIdByOperator`, and in-flight requests through ExecutionRequested logs filtered on the six
- * consumer addresses. A round is therefore safe to run anywhere, any number of times.
+ * consumer addresses. Whether a consumer goes silent on a request is a function of the request id,
+ * so two rounds always agree about it. A round is safe to run anywhere, any number of times.
  *
  * A ROUND, in order:
- *   1. top up gas and USDT from the treasury to each role's target, only by the shortfall
+ *   1. top up gas and USDT from the treasury, only by the shortfall; a refilled treasury simply
+ *      means larger top-ups and bond increases from then on
  *   2. register any agent that does not exist yet
- *   3. advance every in-flight request: finalize once the challenge window has closed, then
- *      settle with a randomised outcome from the consumer that commissioned it
- *   4. open a random number of new requests (sometimes none), each delivered in the same round
- *      because the input bundle is only fresh for five minutes
- *   5. read the same agents back through botidprotocol.vercel.app's public API, so the site is
- *      exercised as well as the chain
+ *   3. bond housekeeping: restore bonds eaten by slashes, sometimes add to a bond, sometimes start
+ *      unbonding a slice and later withdraw it early, sometimes pause an agent and later resume it
+ *   4. advance every in-flight request to the next state the clock allows: expire undelivered
+ *      work, finalize, slash unanswered challenges, settle, or settle by default for consumers
+ *      that went silent
+ *   5. open a random number of new requests. Most are delivered at once; some are declined by
+ *      the operator, some are never delivered and left to expire, and some deliveries by agent E
+ *      are challenged
+ *   6. read the agents back through botidprotocol.vercel.app's public API
  * ---------------------------------------------------------------------------------------------
  */
 
@@ -55,37 +66,61 @@ const RPC_URL = process.env.BOHR_RPC_URL || 'https://rpc.bohr.life';
 const SITE_URL = (process.env.SIM_SITE_URL || 'https://botidprotocol.vercel.app').replace(/\/$/, '');
 const CHAIN_ID = 968n;
 
-// The run stops doing anything after this instant, so a schedule that outlives its week is
+// The run stops doing anything after this instant, so a schedule that outlives its purpose is
 // harmless even if nobody remembers to switch it off.
-const SIM_UNTIL = process.env.SIM_UNTIL || '2026-10-17T23:59:59Z';
+const SIM_UNTIL = process.env.SIM_UNTIL || '2026-11-10T23:59:59Z';
 
+const WALLET_COUNT = 16;
 const ROLES = {
   treasury: [0],
   owners: [1, 2, 3, 4],
-  operators: [5, 6, 7, 8],
+  operators: [5, 6, 7, 8, 15],
   consumers: [9, 10, 11, 12, 13, 14],
 };
-const operatorOf = (ownerIndex) => ownerIndex + 4;
 
-// Funding targets. With 10 BOT and 1,000 USDT in the treasury this commits 7 BOT and 960 USDT
-// and leaves the rest as a float for top-ups. Bond is 150 rather than the 100 minimum so an agent
-// has some credit headroom from the start.
+const AGENTS = [
+  { key: 'A', owner: 1, operator: 5 },
+  { key: 'B', owner: 2, operator: 6 },
+  { key: 'C', owner: 3, operator: 7 },
+  { key: 'D', owner: 4, operator: 8 },
+  { key: 'E', owner: 1, operator: 15, gold: true },
+];
+// The four original agents were registered under these labels; kept so a re-registration after a
+// wipe would produce the same commitments.
+const commitmentFor = (a) =>
+  a.gold ? DEPLOYMENT.goldModel.commitment : ethers.id(`botid.testnet-sim.agent.${a.owner}`);
+const lossToleranceFor = (a) => ({ A: 300, B: 500, C: 800, D: 1200, E: 600 })[a.key];
+
+// Funding targets. Bond is 150 rather than the 100 minimum so an agent has some credit headroom,
+// and so one lost challenge (20% of bond) does not drop it straight below the floor.
 const GAS_TARGET = ethers.parseEther('0.5');
 const GAS_FLOOR = ethers.parseEther('0.1');
 const BOND_USDT = 150;
+const OWNER_FLOAT_USDT = 40;
 const CONSUMER_USDT_TARGET = 60;
 const CONSUMER_USDT_FLOOR = 5;
 
-// Per round. Kept small and irregular on purpose: a market of six consumers does not commission
-// the same number of jobs every few hours.
+// Per round. Kept small and irregular on purpose.
 const MAX_NEW_REQUESTS = 4;
 const IDLE_CHANCE = 0.2;
 const NOTIONAL_RANGE_USDT = [10, 60];
 const DELIVER_BY_SECS = 30 * 60;
 
-// How far back to look for our own requests. Bohr makes a block about every 0.75s, so 900k
-// blocks is a little over a week; the RPC caps one getLogs span at 50k.
-const LOOKBACK_BLOCKS = BigInt(process.env.SIM_LOOKBACK_BLOCKS || 900_000);
+// The unhappy paths, as chances per new request or per agent per round.
+const REJECT_CHANCE = 0.08;         // operator declines inside the rejection window
+const GHOST_CHANCE = 0.1;           // operator never delivers; the request expires and is slashed
+const CHALLENGE_CHANCE = 0.35;      // a delivery by agent E is challenged (at most one open at a time)
+const SILENT_ONE_IN = 10;           // one consumer in ten never settles; settleDefault after 7 days
+const EXTRA_BOND_CHANCE = 0.08;
+const UNBOND_CHANCE = 0.06;
+const WITHDRAW_EARLY_CHANCE = 0.3;
+const PAUSE_CHANCE = 0.03;
+const RESUME_CHANCE = 0.6;
+
+// How far back to look for our own requests. Bohr makes a block about every 0.75s, so 1.4M blocks
+// is about twelve days: comfortably past the seven-day settlement window that settleDefault waits
+// out. The RPC caps one getLogs span at 50k.
+const LOOKBACK_BLOCKS = BigInt(process.env.SIM_LOOKBACK_BLOCKS || 1_400_000);
 const LOG_WINDOW = 50_000n;
 
 const Tier = { None: 0, Bronze: 1, Silver: 2, Gold: 3 };
@@ -103,11 +138,16 @@ const log = (...a) => console.log(...a);
 const rand = (lo, hi) => lo + Math.random() * (hi - lo);
 const randInt = (lo, hi) => Math.floor(rand(lo, hi + 1));
 const pick = (xs) => xs[Math.floor(Math.random() * xs.length)];
+const chance = (p) => Math.random() < p;
 const wait = (p) => p.then((tx) => tx.wait());
 const short = (a) => `${a.slice(0, 6)}…${a.slice(-4)}`;
+const errMsg = (e) => e.shortMessage || e.reason || e.message || String(e);
 
 /** Sign a bare digest; the attestor ecrecovers it unprefixed. See execute-once.js. */
 const signDigest = (wallet, digest) => wallet.signingKey.sign(digest).serialized;
+
+/** Whether the consumer of this request goes silent. Derived, so every round agrees. */
+const isSilent = (requestId) => BigInt(requestId) % BigInt(SILENT_ONE_IN) === 0n;
 
 function wallets(provider) {
   const phrase = (process.env.SIM_MNEMONIC || '').trim();
@@ -115,7 +155,7 @@ function wallets(provider) {
     throw new Error('SIM_MNEMONIC is not set. Run `new-mnemonic` once and store the result as a secret.');
   }
   const mnemonic = ethers.Mnemonic.fromPhrase(phrase);
-  return Array.from({ length: 15 }, (_, i) =>
+  return Array.from({ length: WALLET_COUNT }, (_, i) =>
     ethers.HDNodeWallet.fromMnemonic(mnemonic, `m/44'/60'/0'/0/${i}`).connect(provider ?? null)
   );
 }
@@ -148,6 +188,31 @@ const units = (n) => ethers.parseUnits(String(n), decimals);
 const fmtU = (v) => `${Number(ethers.formatUnits(v, decimals)).toFixed(2)} USDT`;
 const fmtB = (v) => `${Number(ethers.formatEther(v)).toFixed(4)} BOT`;
 
+/**
+ * Send a transaction, logging rather than throwing on a revert. One agent's bad luck (a credit
+ * limit, a race with another round) should cost that one action, not the rest of the round.
+ */
+async function attempt(label, fn) {
+  try {
+    const rc = await wait(fn());
+    log(`  ${label}`);
+    return rc;
+  } catch (e) {
+    log(`  ! ${label} failed: ${errMsg(e)}`);
+    return null;
+  }
+}
+
+async function liveAgents(ctx) {
+  const out = [];
+  for (const a of AGENTS) {
+    const operator = ctx.w[a.operator];
+    const agentId = await ctx.registry.agentIdByOperator(operator.address);
+    if (agentId !== 0n) out.push({ ...a, operatorWallet: operator, ownerWallet: ctx.w[a.owner], agentId });
+  }
+  return out;
+}
+
 // ------------------------------------------------------------------------------ step 1: funding
 
 async function fund(ctx) {
@@ -166,21 +231,24 @@ async function fund(ctx) {
       log(`  ! treasury short on BOT for wallet ${i} (has ${fmtB(have)})`);
       continue;
     }
-    log(`  gas → ${i} ${short(w[i].address)} ${fmtB(need)}`);
-    await wait(t.sendTransaction({ to: w[i].address, value: need }));
+    await attempt(`gas → ${i} ${short(w[i].address)} ${fmtB(need)}`, () => t.sendTransaction({ to: w[i].address, value: need }));
   }
 
-  // USDT for owners that have not bonded yet, and for consumers that are running low.
+  // USDT. Consumers first: they are what keeps work flowing. Owners after, sized to cover any
+  // agent they still have to register plus a float for restoring slashed bonds.
   const wants = [];
-  for (const i of ROLES.owners) {
-    const agentId = await ctx.registry.agentIdByOperator(w[operatorOf(i)].address);
-    if (agentId !== 0n) continue;
-    const bal = await token.balanceOf(w[i].address);
-    if (bal < units(BOND_USDT)) wants.push([i, units(BOND_USDT) - bal]);
-  }
   for (const i of ROLES.consumers) {
     const bal = await token.balanceOf(w[i].address);
     if (bal < units(CONSUMER_USDT_FLOOR)) wants.push([i, units(CONSUMER_USDT_TARGET) - bal]);
+  }
+  for (const i of ROLES.owners) {
+    let unregistered = 0;
+    for (const a of AGENTS.filter((x) => x.owner === i)) {
+      if ((await ctx.registry.agentIdByOperator(w[a.operator].address)) === 0n) unregistered++;
+    }
+    const target = units(BOND_USDT * unregistered + OWNER_FLOAT_USDT);
+    const bal = await token.balanceOf(w[i].address);
+    if (bal < target) wants.push([i, target - bal]);
   }
   for (const [i, amt] of wants) {
     const have = await token.balanceOf(t.address);
@@ -188,22 +256,21 @@ async function fund(ctx) {
       log(`  ! treasury short on USDT for wallet ${i} (has ${fmtU(have)}, needs ${fmtU(amt)})`);
       continue;
     }
-    log(`  usdt → ${i} ${short(w[i].address)} ${fmtU(amt)}`);
-    await wait(token.connect(t).transfer(w[i].address, amt));
+    await attempt(`usdt → ${i} ${short(w[i].address)} ${fmtU(amt)}`, () => token.connect(t).transfer(w[i].address, amt));
   }
 
   // One-time approvals. Owners approve the registry for bonding; consumers approve the router
-  // for fees. MaxUint256 is fine on a testnet token with no value.
+  // for fees and challenge bonds. MaxUint256 is fine on a testnet token with no value.
   for (const i of ROLES.owners) {
     if ((await token.allowance(w[i].address, registryAddr)) === 0n &&
         (await provider.getBalance(w[i].address)) >= GAS_FLOOR) {
-      await wait(token.connect(w[i]).approve(registryAddr, ethers.MaxUint256));
+      await attempt(`approve registry from ${i}`, () => token.connect(w[i]).approve(registryAddr, ethers.MaxUint256));
     }
   }
   for (const i of ROLES.consumers) {
     if ((await token.allowance(w[i].address, routerAddr)) === 0n &&
         (await provider.getBalance(w[i].address)) >= GAS_FLOOR) {
-      await wait(token.connect(w[i]).approve(routerAddr, ethers.MaxUint256));
+      await attempt(`approve router from ${i}`, () => token.connect(w[i]).approve(routerAddr, ethers.MaxUint256));
     }
   }
 }
@@ -212,30 +279,79 @@ async function fund(ctx) {
 
 async function ensureAgents(ctx) {
   const { w, registry, token } = ctx;
-  const agents = [];
-  for (const i of ROLES.owners) {
-    const op = w[operatorOf(i)];
-    let agentId = await registry.agentIdByOperator(op.address);
-    if (agentId === 0n) {
-      const bal = await token.balanceOf(w[i].address);
-      if (bal < units(BOND_USDT)) {
-        log(`  ! owner ${i} cannot bond yet (has ${fmtU(bal)})`);
-        continue;
-      }
-      // A label hash, not a real model commitment: Bronze never opens it. Loss tolerance varies
-      // per agent so the four do not look identical on the leaderboard.
-      const commitment = ethers.id(`botid.testnet-sim.agent.${i}`);
-      const tolerance = [300, 500, 800, 1200][ROLES.owners.indexOf(i)];
-      log(`  registering agent for owner ${i}, operator ${operatorOf(i)}, bond ${BOND_USDT} USDT`);
-      await wait(registry.connect(w[i]).registerAgent(op.address, commitment, Tier.Bronze, tolerance, units(BOND_USDT)));
-      agentId = await registry.agentIdByOperator(op.address);
+  for (const a of AGENTS) {
+    const op = w[a.operator];
+    if ((await registry.agentIdByOperator(op.address)) !== 0n) continue;
+    const owner = w[a.owner];
+    const bal = await token.balanceOf(owner.address);
+    if (bal < units(BOND_USDT)) {
+      log(`  ! agent ${a.key} cannot be bonded yet: owner ${a.owner} has ${fmtU(bal)}`);
+      continue;
     }
-    agents.push({ ownerIndex: i, operator: op, agentId });
+    await attempt(
+      `registered agent ${a.key} (owner ${a.owner}, operator ${a.operator}${a.gold ? ', reference Gold model' : ''}), bond ${BOND_USDT} USDT`,
+      () => registry.connect(owner).registerAgent(op.address, commitmentFor(a), Tier.Bronze, lossToleranceFor(a), units(BOND_USDT))
+    );
   }
-  return agents;
+  return liveAgents(ctx);
 }
 
-// ---------------------------------------------------------------- step 3: in-flight requests
+// --------------------------------------------------------------- step 3: bond housekeeping
+
+async function housekeeping(ctx, agents) {
+  const { registry, token, provider } = ctx;
+  const now = BigInt((await provider.getBlock('latest')).timestamp);
+  for (const a of agents) {
+    const rec = await registry.getAgent(a.agentId);
+    const owner = a.ownerWallet;
+    const effective = rec.bond > rec.unbondingAmount ? rec.bond - rec.unbondingAmount : 0n;
+    const ownerBal = await token.balanceOf(owner.address);
+
+    // Restore a bond that slashes or unbonding have pushed under the working level, so the agent
+    // keeps credit. This is what a refilled treasury ends up paying for.
+    if (effective < units(BOND_USDT)) {
+      const top = units(BOND_USDT) - effective + units(randInt(0, 20));
+      if (ownerBal >= top) {
+        await attempt(`bond top-up agent ${a.key} #${a.agentId} +${fmtU(top)}`, () => registry.connect(owner).increaseBond(a.agentId, top));
+      } else {
+        log(`  ! agent ${a.key} bond is ${fmtU(effective)} and owner ${a.owner} has only ${fmtU(ownerBal)} to restore it`);
+      }
+    } else if (chance(EXTRA_BOND_CHANCE)) {
+      const extra = units(randInt(10, 40));
+      if (ownerBal >= extra + units(20)) {
+        await attempt(`extra bond agent ${a.key} #${a.agentId} +${fmtU(extra)}`, () => registry.connect(owner).increaseBond(a.agentId, extra));
+      }
+    }
+
+    // Unbonding: start a small slice now and then; take it out early (paying the 10% toll) once the
+    // agent has nothing open, or normally if the 21 days have somehow elapsed.
+    if (rec.unbondingAmount === 0n) {
+      if (chance(UNBOND_CHANCE) && effective >= units(BOND_USDT + 20)) {
+        const slice = units(randInt(10, 20));
+        try {
+          await registry.connect(owner).startUnbonding.staticCall(a.agentId, slice);
+          await attempt(`start unbonding agent ${a.key} #${a.agentId} ${fmtU(slice)}`, () => registry.connect(owner).startUnbonding(a.agentId, slice));
+        } catch (e) {
+          log(`  skip unbonding agent ${a.key}: ${errMsg(e)}`);
+        }
+      }
+    } else if (now >= rec.unbondingAt) {
+      await attempt(`withdraw unbonded ${fmtU(rec.unbondingAmount)} from agent ${a.key}`, () => registry.connect(owner).withdraw(a.agentId));
+    } else if (rec.openNotional === 0n && chance(WITHDRAW_EARLY_CHANCE)) {
+      await attempt(`withdraw early ${fmtU(rec.unbondingAmount)} from agent ${a.key} (10% toll)`, () => registry.connect(owner).withdrawEarly(a.agentId));
+    }
+
+    // Pausing. A paused agent has no credit, so no new work lands on it; work already open still
+    // runs to completion.
+    if (!rec.active) {
+      if (chance(RESUME_CHANCE)) await attempt(`resume agent ${a.key} #${a.agentId}`, () => registry.connect(owner).setActive(a.agentId, true));
+    } else if (chance(PAUSE_CHANCE)) {
+      await attempt(`pause agent ${a.key} #${a.agentId}`, () => registry.connect(owner).setActive(a.agentId, false));
+    }
+  }
+}
+
+// ---------------------------------------------------------------- step 4: in-flight requests
 
 async function findOurRequests(ctx) {
   const { router, provider, w } = ctx;
@@ -271,27 +387,38 @@ function randomOutcome() {
 async function advance(ctx) {
   const { router, provider, w } = ctx;
   const byAddress = new Map(ROLES.consumers.map((i) => [w[i].address.toLowerCase(), w[i]]));
+  const anyConsumer = () => w[pick(ROLES.consumers)];
   const ids = await findOurRequests(ctx);
   const now = BigInt((await provider.getBlock('latest')).timestamp);
   const counts = {};
   for (const id of ids) {
     let req = await router.getRequest(id);
     let status = Status[Number(req.status)];
-    if (status === 'Delivered' && now >= req.finalizeAt) {
-      // Anyone may finalize; the consumer does it so the treasury's gas is not the only gas used.
-      const consumer = byAddress.get(req.consumer.toLowerCase());
-      log(`  finalize ${id.slice(0, 10)}…`);
-      await wait(router.connect(consumer ?? w[0]).finalize(id));
-      req = await router.getRequest(id);
-      status = Status[Number(req.status)];
+    const tag = id.slice(0, 10) + '…';
+    const consumer = byAddress.get(req.consumer.toLowerCase());
+
+    if (status === 'Pending' && now > req.deliverBy) {
+      // Permissionless, and the caller collects the bounty, so any consumer will do it.
+      if (await attempt(`expire   ${tag} agent #${req.agentId} never delivered`, () => router.connect(anyConsumer()).markExpired(id))) status = 'Expired';
+    } else if (status === 'Delivered' && now >= req.finalizeAt) {
+      if (await attempt(`finalize ${tag}`, () => router.connect(consumer ?? w[0]).finalize(id))) {
+        req = await router.getRequest(id);
+        status = Status[Number(req.status)];
+      }
+    } else if (status === 'Challenged' && now > req.escalationDeadline) {
+      const challenger = byAddress.get(req.challenger.toLowerCase()) ?? anyConsumer();
+      if (await attempt(`slash    ${tag} agent #${req.agentId} did not answer its challenge`, () => router.connect(challenger).slashUnresolvedChallenge(id))) status = 'Faulted';
     }
+
     if (status === 'Finalized') {
-      const consumer = byAddress.get(req.consumer.toLowerCase());
-      if (consumer && now <= req.settleBy) {
+      if (now > req.settleBy) {
+        if (await attempt(`settle by default ${tag} (consumer stayed silent)`, () => router.connect(anyConsumer()).settleDefault(id))) status = 'Settled';
+      } else if (consumer && !isSilent(id)) {
         const outcome = randomOutcome();
-        log(`  settle   ${id.slice(0, 10)}… agent #${req.agentId} at ${outcome.realizedPnlBps} bps${outcome.slaBreached ? ' (SLA breached)' : ''}`);
-        await wait(router.connect(consumer).settle(id, outcome));
-        status = 'Settled';
+        if (await attempt(
+          `settle   ${tag} agent #${req.agentId} at ${outcome.realizedPnlBps} bps${outcome.slaBreached ? ' (SLA breached)' : ''}`,
+          () => router.connect(consumer).settle(id, outcome)
+        )) status = 'Settled';
       }
     }
     counts[status] = (counts[status] || 0) + 1;
@@ -299,9 +426,9 @@ async function advance(ctx) {
   return counts;
 }
 
-// ------------------------------------------------------------------------ step 4: new work
+// ------------------------------------------------------------------------ step 5: new work
 
-async function openRequests(ctx, agents) {
+async function openRequests(ctx, agents, counts) {
   const { w, registry, router, attestor, token, provider } = ctx;
   const treasury = w[0];
 
@@ -312,23 +439,25 @@ async function openRequests(ctx, agents) {
     return 0;
   }
   if (!agents.length) return 0;
-  if (Math.random() < IDLE_CHANCE) {
+  if (chance(IDLE_CHANCE)) {
     log('  quiet round: no new requests');
     return 0;
   }
 
   const n = randInt(1, MAX_NEW_REQUESTS);
   const minFeeBps = await router.minFeeBps();
+  const challengeBond = await router.challengeBondAmount();
+  let challengesOpen = counts.Challenged || 0;
   let opened = 0;
   for (let k = 0; k < n; k++) {
     const consumer = w[pick(ROLES.consumers)];
     const agent = pick(agents);
     const profile = await registry.getProfile(agent.agentId);
-    const headroom = profile.maxOpenNotional - profile.openNotional;
+    const headroom = profile.maxOpenNotional > profile.openNotional ? profile.maxOpenNotional - profile.openNotional : 0n;
     let notional = units(randInt(...NOTIONAL_RANGE_USDT));
     if (notional > headroom) notional = headroom;
     if (notional < units(1)) {
-      log(`  agent #${agent.agentId} has no credit headroom left, skipping`);
+      log(`  agent ${agent.key} #${agent.agentId} has no credit headroom${profile.active ? '' : ' (paused)'}, skipping`);
       continue;
     }
     // Rounded up, then a random tip on top so fees are not all exactly the floor.
@@ -355,16 +484,32 @@ async function openRequests(ctx, agents) {
     const inputCommitment = await attestor.commit([feed]);
     const deliverBy = timestamp + BigInt(DELIVER_BY_SECS);
 
-    log(`  request  agent #${agent.agentId} by ${short(consumer.address)}: ${fmtU(notional)}, fee ${fmtU(fee)}`);
-    const rc = await wait(router.connect(consumer).requestExecution(agent.agentId, inputCommitment, notional, fee, deliverBy, ''));
+    const rc = await attempt(
+      `request  agent ${agent.key} #${agent.agentId} by ${short(consumer.address)}: ${fmtU(notional)}, fee ${fmtU(fee)}`,
+      () => router.connect(consumer).requestExecution(agent.agentId, inputCommitment, notional, fee, deliverBy, '')
+    );
+    if (!rc) continue;
+    opened++;
     const ev = rc.logs
       .map((l) => { try { return router.interface.parseLog(l); } catch { return null; } })
       .find((e) => e && e.name === 'ExecutionRequested');
     const requestId = ev.args.requestId;
+    const tag = requestId.slice(0, 10) + '…';
+
+    // The operator's choice, made now: decline, go dark, or deliver.
+    const roll = Math.random();
+    if (roll < REJECT_CHANCE) {
+      await attempt(`reject   ${tag} declined by operator ${short(agent.operatorWallet.address)}`, () => router.connect(agent.operatorWallet).reject(requestId));
+      continue;
+    }
+    if (roll < REJECT_CHANCE + GHOST_CHANCE) {
+      log(`  ghost    ${tag} operator will not deliver; it expires after ${DELIVER_BY_SECS / 60} min`);
+      continue;
+    }
 
     const outputCommitment = ethers.id(`output:${requestId}`);
     const agentRec = await registry.getAgent(agent.agentId);
-    const attestation = await agent.operator.signTypedData(
+    const attestation = await agent.operatorWallet.signTypedData(
       { name: 'BotID', version: '1', chainId: CHAIN_ID, verifyingContract: DEPLOYMENT.contracts.SignatureAdapter },
       {
         Execution: [
@@ -378,14 +523,32 @@ async function openRequests(ctx, agents) {
       },
       { requestId, agentId: agent.agentId, modelCommitment: agentRec.modelCommitment, inputCommitment, outputCommitment, deliverBy }
     );
-    log(`  deliver  ${requestId.slice(0, 10)}… by operator ${short(agent.operator.address)}`);
-    await wait(router.connect(agent.operator).deliver(requestId, outputCommitment, bundle, attestation));
-    opened++;
+    const delivered = await attempt(
+      `deliver  ${tag} by operator ${short(agent.operatorWallet.address)}`,
+      () => router.connect(agent.operatorWallet).deliver(requestId, outputCommitment, bundle, attestation)
+    );
+
+    // Challenges: only agent E can be challenged, one at a time, by a consumer who can post the bond.
+    if (delivered && agent.gold && challengesOpen === 0 && chance(CHALLENGE_CHANCE)) {
+      const challengers = [];
+      for (const i of ROLES.consumers) {
+        if ((await token.balanceOf(w[i].address)) >= challengeBond) challengers.push(w[i]);
+      }
+      if (!challengers.length) {
+        log(`  no consumer can post the ${fmtU(challengeBond)} challenge bond`);
+      } else {
+        const challenger = pick(challengers);
+        if (await attempt(
+          `challenge ${tag} by ${short(challenger.address)}, bond ${fmtU(challengeBond)}`,
+          () => router.connect(challenger).challenge(requestId)
+        )) challengesOpen++;
+      }
+    }
   }
   return opened;
 }
 
-// --------------------------------------------------------------------- step 5: the site
+// --------------------------------------------------------------------- step 6: the site
 
 async function touchSite(agents) {
   for (const a of agents) {
@@ -411,9 +574,22 @@ async function printStatus(ctx, agents) {
   }
   log('\nagents');
   for (const a of agents) {
-    const p = await registry.getProfile(a.agentId);
-    log(`  #${a.agentId} score ${p.score} · settled ${p.settledExecutions} · faults ${p.faults} · bond ${fmtU(p.bond)} · open ${fmtU(p.openNotional)} / ${fmtU(p.maxOpenNotional)}`);
+    const [p, rec] = await Promise.all([registry.getProfile(a.agentId), registry.getAgent(a.agentId)]);
+    log(
+      `  ${a.key} #${a.agentId}${a.gold ? ' (gold model)' : ''} score ${p.score} · settled ${p.settledExecutions} · faults ${p.faults}` +
+      ` · bond ${fmtU(p.bond)}${rec.unbondingAmount ? ` (unbonding ${fmtU(rec.unbondingAmount)})` : ''}` +
+      ` · open ${fmtU(p.openNotional)} / ${fmtU(p.maxOpenNotional)}${p.active ? '' : ' · PAUSED'}`
+    );
   }
+}
+
+async function countRequests(ctx) {
+  const counts = {};
+  for (const id of await findOurRequests(ctx)) {
+    const s = Status[Number((await ctx.router.getRequest(id)).status)];
+    counts[s] = (counts[s] || 0) + 1;
+  }
+  return counts;
 }
 
 async function main() {
@@ -436,19 +612,14 @@ async function main() {
   const ctx = await connect();
 
   if (cmd === 'status') {
-    const agents = [];
-    for (const i of ROLES.owners) {
-      const id = await ctx.registry.agentIdByOperator(ctx.w[operatorOf(i)].address);
-      if (id !== 0n) agents.push({ ownerIndex: i, operator: ctx.w[operatorOf(i)], agentId: id });
-    }
-    await printStatus(ctx, agents);
-    log('\nrequests', await advanceDryRun(ctx));
+    await printStatus(ctx, await liveAgents(ctx));
+    log('\nrequests', await countRequests(ctx));
     return;
   }
 
   if (cmd !== 'tick') throw new Error(`unknown command ${cmd}`);
 
-  log(`round at ${new Date().toISOString()} on Bohr (968)`);
+  log(`round at ${new Date().toISOString()} on Bohr (968), running until ${SIM_UNTIL}`);
   const t = ctx.w[0];
   const [tb, tu] = await Promise.all([ctx.provider.getBalance(t.address), ctx.token.balanceOf(t.address)]);
   log(`treasury ${t.address}: ${fmtB(tb)}, ${fmtU(tu)}`);
@@ -461,26 +632,20 @@ async function main() {
   await fund(ctx);
   log('\n2. agents');
   const agents = await ensureAgents(ctx);
-  log(`  ${agents.map((a) => '#' + a.agentId).join(', ') || 'none yet'}`);
-  log('\n3. in-flight');
-  log('  ', await advance(ctx));
-  log('\n4. new work');
-  log(`  opened ${await openRequests(ctx, agents)}`);
-  log('\n5. site');
+  log(`  ${agents.map((a) => `${a.key} #${a.agentId}`).join(', ') || 'none yet'}`);
+  log('\n3. bonds');
+  await housekeeping(ctx, agents);
+  log('\n4. in-flight');
+  const counts = await advance(ctx);
+  log('  ', counts);
+  log('\n5. new work');
+  log(`  opened ${await openRequests(ctx, agents, counts)}`);
+  log('\n6. site');
   await touchSite(agents);
   await printStatus(ctx, agents);
 }
 
-async function advanceDryRun(ctx) {
-  const counts = {};
-  for (const id of await findOurRequests(ctx)) {
-    const s = Status[Number((await ctx.router.getRequest(id)).status)];
-    counts[s] = (counts[s] || 0) + 1;
-  }
-  return counts;
-}
-
 main().catch((e) => {
-  console.error(e.shortMessage || e.message || e);
+  console.error(errMsg(e));
   process.exitCode = 1;
 });

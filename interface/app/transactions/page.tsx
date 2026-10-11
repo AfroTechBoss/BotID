@@ -14,6 +14,11 @@ import { shortHash, timeAgo } from '@/lib/format';
 // history, one row per thing someone sent, including everything that is not an execution — bonds,
 // unbonding, pauses, slashes, publisher changes. Each row's events are listed under it, because a
 // single call routinely touches three contracts and the side effects are part of what happened.
+//
+// Opens on user activity rather than on everything. Protocol setup (the deployer wiring contracts
+// together and setting parameters) is real history, but on a fresh deployment it is most of the
+// rows, and a reader who opens the page to see who is using BotID should not have to wade through
+// the team's own deploy script to find out. It is one tab away, and every row says who sent it.
 
 const PAGE_SIZE = 50;
 
@@ -23,16 +28,19 @@ const KIND_META: Record<TxKind, { label: string; color: string }> = {
   agent: { label: 'Agent', color: 'var(--score-good)' },
   bond: { label: 'Bond', color: 'var(--state-pending)' },
   reputation: { label: 'Reputation', color: 'var(--text-muted)' },
-  admin: { label: 'Admin', color: 'var(--text-subtle)' },
+  admin: { label: 'Protocol setup', color: 'var(--text-subtle)' },
 };
 
-const FILTERS: { id: 'all' | TxKind; label: string }[] = [
-  { id: 'all', label: 'All' },
-  { id: 'execution', label: 'Executions' },
-  { id: 'fault', label: 'Faults' },
-  { id: 'agent', label: 'Agents' },
-  { id: 'bond', label: 'Bonds' },
-  { id: 'admin', label: 'Admin' },
+type FilterId = 'activity' | 'all' | TxKind;
+
+const FILTERS: { id: FilterId; label: string; match: (t: ProtocolTx) => boolean }[] = [
+  { id: 'activity', label: 'User activity', match: (t) => t.kind !== 'admin' },
+  { id: 'execution', label: 'Executions', match: (t) => t.kind === 'execution' },
+  { id: 'fault', label: 'Faults', match: (t) => t.kind === 'fault' },
+  { id: 'agent', label: 'Agents', match: (t) => t.kind === 'agent' },
+  { id: 'bond', label: 'Bonds', match: (t) => t.kind === 'bond' },
+  { id: 'admin', label: 'Protocol setup', match: (t) => t.kind === 'admin' },
+  { id: 'all', label: 'All', match: () => true },
 ];
 
 /** What the search box matches: hash, sender, any address an event names, agent id, request id. */
@@ -50,20 +58,23 @@ function matches(tx: ProtocolTx, from: string | undefined, q: string) {
 }
 
 export default function Transactions() {
-  const { network } = useNetwork();
+  const { network, setNetwork } = useNetwork();
   const { data, loading, error, deployed, refresh } = useTransactions(network.id);
   const now = useNow(30_000);
-  const [filter, setFilter] = useState<'all' | TxKind>('all');
+  const [filter, setFilter] = useState<FilterId>('activity');
   const [query, setQuery] = useState('');
   const [page, setPage] = useState(0);
   const [open, setOpen] = useState<Set<string>>(new Set());
   const [details, setDetails] = useState<Map<string, TxDetails>>(new Map());
 
-  const all = data ?? [];
-  const rows = useMemo(
-    () => all.filter((t) => (filter === 'all' || t.kind === filter) && matches(t, details.get(t.hash)?.from, query.trim())),
-    [all, filter, query, details]
-  );
+  const all = useMemo(() => data?.txs ?? [], [data]);
+  const owner = data?.owner;
+  const activityCount = all.filter((t) => t.kind !== 'admin').length;
+  const setupCount = all.length - activityCount;
+  const rows = useMemo(() => {
+    const match = FILTERS.find((f) => f.id === filter)!.match;
+    return all.filter((t) => match(t) && matches(t, details.get(t.hash)?.from, query.trim()));
+  }, [all, filter, query, details]);
   const pages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
   const current = Math.min(page, pages - 1);
   const visible = rows.slice(current * PAGE_SIZE, current * PAGE_SIZE + PAGE_SIZE);
@@ -110,7 +121,7 @@ export default function Transactions() {
         <h1 style={{ fontSize: 28 }}>Transactions</h1>
         {data && (
           <span className="text-muted" style={{ fontSize: 12 }}>
-            {all.length} {all.length === 1 ? 'transaction' : 'transactions'} on {network.name}
+            {activityCount} from users · {setupCount} protocol setup · on {network.name}
           </span>
         )}
       </div>
@@ -118,9 +129,25 @@ export default function Transactions() {
       <p className="text-muted" style={{ fontSize: 12, marginBottom: 'var(--space-4)' }}>
         Every transaction that touched a BotID contract (the router, registry, reputation engine,
         input attestor and verification adapters), read live from the chain. One row per
-        transaction; open a row to see every event it emitted. For one row per request, see{' '}
-        <Link href="/executions">Executions</Link>.
+        transaction; open a row to see every event it emitted. The From column says whether a
+        transaction came from a user's wallet or from the protocol owner. For one row per request,
+        see <Link href="/executions">Executions</Link>.
       </p>
+
+      {/* A deployment nobody has used yet is all setup, and that reads as "only admins use this"
+          unless it is said outright. Points at the network where the activity is. */}
+      {data && all.length > 0 && activityCount === 0 && (
+        <div style={{ border: '1px solid var(--color-divider)', padding: 'var(--space-3)', marginBottom: 'var(--space-4)', fontSize: 13, display: 'flex', gap: 'var(--space-3)', alignItems: 'baseline', flexWrap: 'wrap' }}>
+          <span>
+            No user activity on {network.name} yet. The {setupCount} {setupCount === 1 ? 'transaction' : 'transactions'} here
+            are the protocol owner deploying and configuring the contracts.
+            {network.id !== 'bohr' && ' Agents, bonds and executions from user wallets are on Bohr Testnet.'}
+          </span>
+          {network.id !== 'bohr' && (
+            <button className="btn" style={{ marginLeft: 'auto', fontSize: 12 }} onClick={() => setNetwork('bohr')}>Show Bohr Testnet</button>
+          )}
+        </div>
+      )}
 
       {error && (
         <div style={{ border: '1px solid var(--score-critical)', color: 'var(--score-critical)', padding: 'var(--space-3)', marginBottom: 'var(--space-4)', fontSize: 13, display: 'flex', gap: 'var(--space-3)', alignItems: 'baseline', flexWrap: 'wrap' }}>
@@ -132,7 +159,7 @@ export default function Transactions() {
       {all.length > 0 && (
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center', marginBottom: 'var(--space-4)' }}>
           {FILTERS.map((f) => {
-            const n = f.id === 'all' ? all.length : all.filter((t) => t.kind === f.id).length;
+            const n = all.filter(f.match).length;
             return (
               <button key={f.id} className={`btn ${filter === f.id ? '' : 'btn-secondary'}`} onClick={() => setFilter(f.id)} style={{ fontSize: 12 }}>
                 {f.label} <span className="tabular" style={{ opacity: 0.7 }}>{n}</span>
@@ -194,9 +221,14 @@ export default function Transactions() {
                     <td style={{ fontFamily: 'var(--font-mono)' }}>
                       {agentId === undefined ? <span className="text-muted">—</span> : <Link href={`/agents/${agentId}`}>#{agentId.toString()}</Link>}
                     </td>
-                    <td style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>
+                    <td style={{ fontSize: 12, whiteSpace: 'nowrap' }}>
                       {d?.from ? (
-                        <a href={explorerLink(network.id, 'address', d.from)} target="_blank" rel="noopener noreferrer">{shortHash(d.from, 4)}</a>
+                        <>
+                          <a href={explorerLink(network.id, 'address', d.from)} target="_blank" rel="noopener noreferrer" style={{ fontFamily: 'var(--font-mono)' }}>{shortHash(d.from, 4)}</a>
+                          <span className="text-muted" style={{ display: 'block', fontSize: 11 }}>
+                            {owner && d.from.toLowerCase() === owner ? 'Protocol owner' : 'User wallet'}
+                          </span>
+                        </>
                       ) : (
                         <span className="text-muted">…</span>
                       )}
@@ -247,10 +279,10 @@ export default function Transactions() {
         </div>
       )}
 
-      {deployed && data && all.length > 0 && rows.length === 0 && (
+      {deployed && data && all.length > 0 && rows.length === 0 && !(filter === 'activity' && activityCount === 0 && !query) && (
         <div style={{ textAlign: 'center', padding: 'var(--space-8) 0', color: 'var(--text-subtle)' }}>
           <p style={{ fontSize: 13 }}>Nothing matches that filter or search.</p>
-          <button className="btn btn-secondary" style={{ marginTop: 'var(--space-3)' }} onClick={() => { setFilter('all'); setQuery(''); }}>Show all</button>
+          <button className="btn btn-secondary" style={{ marginTop: 'var(--space-3)' }} onClick={() => { setFilter('all'); setQuery(''); }}>Show everything</button>
         </div>
       )}
     </main>

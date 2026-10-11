@@ -41,7 +41,12 @@
  */
 
 const path = require('path');
-const { ethers } = require('ethers');
+// ethers from node_modules when it is installed, otherwise the copy vendored beside this file.
+// Scheduled runs land in containers whose network policy may not reach the npm registry, and a
+// round that dies on `npm install` before sending anything is the least useful way to fail.
+const { ethers } = (() => {
+  try { return require('ethers'); } catch { return require('./vendor/ethers-6.17.0.umd.min.js'); }
+})();
 
 const ABI = require(path.join(__dirname, '..', 'src', 'abi.json'));
 const DEPLOYMENT = require(path.join(__dirname, '..', '..', 'contracts', 'deployments', 'bohr-968.json'));

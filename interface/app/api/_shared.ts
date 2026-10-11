@@ -60,12 +60,11 @@ export function fail(status: number, error: string, detail?: Record<string, unkn
  * into one. The response echoes the network back so a caller who forgot the parameter can see
  * which chain answered.
  *
- * The default was Bohr until BOT Chain was deployed on 2026-09-03. That flip changes the answer
- * to every existing no-parameter call, which is the honest behaviour — the default should be the
- * chain the protocol actually runs on — but a caller that was relying on the old default now reads
- * an empty BOT Chain rather than a populated Bohr. It reads as "this agent does not exist" instead
- * of as an error, so it is worth stating loudly rather than leaving to be discovered: pin
- * `?network=bohr` if the testnet is what you meant.
+ * The default has flipped twice: Bohr until BOT Chain was deployed on 2026-09-03, BOT Chain until
+ * 2026-10-11, and Bohr again since, because that is where the agents and executions are. Each flip
+ * changes the answer to every existing no-parameter call, and an agent that exists on one chain
+ * reads as "does not exist" on the other rather than as an error. So pin `?network=` rather than
+ * relying on the default: `?network=bohr` for the testnet, `?network=botchain` for mainnet.
  *
  * An unknown value is a 400 rather than a fallback, and the two server-rendered receipt pages now
  * resolve through the same `networkFromParam`, so a bad `?network=` cannot quietly answer with a

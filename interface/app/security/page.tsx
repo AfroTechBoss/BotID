@@ -185,8 +185,8 @@ export default function Security() {
           exists for that network.
         </p>
         <p>
-          It opens on BOT Chain, because mainnet is the default network now, and it is two rows
-          shorter there than on Bohr: <code>ZkAdapter</code> and its <code>Halo2Verifier</code> were
+          It opens on Bohr, because the testnet is the default network, and it is two rows
+          shorter on BOT Chain: <code>ZkAdapter</code> and its <code>Halo2Verifier</code> were
           not deployed to mainnet at all. A missing row means the capability does not exist on that
           chain, not that we have not got round to listing it. The bond token is the exception
           on both networks and is marked as such: USDT

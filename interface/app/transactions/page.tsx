@@ -7,6 +7,7 @@ import { useNow, useTransactions } from '@/lib/useChain';
 import { describeTxs, type ProtocolTx, type TxDetails, type TxKind } from '@/lib/transactions';
 import { explorerLink } from '@/lib/chain';
 import { shortHash, timeAgo } from '@/lib/format';
+import { exportCsv, exportPdf, toExportRows } from '@/lib/exportTxs';
 
 // Every transaction that touched a BotID contract, newest first, one row per transaction.
 //
@@ -66,6 +67,8 @@ export default function Transactions() {
   const [page, setPage] = useState(0);
   const [open, setOpen] = useState<Set<string>>(new Set());
   const [details, setDetails] = useState<Map<string, TxDetails>>(new Map());
+  const [exporting, setExporting] = useState<'csv' | 'pdf' | null>(null);
+  const [exportError, setExportError] = useState<string>();
 
   const all = useMemo(() => data?.txs ?? [], [data]);
   const owner = data?.owner;
@@ -107,6 +110,30 @@ export default function Transactions() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [missingKey, network.id]);
 
+  // Exports carry every filtered row, not just this page, so the rows not yet dated or attributed
+  // are filled in first. In chunks, so a long history is a few batched round trips rather than one
+  // enormous one.
+  const runExport = async (kind: 'csv' | 'pdf') => {
+    setExporting(kind);
+    setExportError(undefined);
+    try {
+      const merged = new Map(details);
+      const todo = rows.filter((t) => !merged.has(t.hash));
+      for (let i = 0; i < todo.length; i += 100) {
+        for (const [k, v] of await describeTxs(network.id, todo.slice(i, i + 100))) merged.set(k, v);
+      }
+      setDetails(merged);
+      const out = toExportRows(rows, merged, owner, network.id);
+      const meta = { network: network.id, networkName: network.name, filterLabel: FILTERS.find((f) => f.id === filter)!.label, query: query.trim() };
+      if (kind === 'csv') exportCsv(out, meta);
+      else await exportPdf(out, meta);
+    } catch (e) {
+      setExportError(e instanceof Error ? e.message : 'Export failed.');
+    } finally {
+      setExporting(null);
+    }
+  };
+
   const toggle = (hash: string) =>
     setOpen((prev) => {
       const next = new Set(prev);
@@ -120,16 +147,25 @@ export default function Transactions() {
       <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'baseline', justifyContent: 'space-between', gap: 'var(--space-3)', marginBottom: 'var(--space-2)' }}>
         <h1 style={{ fontSize: 28 }}>Transactions</h1>
         {data && (
-          <span className="text-muted" style={{ fontSize: 12 }}>
-            {activityCount} from users · {setupCount} protocol setup · on {network.name}
-          </span>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--space-3)', alignItems: 'baseline' }}>
+            <span className="text-muted" style={{ fontSize: 12 }}>
+              {activityCount} from users · {setupCount} protocol setup · on {network.name}
+            </span>
+            <button className="btn btn-secondary" style={{ fontSize: 12 }} disabled={!rows.length || exporting !== null} onClick={() => runExport('csv')}>
+              {exporting === 'csv' ? 'Preparing CSV…' : 'Export CSV'}
+            </button>
+            <button className="btn btn-secondary" style={{ fontSize: 12 }} disabled={!rows.length || exporting !== null} onClick={() => runExport('pdf')}>
+              {exporting === 'pdf' ? 'Preparing PDF…' : 'Export PDF'}
+            </button>
+          </div>
         )}
       </div>
 
       <p className="text-muted" style={{ fontSize: 12, marginBottom: 'var(--space-4)' }}>
         Every transaction that touched a BotID contract (the router, registry, reputation engine,
         input attestor and verification adapters), read live from the chain. One row per
-        transaction; open a row to see every event it emitted. The From column says whether a
+        transaction; open a row to see every event it emitted. Exports include every row in the
+        current filter and search, not just this page. The From column says whether a
         transaction came from a user's wallet or from the protocol owner. For one row per request,
         see <Link href="/executions">Executions</Link>.
       </p>
@@ -147,6 +183,10 @@ export default function Transactions() {
             <button className="btn" style={{ marginLeft: 'auto', fontSize: 12 }} onClick={() => setNetwork('bohr')}>Show Bohr Testnet</button>
           )}
         </div>
+      )}
+
+      {exportError && (
+        <p style={{ color: 'var(--score-critical)', fontSize: 13, marginBottom: 'var(--space-4)' }}>Could not export: {exportError}</p>
       )}
 
       {error && (

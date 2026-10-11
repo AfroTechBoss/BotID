@@ -60,6 +60,17 @@ export interface ProtocolTx {
   headline: ProtocolEvent;
 }
 
+export interface TxHistory {
+  txs: ProtocolTx[];
+  /**
+   * The protocol's owner on this network, lowercased: the deployer, who also sends every setup and
+   * parameter call. Read from the registry rather than written down, so a handover is reflected
+   * the moment it lands. What lets a row say "protocol owner" instead of leaving a reader to guess
+   * whether an address is the team or a user.
+   */
+  owner?: string;
+}
+
 export interface TxDetails {
   /** Milliseconds; absent where the block read failed. */
   time?: number;
@@ -87,7 +98,7 @@ const KIND_RANK: TxKind[] = ['fault', 'execution', 'agent', 'bond', 'admin', 're
 /** Secondary events: side effects of a call that already has a better headline. */
 const SECONDARY = new Set(['ExposureChanged', 'OutcomeRecorded', 'FaultRecorded', 'AgentInitialized', 'VoiceEarned', 'WorkAttributed', 'Slashed', 'TierDemonstrated']);
 
-export async function readTransactions(network: NetworkId): Promise<ProtocolTx[] | undefined> {
+export async function readTransactions(network: NetworkId): Promise<TxHistory | undefined> {
   const fromBlock = DEPLOY_BLOCK[network];
   const contracts = SCANNED.flatMap(([name, abi]) => {
     const address = addressOf(network, name);
@@ -97,6 +108,13 @@ export async function readTransactions(network: NetworkId): Promise<ProtocolTx[]
 
   const client = publicClient(network);
   const head = await client.getBlockNumber();
+  const registry = addressOf(network, 'AgentRegistry');
+  const ownerRead = registry
+    ? client
+        .readContract({ address: registry, abi: agentRegistryAbi as Abi, functionName: 'owner' })
+        .then((o) => String(o).toLowerCase())
+        .catch(() => undefined)
+    : Promise.resolve(undefined);
   const pages = await Promise.all(
     // A failed window costs that window, not the page; see `routerLogs`.
     logWindows(network, fromBlock, head).map((range) =>
@@ -130,9 +148,10 @@ export async function readTransactions(network: NetworkId): Promise<ProtocolTx[]
     tx.kind = ranked[0].kind;
   }
 
-  return [...txs.values()].sort((a, b) =>
+  const sorted = [...txs.values()].sort((a, b) =>
     b.block === a.block ? b.firstLog - a.firstLog : b.block > a.block ? 1 : -1
   );
+  return { txs: sorted, owner: await ownerRead };
 }
 
 /** Lower is more significant. Primary events beat side effects, then by kind. */

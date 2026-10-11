@@ -11,7 +11,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { readAllAgents, readAgent, registryAddress, type AgentView } from './registry';
 import { readActivity, readAgentExecutions, readExecutions, type Activity, type AgentExecution } from './activity';
-import { readTransactions, type ProtocolTx } from './transactions';
+import { readTransactions, type TxHistory } from './transactions';
 import type { NetworkId } from './network';
 
 export interface Feed<T> {
@@ -53,7 +53,7 @@ export function useExecutions(network: NetworkId): Feed<AgentExecution[]> {
 }
 
 /** Every transaction that touched a protocol contract, newest first. */
-export function useTransactions(network: NetworkId): Feed<ProtocolTx[]> {
+export function useTransactions(network: NetworkId): Feed<TxHistory> {
   return usePolled(network, readTransactions, TRANSACTIONS_MS);
 }
 

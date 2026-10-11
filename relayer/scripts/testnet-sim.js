@@ -96,7 +96,6 @@ const lossToleranceFor = (a) => ({ A: 300, B: 500, C: 800, D: 1200, E: 600 })[a.
 const GAS_TARGET = ethers.parseEther('0.5');
 const GAS_FLOOR = ethers.parseEther('0.1');
 const BOND_USDT = 150;
-const OWNER_FLOAT_USDT = 40;
 const CONSUMER_USDT_TARGET = 60;
 const CONSUMER_USDT_FLOOR = 5;
 
@@ -112,6 +111,7 @@ const GHOST_CHANCE = 0.1;           // operator never delivers; the request expi
 const CHALLENGE_CHANCE = 0.35;      // a delivery by agent E is challenged (at most one open at a time)
 const SILENT_ONE_IN = 10;           // one consumer in ten never settles; settleDefault after 7 days
 const EXTRA_BOND_CHANCE = 0.08;
+const EXTRA_BOND_TREASURY_MIN = 300; // voluntary bond growth only when the treasury is flush
 const UNBOND_CHANCE = 0.06;
 const WITHDRAW_EARLY_CHANCE = 0.3;
 const PAUSE_CHANCE = 0.03;
@@ -234,8 +234,9 @@ async function fund(ctx) {
     await attempt(`gas → ${i} ${short(w[i].address)} ${fmtB(need)}`, () => t.sendTransaction({ to: w[i].address, value: need }));
   }
 
-  // USDT. Consumers first: they are what keeps work flowing. Owners after, sized to cover any
-  // agent they still have to register plus a float for restoring slashed bonds.
+  // USDT. Consumers first: they are what keeps work flowing. Owners after, and only for agents
+  // they still have to register. Restoring a slashed bond is funded on demand in housekeeping, so
+  // the treasury's last dollars are not parked in an owner's wallet waiting for a slash.
   const wants = [];
   for (const i of ROLES.consumers) {
     const bal = await token.balanceOf(w[i].address);
@@ -246,7 +247,8 @@ async function fund(ctx) {
     for (const a of AGENTS.filter((x) => x.owner === i)) {
       if ((await ctx.registry.agentIdByOperator(w[a.operator].address)) === 0n) unregistered++;
     }
-    const target = units(BOND_USDT * unregistered + OWNER_FLOAT_USDT);
+    if (!unregistered) continue;
+    const target = units(BOND_USDT * unregistered);
     const bal = await token.balanceOf(w[i].address);
     if (bal < target) wants.push([i, target - bal]);
   }
@@ -298,27 +300,36 @@ async function ensureAgents(ctx) {
 
 // --------------------------------------------------------------- step 3: bond housekeeping
 
+/** Make sure `who` holds `amount`, moving the shortfall from the treasury. False if it cannot. */
+async function ensureUsdt(ctx, who, amount) {
+  const bal = await ctx.token.balanceOf(who.address);
+  if (bal >= amount) return true;
+  const gap = amount - bal;
+  const have = await ctx.token.balanceOf(ctx.w[0].address);
+  if (have < gap) return false;
+  return !!(await attempt(`usdt → ${short(who.address)} ${fmtU(gap)} for bond`, () => ctx.token.connect(ctx.w[0]).transfer(who.address, gap)));
+}
+
 async function housekeeping(ctx, agents) {
-  const { registry, token, provider } = ctx;
+  const { registry, provider } = ctx;
   const now = BigInt((await provider.getBlock('latest')).timestamp);
   for (const a of agents) {
     const rec = await registry.getAgent(a.agentId);
     const owner = a.ownerWallet;
     const effective = rec.bond > rec.unbondingAmount ? rec.bond - rec.unbondingAmount : 0n;
-    const ownerBal = await token.balanceOf(owner.address);
 
     // Restore a bond that slashes or unbonding have pushed under the working level, so the agent
     // keeps credit. This is what a refilled treasury ends up paying for.
     if (effective < units(BOND_USDT)) {
       const top = units(BOND_USDT) - effective + units(randInt(0, 20));
-      if (ownerBal >= top) {
+      if (await ensureUsdt(ctx, owner, top)) {
         await attempt(`bond top-up agent ${a.key} #${a.agentId} +${fmtU(top)}`, () => registry.connect(owner).increaseBond(a.agentId, top));
       } else {
-        log(`  ! agent ${a.key} bond is ${fmtU(effective)} and owner ${a.owner} has only ${fmtU(ownerBal)} to restore it`);
+        log(`  ! agent ${a.key} bond is ${fmtU(effective)} and the treasury cannot fund restoring it`);
       }
-    } else if (chance(EXTRA_BOND_CHANCE)) {
+    } else if (chance(EXTRA_BOND_CHANCE) && (await ctx.token.balanceOf(ctx.w[0].address)) >= units(EXTRA_BOND_TREASURY_MIN)) {
       const extra = units(randInt(10, 40));
-      if (ownerBal >= extra + units(20)) {
+      if (await ensureUsdt(ctx, owner, extra)) {
         await attempt(`extra bond agent ${a.key} #${a.agentId} +${fmtU(extra)}`, () => registry.connect(owner).increaseBond(a.agentId, extra));
       }
     }

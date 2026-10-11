@@ -67,8 +67,8 @@ export interface NetworkMeta {
  * not resolve — so array order, switcher order and the default are one thing rather than three.
  */
 export const NETWORKS = {
-  botchain: { chain: botchain, short: 'botchain', live: true, blockTimeMs: 750, logWindow: 50_000n },
   bohr: { chain: bohr, short: 'bohr', live: true, blockTimeMs: 750, logWindow: 50_000n },
+  botchain: { chain: botchain, short: 'botchain', live: true, blockTimeMs: 750, logWindow: 50_000n },
 } as const satisfies Record<string, NetworkMeta>;
 
 export type NetworkId = keyof typeof NETWORKS;
@@ -87,17 +87,20 @@ export const CHAINS: Record<NetworkId, Chain> = Object.fromEntries(
 /**
  * The network a caller gets when nothing says otherwise.
  *
- * BOT Chain since 2026-09-03. It was Bohr for as long as Bohr was the only deployment, and the flip
- * is not cosmetic: the default decides which chain an unmodified wallet prompt is asking about and
- * which addresses every table on the site is showing. BOT Chain is where a bond is real money, so
- * it is the one a first-time reader should be looking at — landing on a testnet and assuming
- * otherwise is the more expensive mistake of the two.
+ * Bohr again since 2026-10-11, after a stretch on BOT Chain from 2026-09-03. The default decides
+ * which chain an unmodified wallet prompt is asking about and which addresses every table on the
+ * site is showing, so it should be the chain where there is something to show. Nothing has executed
+ * on mainnet yet, and a first-time reader landing there saw only the deployer's setup transactions
+ * and an empty market; all agent, bond and execution activity is on Bohr. The mainnet switch is one
+ * click away, and a wallet prompt for 677 still says which chain it is asking about.
+ *
+ * Kept first in NETWORKS as well, so the switcher order and the fallback agree with this.
  *
  * It lives here rather than in network.tsx because server components need it too, and anything
  * exported from a 'use client' module becomes a client reference when the server imports it. See
  * the header of lib/contracts.ts for how that bites.
  */
-export const DEFAULT_NETWORK: NetworkId = 'botchain';
+export const DEFAULT_NETWORK: NetworkId = 'bohr';
 
 /**
  * Resolve a `?network=` parameter against the registry, by slug or by chain id.

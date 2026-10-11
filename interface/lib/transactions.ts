@@ -16,7 +16,7 @@
 // The bond token is deliberately not scanned. Its Transfer events are the money moving *inside*
 // protocol calls this already lists, plus every unrelated USDT transfer on the chain.
 
-import { parseEventLogs, type Abi } from 'viem';
+import { formatUnits, parseEventLogs, type Abi } from 'viem';
 import {
   agentRegistryAbi,
   executionRouterAbi,
@@ -30,7 +30,7 @@ import { addressOf, DEPLOY_BLOCK, type ContractName } from './contracts';
 import { publicClient, logWindows } from './chain';
 import { blockTimes } from './activity';
 import { tierNameOf } from './registry';
-import { formatToken } from './token';
+import { BOND_TOKEN } from './token';
 import type { NetworkId } from './network';
 
 /** What a reader filters on. Coarser than event names, which nobody outside the codebase knows. */
@@ -184,7 +184,18 @@ export async function describeTxs(network: NetworkId, txs: ProtocolTx[]): Promis
 
 // ------------------------------------------------------------------------------- decoding
 
-const amt = (v: unknown) => formatToken(v as bigint);
+/**
+ * Exact enough to read a fee. The shared `formatToken` shows whole tokens, which is right for bonds
+ * and notionals but turns every fee on this page into "0 USDT": fees are a tenth of a percent of
+ * notional and nearly always under a dollar. Two decimals, more only for amounts below a cent.
+ */
+const amt = (v: unknown) => {
+  const raw = typeof v === 'bigint' ? v : 0n;
+  const n = Number(formatUnits(raw, BOND_TOKEN.decimals));
+  const digits = n !== 0 && Math.abs(n) < 0.01 ? 6 : 2;
+  const text = n.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: digits });
+  return `${text} ${BOND_TOKEN.symbol}`;
+};
 const addr = (v: unknown) => String(v ?? '');
 const shortAddr = (v: unknown) => {
   const s = addr(v);

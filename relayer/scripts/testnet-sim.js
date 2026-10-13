@@ -18,10 +18,17 @@
  * key is ever written to disk or to the repository.
  *
  *   0        treasury   funded by hand; distributes BOT and USDT; signs input bundles (publisher)
- *   1 - 4    owners     each registers and bonds one Bronze agent; owner 1 also owns agent E
- *   5 - 8    operators  owner i's agent is operated by wallet i + 4; they sign and send `deliver`
- *   9 - 14   consumers  commission work, pay fees, grade it, expire it, and challenge it
+ *   1 - 4    owners     own the nine agents (see AGENTS for who owns which)
+ *   5 - 8    operators  of agents A to D; they sign and send `deliver`
+ *   9 - 14   consumers  ordinary consumers: commission work, pay fees, grade it, expire it
  *   15       operator   of agent E, the one agent registered on the reference Gold model
+ *   16 - 19  operators  of agents F to I, added 2026-10-13
+ *   20 - 22  consumers  with habits of their own: a big buyer, a picky one and a challenger
+ *
+ * AGENTS ARE NOT CLONES. Each has a profile (PROFILES below) that sets how often it declines or
+ * misses work and how its results are distributed, and its own bond. Scores on the leaderboard
+ * therefore spread because the agents behave differently, not because the dice happened to fall
+ * differently: a reliable agent climbs, a flaky one collects liveness faults, a risky one swings.
  *
  * Agent E exists because `challenge` reverts NotEscalatable against an agent whose model has no
  * Gold verifier, and the four label-hash agents have none. Registering one agent on the
@@ -46,7 +53,7 @@
  *      that went silent
  *   5. open a random number of new requests. Most are delivered at once; some are declined by
  *      the operator, some are never delivered and left to expire, and some deliveries by agent E
- *      are challenged
+ *      are challenged. How often each happens depends on the agent's profile
  *   6. read the agents back through botidprotocol.vercel.app's public API
  * ---------------------------------------------------------------------------------------------
  */
@@ -70,44 +77,90 @@ const CHAIN_ID = 968n;
 // harmless even if nobody remembers to switch it off.
 const SIM_UNTIL = process.env.SIM_UNTIL || '2026-11-10T23:59:59Z';
 
-const WALLET_COUNT = 16;
+const WALLET_COUNT = 23;
 const ROLES = {
   treasury: [0],
   owners: [1, 2, 3, 4],
-  operators: [5, 6, 7, 8, 15],
-  consumers: [9, 10, 11, 12, 13, 14],
+  operators: [5, 6, 7, 8, 15, 16, 17, 18, 19],
+  consumers: [9, 10, 11, 12, 13, 14, 20, 21, 22],
 };
 
+/**
+ * How an agent behaves. Chances are per request; outcomes are drawn per settlement.
+ *
+ *   win       chance a settled result is a gain, and the range of that gain in bps
+ *   loss      the range of an ordinary loss
+ *   blowup    chance of a large loss, and its range
+ *   sla       chance the consumer reports an SLA breach
+ *   reject    chance the operator declines inside the rejection window
+ *   ghost     chance the operator accepts and then never delivers (liveness fault, 2% slash)
+ */
+const PROFILES = {
+  steady: { win: [0.7, 10, 320], loss: [10, 250], blowup: [0.05, 250, 600], sla: 0.05, reject: 0.08, ghost: 0.1 },
+  reliable: { win: [0.85, 40, 250], loss: [10, 80], blowup: [0.01, 150, 300], sla: 0.01, reject: 0.03, ghost: 0.02 },
+  flaky: { win: [0.6, 10, 200], loss: [20, 300], blowup: [0.05, 300, 700], sla: 0.15, reject: 0.15, ghost: 0.3 },
+  risky: { win: [0.55, 150, 800], loss: [100, 500], blowup: [0.15, 500, 1200], sla: 0.05, reject: 0.05, ghost: 0.05 },
+};
+
+/**
+ * The agents. `bond` is the level housekeeping keeps it at (restored after slashes); `notional` is
+ * the job size consumers commission from it, still capped by its credit.
+ *
+ * A to E keep the operators and commitments they were registered with. F to I were added so the
+ * market has a spread of behaviours and of capital: a well-capitalised reliable agent, a thinly
+ * bonded flaky one sitting a slash or two from losing its credit, a risky mid-size one and a whale.
+ */
 const AGENTS = [
-  { key: 'A', owner: 1, operator: 5 },
-  { key: 'B', owner: 2, operator: 6 },
-  { key: 'C', owner: 3, operator: 7 },
-  { key: 'D', owner: 4, operator: 8 },
-  { key: 'E', owner: 1, operator: 15, gold: true },
+  { key: 'A', owner: 1, operator: 5, profile: 'steady', bond: 150, notional: [10, 60] },
+  { key: 'B', owner: 2, operator: 6, profile: 'reliable', bond: 150, notional: [10, 60] },
+  { key: 'C', owner: 3, operator: 7, profile: 'risky', bond: 150, notional: [10, 60] },
+  { key: 'D', owner: 4, operator: 8, profile: 'flaky', bond: 150, notional: [10, 60] },
+  { key: 'E', owner: 1, operator: 15, profile: 'steady', bond: 150, notional: [10, 60], gold: true },
+  { key: 'F', owner: 2, operator: 16, profile: 'reliable', bond: 250, notional: [20, 100] },
+  { key: 'G', owner: 3, operator: 17, profile: 'flaky', bond: 110, notional: [5, 40] },
+  { key: 'H', owner: 4, operator: 18, profile: 'risky', bond: 200, notional: [20, 90] },
+  { key: 'I', owner: 2, operator: 19, profile: 'reliable', bond: 500, notional: [50, 220] },
 ];
-// The four original agents were registered under these labels; kept so a re-registration after a
-// wipe would produce the same commitments.
+const profileOf = (a) => PROFILES[a.profile] ?? PROFILES.steady;
+// A to D were registered under owner-numbered labels; kept so a re-registration after a wipe would
+// produce the same commitments. Later agents are labelled by key.
 const commitmentFor = (a) =>
-  a.gold ? DEPLOYMENT.goldModel.commitment : ethers.id(`botid.testnet-sim.agent.${a.owner}`);
-const lossToleranceFor = (a) => ({ A: 300, B: 500, C: 800, D: 1200, E: 600 })[a.key];
+  a.gold
+    ? DEPLOYMENT.goldModel.commitment
+    : ethers.id(`botid.testnet-sim.agent.${'ABCD'.includes(a.key) ? a.owner : a.key}`);
+const lossToleranceFor = (a) => ({ A: 300, B: 500, C: 800, D: 1200, E: 600, F: 400, G: 1500, H: 1000, I: 250 })[a.key];
+
+/**
+ * Consumers with habits. Everyone not listed is ordinary: hires any agent with headroom, at the
+ * agent's usual job size.
+ *
+ *   size       multiplier on the agent's usual job size
+ *   minScore   only hires agents at or above this score with no faults
+ *   challenge  a challenger by temperament: first in line to challenge agent E, and prefers it
+ *   usdt       balance target, larger for consumers that post bonds or buy big
+ */
+const CONSUMERS = {
+  20: { size: 2, usdt: 150 },
+  21: { minScore: 5000, usdt: 60 },
+  22: { challenge: true, usdt: 120 },
+};
+const consumerProfile = (i) => CONSUMERS[i] ?? {};
 
 // Funding targets. Bond is 150 rather than the 100 minimum so an agent has some credit headroom,
 // and so one lost challenge (20% of bond) does not drop it straight below the floor.
 const GAS_TARGET = ethers.parseEther('0.5');
 const GAS_FLOOR = ethers.parseEther('0.1');
-const BOND_USDT = 150;
 const CONSUMER_USDT_TARGET = 60;
 const CONSUMER_USDT_FLOOR = 5;
 
 // Per round. Kept small and irregular on purpose.
-const MAX_NEW_REQUESTS = 4;
-const IDLE_CHANCE = 0.2;
-const NOTIONAL_RANGE_USDT = [10, 60];
+// More agents means more work per round, or the new ones would starve the old.
+const MAX_NEW_REQUESTS = 6;
+const IDLE_CHANCE = 0.15;
 const DELIVER_BY_SECS = 30 * 60;
 
-// The unhappy paths, as chances per new request or per agent per round.
-const REJECT_CHANCE = 0.08;         // operator declines inside the rejection window
-const GHOST_CHANCE = 0.1;           // operator never delivers; the request expires and is slashed
+// The unhappy paths not set per agent, as chances per request or per agent per round. Declines and
+// missed deliveries are in PROFILES.
 const CHALLENGE_CHANCE = 0.35;      // a delivery by agent E is challenged (at most one open at a time)
 const SILENT_ONE_IN = 10;           // one consumer in ten never settles; settleDefault after 7 days
 const EXTRA_BOND_CHANCE = 0.08;
@@ -208,7 +261,10 @@ async function liveAgents(ctx) {
   for (const a of AGENTS) {
     const operator = ctx.w[a.operator];
     const agentId = await ctx.registry.agentIdByOperator(operator.address);
-    if (agentId !== 0n) out.push({ ...a, operatorWallet: operator, ownerWallet: ctx.w[a.owner], agentId });
+    if (agentId !== 0n) {
+      out.push({ ...a, operatorWallet: operator, ownerWallet: ctx.w[a.owner], agentId });
+      agentById.set(agentId.toString(), a);
+    }
   }
   return out;
 }
@@ -234,23 +290,16 @@ async function fund(ctx) {
     await attempt(`gas → ${i} ${short(w[i].address)} ${fmtB(need)}`, () => t.sendTransaction({ to: w[i].address, value: need }));
   }
 
-  // USDT. Consumers first: they are what keeps work flowing. Owners after, and only for agents
-  // they still have to register. Restoring a slashed bond is funded on demand in housekeeping, so
-  // the treasury's last dollars are not parked in an owner's wallet waiting for a slash.
+  // USDT for consumers: they are what keeps work flowing. Owners are funded on demand, for a
+  // registration in ensureAgents and for a bond top-up in housekeeping, so the treasury's dollars
+  // are not parked in an owner's wallet waiting for something to happen.
   const wants = [];
   for (const i of ROLES.consumers) {
     const bal = await token.balanceOf(w[i].address);
-    if (bal < units(CONSUMER_USDT_FLOOR)) wants.push([i, units(CONSUMER_USDT_TARGET) - bal]);
-  }
-  for (const i of ROLES.owners) {
-    let unregistered = 0;
-    for (const a of AGENTS.filter((x) => x.owner === i)) {
-      if ((await ctx.registry.agentIdByOperator(w[a.operator].address)) === 0n) unregistered++;
-    }
-    if (!unregistered) continue;
-    const target = units(BOND_USDT * unregistered);
-    const bal = await token.balanceOf(w[i].address);
-    if (bal < target) wants.push([i, target - bal]);
+    const target = units(consumerProfile(i).usdt ?? CONSUMER_USDT_TARGET);
+    // A consumer that posts challenge bonds is topped up before it runs dry, not after.
+    const floor = consumerProfile(i).challenge ? units(60) : units(CONSUMER_USDT_FLOOR);
+    if (bal < floor) wants.push([i, target - bal]);
   }
   for (const [i, amt] of wants) {
     const have = await token.balanceOf(t.address);
@@ -280,19 +329,19 @@ async function fund(ctx) {
 // ------------------------------------------------------------------------- step 2: agents
 
 async function ensureAgents(ctx) {
-  const { w, registry, token } = ctx;
-  for (const a of AGENTS) {
+  const { w, registry } = ctx;
+  // Cheapest first, so a treasury that cannot cover every new agent still gets some registered.
+  for (const a of [...AGENTS].sort((x, y) => x.bond - y.bond)) {
     const op = w[a.operator];
     if ((await registry.agentIdByOperator(op.address)) !== 0n) continue;
     const owner = w[a.owner];
-    const bal = await token.balanceOf(owner.address);
-    if (bal < units(BOND_USDT)) {
-      log(`  ! agent ${a.key} cannot be bonded yet: owner ${a.owner} has ${fmtU(bal)}`);
+    if (!(await ensureUsdt(ctx, owner, units(a.bond)))) {
+      log(`  ! agent ${a.key} cannot be bonded yet: the treasury cannot fund its ${a.bond} USDT bond`);
       continue;
     }
     await attempt(
-      `registered agent ${a.key} (owner ${a.owner}, operator ${a.operator}${a.gold ? ', reference Gold model' : ''}), bond ${BOND_USDT} USDT`,
-      () => registry.connect(owner).registerAgent(op.address, commitmentFor(a), Tier.Bronze, lossToleranceFor(a), units(BOND_USDT))
+      `registered agent ${a.key} (${a.profile}, owner ${a.owner}, operator ${a.operator}${a.gold ? ', reference Gold model' : ''}), bond ${a.bond} USDT`,
+      () => registry.connect(owner).registerAgent(op.address, commitmentFor(a), Tier.Bronze, lossToleranceFor(a), units(a.bond))
     );
   }
   return liveAgents(ctx);
@@ -320,8 +369,8 @@ async function housekeeping(ctx, agents) {
 
     // Restore a bond that slashes or unbonding have pushed under the working level, so the agent
     // keeps credit. This is what a refilled treasury ends up paying for.
-    if (effective < units(BOND_USDT)) {
-      const top = units(BOND_USDT) - effective + units(randInt(0, 20));
+    if (effective < units(a.bond)) {
+      const top = units(a.bond) - effective + units(randInt(0, 20));
       if (await ensureUsdt(ctx, owner, top)) {
         await attempt(`bond top-up agent ${a.key} #${a.agentId} +${fmtU(top)}`, () => registry.connect(owner).increaseBond(a.agentId, top));
       } else {
@@ -337,7 +386,7 @@ async function housekeeping(ctx, agents) {
     // Unbonding: start a small slice now and then; take it out early (paying the 10% toll) once the
     // agent has nothing open, or normally if the 21 days have somehow elapsed.
     if (rec.unbondingAmount === 0n) {
-      if (chance(UNBOND_CHANCE) && effective >= units(BOND_USDT + 20)) {
+      if (chance(UNBOND_CHANCE) && effective >= units(a.bond + 20)) {
         const slice = units(randInt(10, 20));
         try {
           await registry.connect(owner).startUnbonding.staticCall(a.agentId, slice);
@@ -389,11 +438,17 @@ async function findOurRequests(ctx) {
  * SLA breach. Skewed positive because these agents are not trying to lose, but not so positive
  * that every score converges on the same ceiling.
  */
-function randomOutcome() {
+function randomOutcome(profile = PROFILES.steady) {
+  const [winP, winLo, winHi] = profile.win;
+  const [blowP, blowLo, blowHi] = profile.blowup;
   const r = Math.random();
-  const realizedPnlBps = r < 0.7 ? randInt(10, 320) : r < 0.95 ? -randInt(10, 250) : -randInt(250, 600);
-  return { realizedPnlBps, slaBreached: Math.random() < 0.05, limitBreached: false };
+  const realizedPnlBps =
+    r < winP ? randInt(winLo, winHi) : r < 1 - blowP ? -randInt(profile.loss[0], profile.loss[1]) : -randInt(blowLo, blowHi);
+  return { realizedPnlBps, slaBreached: Math.random() < profile.sla, limitBreached: false };
 }
+
+/** The sim's agent behind an on-chain agent id, for settling with that agent's profile. */
+const agentById = new Map();
 
 async function advance(ctx) {
   const { router, provider, w } = ctx;
@@ -425,7 +480,7 @@ async function advance(ctx) {
       if (now > req.settleBy) {
         if (await attempt(`settle by default ${tag} (consumer stayed silent)`, () => router.connect(anyConsumer()).settleDefault(id))) status = 'Settled';
       } else if (consumer && !isSilent(id)) {
-        const outcome = randomOutcome();
+        const outcome = randomOutcome(profileOf(agentById.get(req.agentId.toString()) ?? {}));
         if (await attempt(
           `settle   ${tag} agent #${req.agentId} at ${outcome.realizedPnlBps} bps${outcome.slaBreached ? ' (SLA breached)' : ''}`,
           () => router.connect(consumer).settle(id, outcome)
@@ -461,11 +516,28 @@ async function openRequests(ctx, agents, counts) {
   let challengesOpen = counts.Challenged || 0;
   let opened = 0;
   for (let k = 0; k < n; k++) {
-    const consumer = w[pick(ROLES.consumers)];
-    const agent = pick(agents);
+    const ci = pick(ROLES.consumers);
+    const consumer = w[ci];
+    const habits = consumerProfile(ci);
+    let pool = agents;
+    if (habits.minScore !== undefined) {
+      const ok = [];
+      for (const a of agents) {
+        const p = await registry.getProfile(a.agentId);
+        if (Number(p.score) >= habits.minScore && Number(p.faults) === 0) ok.push(a);
+      }
+      if (!ok.length) {
+        log(`  picky consumer ${short(consumer.address)} found no agent at score ${habits.minScore} with no faults`);
+        continue;
+      }
+      pool = ok;
+    }
+    // The challenger hires agent E half the time, because E is the one it can challenge.
+    const gold = agents.find((a) => a.gold);
+    const agent = habits.challenge && gold && chance(0.5) ? gold : pick(pool);
     const profile = await registry.getProfile(agent.agentId);
     const headroom = profile.maxOpenNotional > profile.openNotional ? profile.maxOpenNotional - profile.openNotional : 0n;
-    let notional = units(randInt(...NOTIONAL_RANGE_USDT));
+    let notional = units(Math.round(randInt(...agent.notional) * (habits.size ?? 1)));
     if (notional > headroom) notional = headroom;
     if (notional < units(1)) {
       log(`  agent ${agent.key} #${agent.agentId} has no credit headroom${profile.active ? '' : ' (paused)'}, skipping`);
@@ -508,12 +580,13 @@ async function openRequests(ctx, agents, counts) {
     const tag = requestId.slice(0, 10) + '…';
 
     // The operator's choice, made now: decline, go dark, or deliver.
+    const behaviour = profileOf(agent);
     const roll = Math.random();
-    if (roll < REJECT_CHANCE) {
+    if (roll < behaviour.reject) {
       await attempt(`reject   ${tag} declined by operator ${short(agent.operatorWallet.address)}`, () => router.connect(agent.operatorWallet).reject(requestId));
       continue;
     }
-    if (roll < REJECT_CHANCE + GHOST_CHANCE) {
+    if (roll < behaviour.reject + behaviour.ghost) {
       log(`  ghost    ${tag} operator will not deliver; it expires after ${DELIVER_BY_SECS / 60} min`);
       continue;
     }
@@ -543,12 +616,14 @@ async function openRequests(ctx, agents, counts) {
     if (delivered && agent.gold && challengesOpen === 0 && chance(CHALLENGE_CHANCE)) {
       const challengers = [];
       for (const i of ROLES.consumers) {
-        if ((await token.balanceOf(w[i].address)) >= challengeBond) challengers.push(w[i]);
+        if ((await token.balanceOf(w[i].address)) >= challengeBond) challengers.push(i);
       }
       if (!challengers.length) {
         log(`  no consumer can post the ${fmtU(challengeBond)} challenge bond`);
       } else {
-        const challenger = pick(challengers);
+        // The challenger by temperament goes first when it can afford to.
+        const keen = challengers.find((i) => consumerProfile(i).challenge);
+        const challenger = w[keen ?? pick(challengers)];
         if (await attempt(
           `challenge ${tag} by ${short(challenger.address)}, bond ${fmtU(challengeBond)}`,
           () => router.connect(challenger).challenge(requestId)
@@ -587,7 +662,7 @@ async function printStatus(ctx, agents) {
   for (const a of agents) {
     const [p, rec] = await Promise.all([registry.getProfile(a.agentId), registry.getAgent(a.agentId)]);
     log(
-      `  ${a.key} #${a.agentId}${a.gold ? ' (gold model)' : ''} score ${p.score} · settled ${p.settledExecutions} · faults ${p.faults}` +
+      `  ${a.key} #${a.agentId} ${a.profile}${a.gold ? ' (gold model)' : ''} score ${p.score} · settled ${p.settledExecutions} · faults ${p.faults}` +
       ` · bond ${fmtU(p.bond)}${rec.unbondingAmount ? ` (unbonding ${fmtU(rec.unbondingAmount)})` : ''}` +
       ` · open ${fmtU(p.openNotional)} / ${fmtU(p.maxOpenNotional)}${p.active ? '' : ' · PAUSED'}`
     );

@@ -155,7 +155,7 @@ approve a bond.
 
 ## Tests
 
-255 tests across ten suites. They are organised around the attacks the design exists to
+300 tests across 14 suites. They are organised around the attacks the design exists to
 prevent, not just around function coverage:
 
 | Suite | Covers |
@@ -170,6 +170,10 @@ prevent, not just around function coverage:
 | `Decimals` | Every capital parameter against a 6-decimal bond token, where an 18-decimal default silently never binds |
 | `eip712` | The typed-data envelope and domain separation — the same digest must not verify at a second adapter |
 | `Timelock` | Queue, execute, expire, and the setters deliberately left immediate |
+| `ChallengeGrief` | The challenge that could only ever be won — `canEscalate`, the refusal, and that a real check still slashes |
+| `SilentSettleGrief` | Reputation for work nobody vouched for: silence moves no score, and reported outcomes still do |
+| `StolenAttribution` | The proof claim that skipped the router — front-running credit, and what the fix leaves permissionless |
+| `SybilVoice` | Influence bought by the fee rather than by address count, and the fragmentation that used to be free |
 
 Tests worth reading as documentation of the redesign:
 
@@ -242,7 +246,7 @@ The agent needs the circuit built first, because it runs it at every tier — se
 
 | Directory | What is in it |
 |---|---|
-| `contracts/` | The protocol. Solc 0.8.24, no external dependencies, 255 tests |
+| `contracts/` | The protocol. Solc 0.8.24, no external dependencies, 300 tests |
 | `contracts/abi/` | Consumer-facing ABIs as checked-in TypeScript. Generated, reviewed in diffs |
 | `circuits/` | The Gold tier's ONNX model, `ezkl` pipeline, and the run/prove entrypoints |
 | `relayer/` | Reference agent, watchtower and consumer. One dependency: `ethers` |
